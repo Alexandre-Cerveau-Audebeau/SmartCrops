@@ -171,27 +171,29 @@ public class FormulaSwitchTests : IntegrationTestBase
     /// <summary>
     /// « Votre formule — conservée » (Alexandre, 22/09 18:02): the formula an
     /// account is on stays its own even beyond its limits — choosing it again
-    /// (« Garder Novice ») is accepted, stamps the deliberate choice, and moves
-    /// no layout.
+    /// (« Garder Jardinier ») is accepted, stamps the deliberate choice, and
+    /// moves no layout. At the Gardener, beyond both its limits — eleven
+    /// gardens of 60 × 60 for ten of 50 × 50 —, a formula with a layout to keep
+    /// (the Novice writes none since SMA-448, lot F2).
     /// </summary>
     [Fact]
     public async Task PutCurrent_ItsOwnFormula_EvenBeyondItsLimits_IsKept_StampsTheChoice_AndMovesNoLayout()
     {
-        var userId = await SeedUserAsync("novice");
-        for (var i = 0; i < 4; i++) await SeedGardenAsync(userId, Guid.NewGuid(), 25, 25);
+        var userId = await SeedUserAsync("gardener");
+        for (var i = 0; i < 11; i++) await SeedGardenAsync(userId, Guid.NewGuid(), 60, 60);
         AuthAs(userId);
         var layout = new SaveDashboardPreferencesRequest(
-            DashboardLayout.Levels.Novice,
-            [.. DashboardPresets.For("novice").Select(b => new SaveDashboardBlockRequest(b.Key, b.Size, b.Hidden, null))]);
+            DashboardLayout.Levels.Gardener,
+            [.. DashboardPresets.For("gardener").Select(b => new SaveDashboardBlockRequest(b.Key, b.Size, b.Hidden, null))]);
         Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(PreferencesUrl, layout)).StatusCode);
         var rowBefore = await CurrentRowAsync(userId);
         var before = DateTime.UtcNow.AddSeconds(-1);
 
-        var response = await SwitchAsync("novice");
+        var response = await SwitchAsync("gardener");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var (formula, chosenAt) = await AccountAsync(userId);
-        Assert.Equal("novice", formula);
+        Assert.Equal("gardener", formula);
         Assert.NotNull(chosenAt);
         Assert.True(chosenAt >= before, $"FormulaChosenAt {chosenAt:O} should be now");
         Assert.Equal(rowBefore, await CurrentRowAsync(userId));

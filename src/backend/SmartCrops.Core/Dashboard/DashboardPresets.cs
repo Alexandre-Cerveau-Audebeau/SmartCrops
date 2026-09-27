@@ -35,22 +35,22 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// </summary>
 public static class DashboardPresets
 {
-    private const string S = DashboardLayout.Sizes.Small;
     private const string M = DashboardLayout.Sizes.Medium;
     private const string L = DashboardLayout.Sizes.Large;
     private const string W = DashboardLayout.Sizes.Wide;
 
-    private static readonly IReadOnlyList<DashboardPresetBlock> NovicePreset =
-    [
-        new(DashboardLayout.Blocks.Weather, M, false),
-        new(DashboardLayout.Blocks.Gardens, M, false),
-        new(DashboardLayout.Blocks.Tips, S, false),
-        new(DashboardLayout.Blocks.Month, S, false),
-        new(DashboardLayout.Blocks.Todo, M, true),
-        new(DashboardLayout.Blocks.Counters, M, true),
-        new(DashboardLayout.Blocks.Stats, L, true),
-        new(DashboardLayout.Blocks.Harvest, L, true),
-    ];
+    /// <summary>
+    /// SMA-448, lot F2 — NO widget: the Novice's page is one card per garden,
+    /// not a grid of widgets (V3-01: « Aucun »; contract v3 § 3.1, § 4.3 —
+    /// decided by Alexandre on 22/09, 14:53 and 16:39). An empty preset is
+    /// what the catalogue serves for it (<see cref="FormulaCatalog"/>: no
+    /// widget, no size) and what the controller enforces (R8): a Novice can
+    /// store no layout, and a layout stored under the frozen design's Novice
+    /// preset — « Météo Moyen, Jardins Moyen, Conseils Petit, Ce mois-ci
+    /// Petit », history since this lot — reads as no block, every block being
+    /// one the formula does not have.
+    /// </summary>
+    private static readonly IReadOnlyList<DashboardPresetBlock> NovicePreset = [];
 
     /// <summary>
     /// Without Statistics since the formulas (SMA-448, lot F1 — R1, V3-01:

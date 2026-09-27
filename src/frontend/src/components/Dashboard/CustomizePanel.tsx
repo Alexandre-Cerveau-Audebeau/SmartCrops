@@ -14,6 +14,7 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import { BLOCK_ICONS } from './blockIcons';
+import { formulaRefusalText } from './formulaRefusal';
 import { permitsBlock } from '../../constants/dashboardCapabilities';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import {
@@ -87,27 +88,10 @@ export default function CustomizePanel({
     (block) => block.hidden && capabilities !== null && permitsBlock(capabilities, block.key)
   );
 
-  // The refusal, in words (A1): the formula refused, then each reason the
-  // server served with its numbers — how many gardens for how many at most, a
-  // garden of what size for what size at most —, joined as the language lists
-  // things. A refusal the server did not explain names the formula alone.
-  const refusalText = refusal
-    ? refusal.reasons.length === 0
-      ? t('dashboard.panel.refusedNoReason', { level: t(`dashboard.levels.${refusal.formula}.name`) })
-      : t('dashboard.panel.refused', {
-          level: t(`dashboard.levels.${refusal.formula}.name`),
-          reasons: refusal.reasons.map((reason) =>
-            reason.kind === 'gardens'
-              ? t('dashboard.panel.reasonGardens', { count: reason.have, limit: reason.limit })
-              : t('dashboard.panel.reasonSize', {
-                  width: reason.width,
-                  height: reason.height,
-                  maxWidth: reason.maxWidth,
-                  maxHeight: reason.maxHeight,
-                })
-          ),
-        })
-    : '';
+  // The refusal, in words (A1) — ONE sentence with the Novice page's chooser
+  // (`formulaRefusalText`, SMA-448 lot F2): the formula refused, then each
+  // reason the server served with its numbers.
+  const refusalText = formulaRefusalText(refusal, t);
 
   const sectionTitleSx = {
     fontSize: `${DASHBOARD_TYPE.title}px`,

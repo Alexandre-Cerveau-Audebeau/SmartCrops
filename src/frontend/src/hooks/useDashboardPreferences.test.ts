@@ -96,16 +96,18 @@ afterEach(() => {
 
 describe('useDashboardPreferences — loading (SMA-336)', () => {
   it('serves the layout the server returned and clears loading', async () => {
+    // A formula other than the default, with widgets — the Expert's nine
+    // (the Novice has none since SMA-448, lot F2).
     vi.mocked(fetchDashboardPreferences).mockResolvedValue(
-      preferences({ level: 'novice', blocks: presetFor('novice') })
+      preferences({ level: 'expert', blocks: presetFor('expert') })
     );
 
     const { result } = renderHook(() => useDashboardPreferences());
 
     expect(result.current.loading).toBe(true);
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.level).toBe('novice');
-    expect(result.current.blocks).toHaveLength(8);
+    expect(result.current.level).toBe('expert');
+    expect(result.current.blocks).toHaveLength(presetFor('expert').length);
     expect(result.current.loadError).toBe(false);
     expect(result.current.adjusted).toBe(false);
   });

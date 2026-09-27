@@ -1,18 +1,11 @@
 import { Fragment, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Skeleton from '@mui/material/Skeleton';
-import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
@@ -21,13 +14,13 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import AddIcon from '@mui/icons-material/Add';
 import AddLocationAltOutlinedIcon from '@mui/icons-material/AddLocationAltOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
 import FilterVintageOutlinedIcon from '@mui/icons-material/FilterVintageOutlined';
 import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
 import DeleteGardenDialog from '../../Garden/DeleteGardenDialog';
+import RenameGardenDialog from '../../Garden/RenameGardenDialog';
 import DashboardBlock from '../DashboardBlock';
 import ExposureDot from '../ExposureDot';
+import GardenActions from '../GardenActions';
 import GardenThumbnail from '../GardenThumbnail';
 import InviteState from '../InviteState';
 import MissingDataMark from '../MissingDataMark';
@@ -36,7 +29,6 @@ import OccupancyBar from '../OccupancyBar';
 import { useGlyphsFit } from '../useGlyphsFit';
 import WeatherGlyph from './WeatherGlyph';
 import { displayTemperature } from './weatherFormat';
-import { updateGarden } from '../../../services/gardenApi';
 import { DASHBOARD_TYPE, DASHBOARD_WEATHER } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import type { DashboardSize } from '../../../types/Dashboard';
@@ -112,12 +104,6 @@ const TABLE_THUMB_W = 40;
 const TABLE_THUMB_H = 30;
 
 /**
- * Padding around an action glyph. 3 px on a 20 px icon gives a 26 px control —
- * above the 24 px floor WCAG 2.2 sets for a target, and exactly the height of
- * the artboards' own `.pill` (26 px), which is what the zone behind the two
- * buttons is.
- */
-/**
  * How wide the DESCRIPTION line of the identity cell may ever ask to be
  * (round 5, V18).
  *
@@ -135,26 +121,6 @@ const TABLE_THUMB_H = 30;
  * instead of the 40-odd px it had left over beside the date.
  */
 const DESCRIPTION_MAX_PX = { gardener: 130, expert: 106 } as const;
-
-const ACTION_PAD_PX = '3px';
-
-/**
- * The tinted zone behind the two action glyphs (round 4, part B).
- *
- * 52 px by 26: two 26 px controls side by side, no gap and no padding, so the
- * tint hugs them exactly and reads as one pill rather than a panel. 26 px is
- * `.pill`'s height and `999px` its radius — the zone is drawn in the artboards'
- * own vocabulary for a small inset, which is the whole point of § 4: the
- * addition must not announce itself.
- *
- * `surfaceSubtle` is the fill: the product's single step away from the card, and
- * the artboards' `--surface` verbatim (`#F2F6F0` by day). § 4 asks for « très
- * légèrement plus clair que la carte » — at night that is literally what it is
- * (`#1E3358` against a `#16294A` card); by day the card is pure white and
- * nothing can be lighter, so the token steps the other way by the same few per
- * cent. It is a theme token in both modes, which is the rule that matters.
- */
-const ACTIONS_ZONE_W = 52;
 
 /**
  * The fade, and NOT a rule (round 4, part B).
@@ -298,9 +264,11 @@ interface Props {
  * thumbnail, the type chip and the ornamental chip. Large stops being a grid of
  * cards and becomes the six-column comparison table.
  *
- * The rename, the type-the-name deletion and their dialogs are MOVED here
- * untouched, aria-labels included. They cost four review rounds to get right and
- * this lot has no reason to spend them again.
+ * The rename and the type-the-name deletion were MOVED here untouched,
+ * aria-labels included — they cost four review rounds to get right. Since
+ * SMA-448, lot F2, the rename dialog and the two action buttons are components
+ * of their own (`RenameGardenDialog`, `GardenActions`): the Novice page draws
+ * the same ones, by construction.
  *
  * HARVEST renders a marker with NO gesture (decision D10) until PR 5/5. WEATHER
  * is fed since PR 3b/5 (amendment A6 lifted): the `.pill.wx` of `Main.dc.html`
@@ -396,14 +364,11 @@ export default function GardensBlock({
   // engine once per garden per keystroke.
   const views = useGardenViews(gardens);
 
-  const [mutationError, setMutationError] = useState(false);
-  const [isMutating, setIsMutating] = useState(false);
-
+  // The garden being renamed — the dialog is `RenameGardenDialog`'s
+  // (SMA-448, lot F2), which owns the request and its states.
   const [editingGarden, setEditingGarden] = useState<DashboardGardenData | null>(
     null
   );
-  const [editName, setEditName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
 
   // The deletion target OUTLIVES the dialog open flag (the MyGardens idiom):
   // every close path only flips `deleteOpen`, so the fading dialog keeps its
@@ -412,51 +377,6 @@ export default function GardensBlock({
     null
   );
   const [deleteOpen, setDeleteOpen] = useState(false);
-
-  /**
-   * EVERY way the rename dialog closes (round 1, E9 / G4). Clearing the error
-   * here is the point: it is raised inside a modal, so leaving it behind put a
-   * failure message on the widget frame with no subject left to explain it.
-   */
-  const closeEditDialog = () => {
-    // Not while the rename is in flight (round 2, E'5 / N2). The Save button is
-    // disabled, but the backdrop and Escape still reach this handler: closing
-    // there unmounts the Dialog the error Alert lives in, so a rename that then
-    // fails is reported nowhere at all. Same contract as `closeCreateDialog` in
-    // GardensDashboard.tsx — the widget and the page close the same way.
-    if (isMutating) return;
-    setEditingGarden(null);
-    setMutationError(false);
-  };
-
-  const handleEdit = async () => {
-    if (!editingGarden || isMutating) return;
-    setIsMutating(true);
-    setMutationError(false);
-    try {
-      await updateGarden(
-        editingGarden.id,
-        editName,
-        editDescription || undefined
-      );
-      // Clears the state directly: `isMutating` is still true here (it falls in
-      // the `finally`), so the guarded close would refuse to run.
-      setEditingGarden(null);
-      setMutationError(false);
-      onChanged();
-    } catch {
-      setMutationError(true);
-    } finally {
-      setIsMutating(false);
-    }
-  };
-
-  const openEditDialog = (garden: DashboardGardenData) => {
-    setEditingGarden(garden);
-    setEditName(garden.name);
-    setEditDescription(garden.description ?? '');
-    setMutationError(false);
-  };
 
   const openDeleteDialog = (garden: DashboardGardenData) => {
     setDeleteTarget(garden);
@@ -609,76 +529,13 @@ export default function GardensBlock({
   );
 
   /**
-   * Rename and delete — the same two buttons at EVERY size (round 2, V12).
-   *
-   * They were on the Large table only, which is what the frozen design draws.
-   * But the Novice preset shows this widget in Medium, so a Novice account had
-   * no way at all to rename or delete a garden from the dashboard — and both
-   * are primary gestures of the page. Documented amendment to the frozen
-   * design: they come back on the Medium row, in the same place, so the two
-   * sizes have one trailing structure and the buttons never move under the
-   * cursor when a widget is resized.
-   */
-  const gardenActions = (garden: DashboardGardenData) => (
-    // The tinted, borderless, rounded ZONE of § 4 (round 4, part B): two 26 px
-    // controls touching, so the fill hugs them into a 52 x 26 pill — the
-    // artboards' own `.pill` box, and no rule anywhere on it.
-    <Box
-      data-row-actions-zone
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        flexShrink: 0,
-        width: ACTIONS_ZONE_W,
-        borderRadius: '999px',
-        backgroundColor: 'surfaceSubtle',
-      }}
-    >
-      <IconButton
-        size="small"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          openEditDialog(garden);
-        }}
-        aria-label={`${t('gardens.edit')} ${garden.name}`}
-        sx={{
-          p: ACTION_PAD_PX,
-          color: 'text.secondary',
-          '&:hover': { color: 'text.primary' },
-        }}
-      >
-        <EditIcon fontSize="small" />
-      </IconButton>
-      {/* NEUTRAL at rest, red when the pointer or the keyboard reaches it
-          (§ 4). A saturated bin on every row put three alarms in a table the
-          frozen design gives no alert colour at all; the warning belongs to the
-          moment of acting, not to the moment of looking. `Mui-focusVisible`
-          rather than `:focus` so it answers the keyboard and not a click that
-          has already left. */}
-      <IconButton
-        size="small"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          openDeleteDialog(garden);
-        }}
-        aria-label={`${t('gardens.delete')} ${garden.name}`}
-        sx={{
-          p: ACTION_PAD_PX,
-          color: 'text.secondary',
-          '&:hover': { color: 'error.main' },
-          '&.Mui-focusVisible': { color: 'error.main' },
-        }}
-      >
-        <DeleteIcon fontSize="small" />
-      </IconButton>
-    </Box>
-  );
-
-  /**
    * The trailing group of a row: rename, delete, chevron — in that order, at
-   * that place, at both sizes (round 2, V12).
+   * that place, at both sizes (round 2, V12). Rename and delete were on the
+   * Large table only, which is what the frozen design draws; but the Medium
+   * list had no way at all to rename or delete a garden — both primary
+   * gestures of the page. Documented amendment: `GardenActions` on every
+   * row, in the same place, so the sizes have one trailing structure and the
+   * buttons never move under the cursor when a widget is resized.
    *
    * The chevron used to live INSIDE the Medium row's link. It cannot stay
    * there: a button inside an anchor is invalid content, and the buttons have
@@ -697,7 +554,7 @@ export default function GardensBlock({
         flexShrink: 0,
       }}
     >
-      {gardenActions(garden)}
+      <GardenActions garden={garden} onRename={setEditingGarden} onDelete={openDeleteDialog} />
       {/* V15 — the chevron OPENS the garden.
 
           It never did. It was drawn with `pointerEvents: 'none'`, so a click
@@ -1361,80 +1218,11 @@ export default function GardensBlock({
     >
       {body()}
 
-      <Dialog
-        open={editingGarden !== null}
-        onClose={closeEditDialog}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>{t('gardens.editDialogTitle')}</DialogTitle>
-        <DialogContent>
-          {mutationError && (
-            <Alert severity="error" sx={{ mb: 1 }}>
-              {t('gardens.mutationError')}
-            </Alert>
-          )}
-          <TextField
-            label={t('gardens.gardenName')}
-            fullWidth
-            required
-            slotProps={{ htmlInput: { maxLength: 100 } }}
-            value={editName}
-            onChange={(event) => setEditName(event.target.value)}
-            disabled={isMutating}
-            sx={{ mt: 1, mb: 2 }}
-          />
-          <TextField
-            label={t('gardens.description')}
-            fullWidth
-            multiline
-            rows={3}
-            slotProps={{ htmlInput: { maxLength: 500 } }}
-            value={editDescription}
-            onChange={(event) => setEditDescription(event.target.value)}
-            disabled={isMutating}
-          />
-        </DialogContent>
-        <DialogActions>
-          {/* Round 3 (N'1): while `closeEditDialog` refuses to close, the
-              dialog has to SAY that it is working. Cancel disabled, the fields
-              disabled and a spinner on Save — the same pending shape as
-              DeleteGardenDialog, so the two dialogs read alike.
-
-              Round 4 (E'''2): all of that is SILENT. The spinner is
-              `aria-hidden` and `aria-busy` sits on a disabled button, which
-              assistive technology does not announce — so a screen-reader user
-              met a dialog that refused to close and said nothing. This region
-              is what speaks. It stays MOUNTED and empty when idle: a live
-              region inserted at the same moment as its text is announced
-              unreliably, one that is already there is not. */}
-          <Typography
-            role="status"
-            aria-live="polite"
-            variant="body2"
-            color="text.secondary"
-            sx={{ mr: 'auto', pl: 1 }}
-          >
-            {isMutating ? t('gardens.savingStatus') : ''}
-          </Typography>
-          <Button onClick={closeEditDialog} disabled={isMutating}>
-            {t('gardens.cancel')}
-          </Button>
-          <Button
-            variant="contained"
-            disabled={isMutating || !editName.trim()}
-            aria-busy={isMutating}
-            startIcon={
-              isMutating ? (
-                <CircularProgress size={18} color="inherit" aria-hidden="true" />
-              ) : undefined
-            }
-            onClick={handleEdit}
-          >
-            {t('gardens.save')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <RenameGardenDialog
+        garden={editingGarden}
+        onClose={() => setEditingGarden(null)}
+        onRenamed={onChanged}
+      />
 
       {/* Delete confirm (SMA-18 lot 1): type-the-name brake. The aggregate
           counts the DISTINCT placed varieties itself, which is the same number

@@ -14,6 +14,7 @@ import { rulesFor } from '../test/dashboardDom';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
+import { gardens as sceneGardens, varieties as sceneVarieties } from '../test/layout/scenes';
 import { WEATHER_BEARING_BLOCKS } from '../components/Dashboard/weatherDisclaimer';
 import type { DashboardBlockKey, DashboardLevel } from '../types/Dashboard';
 import type { DashboardWeatherData, WeatherStatus } from '../types/DashboardWeather';
@@ -188,6 +189,13 @@ const WEATHER_FIGURE_SELECTORS = [
   '[data-todo-weather-note]',
   '[data-tips-tip]',
   '[data-tips-weather-note]',
+  // SMA-448, lot F2 — the Novice page's cards: the temperature at the
+  // garden's city, and a task read from a forecast (« Tailler » and
+  // « Semer » come from the plans alone, and are not listed).
+  '[data-novice-weather]',
+  '[data-novice-task="water"]',
+  '[data-novice-task="cold"]',
+  '[data-novice-task="frost"]',
 ] as const;
 
 /** Every rendered node of `WEATHER_FIGURE_SELECTORS` — empty when the page draws no weather. */
@@ -512,6 +520,119 @@ describe('GardensDashboard — the Key figures band bears the warning by what it
     await land(aggregateWith('fresh'));
 
     expect(renderedWidgets()).not.toContain('keyfigures');
+    expect(disclaimers()).toHaveLength(0);
+  });
+});
+
+// SMA-448, lot F2 (V1, contract § 6 « ce que la v3 ajoute », 1) — the Novice
+// page: its CARDS are the bearers. « Chaque fois qu'une température est
+// visible, l'avertissement l'est aussi » (SMA-387); a card that shows a task
+// read from a forecast bears it too; a page whose cards show no figure bears
+// none — even when the aggregate carries a place that no card reads.
+describe('GardensDashboard — the Novice page bears the warning by what its cards show (SMA-448, F2 — V1)', () => {
+  const serveNovice = () =>
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'novice',
+      capabilities: capabilitiesFor('novice'),
+      isPreset: true,
+      blocks: presetFor('novice'),
+      updatedAt: null,
+    });
+  const cards = () => document.querySelectorAll('[data-novice-card]');
+  const temperatures = () => document.querySelectorAll('[data-novice-weather]');
+  /** The kinds of the tasks the cards show that are read from a forecast. */
+  const forecastTasks = () =>
+    [...document.querySelectorAll('[data-novice-task]')]
+      .map((node) => node.getAttribute('data-novice-task'))
+      .filter((kind) => ['water', 'cold', 'frost'].includes(kind ?? ''));
+
+  /** The harness's scene: Terrasse with its plants, in ONE place — `place` — the other two gardens without a city. */
+  const sceneIn = (place: ReturnType<typeof locationFixture>) => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardFixture(sceneGardens, {
+        varieties: sceneVarieties,
+        totals: { gardenCount: 3, placementCount: 64, varietyCount: 16, catalogPlantCount: 536 },
+      })
+    );
+    vi.mocked(fetchDashboardWeather).mockResolvedValue(
+      weatherFixture(
+        [place],
+        [
+          linkFixture({ gardenId: 'g1', locationKey: place.key, source: 'garden' }),
+          linkFixture({ gardenId: 'g2', locationKey: null, source: null }),
+          linkFixture({ gardenId: 'g3', locationKey: null, source: null }),
+        ]
+      )
+    );
+  };
+
+  beforeEach(() => serveNovice());
+
+  it('is shown when a card shows a temperature — with no widget on the page at all', async () => {
+    serve(aggregateWith('fresh'));
+
+    await renderPage('fr');
+
+    await waitFor(() => expect(temperatures()).toHaveLength(1));
+    expect(renderedWidgets()).toEqual([]);
+    const note = await screen.findByRole('note');
+    expect(note).toHaveAttribute('data-weather-disclaimer');
+    expect(disclaimers()).toHaveLength(1);
+    expect(document.body.textContent).toContain('24°');
+  });
+
+  it('is shown when the only figure on the page is a task read from a forecast — a place with its days but no current reading', async () => {
+    sceneIn(locationFixture({ key: '45.77,4.77', name: 'Écully', current: null }));
+
+    await renderPage('fr');
+
+    // Terrasse waters tonight — read from the days of its place — and shows
+    // no temperature: the place had none to give.
+    await waitFor(() => expect(forecastTasks()).toEqual(['water']));
+    expect(temperatures()).toHaveLength(0);
+    expect(document.querySelectorAll('[data-novice-weather-silent]')).toHaveLength(1);
+    const note = await screen.findByRole('note');
+    expect(note).toHaveAttribute('data-weather-disclaimer');
+    expect(disclaimers()).toHaveLength(1);
+  });
+
+  it('is absent when no card shows a figure — the aggregate landed WITH data that no card reads', async () => {
+    // A place with data, and every garden without a city: nothing on the
+    // page draws it, so nothing is warned about. The second half is the
+    // guard: were a card to draw a figure of that place, the selectors would
+    // find it.
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardFixture([gardenFixture({ id: 'g1', name: 'Casa Lolo' })]));
+    const land = holdWeather();
+
+    await renderPage('fr');
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(1));
+
+    await land(
+      weatherFixture(
+        [locationFixture({ key: '45.76,4.84', name: 'Lyon', status: 'fresh' })],
+        [linkFixture({ gardenId: 'g1', locationKey: null, source: null })]
+      )
+    );
+
+    expect(document.querySelectorAll('[data-novice-weather-add]')).toHaveLength(1);
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(disclaimers()).toHaveLength(0);
+    expect(weatherFigures()).toHaveLength(0);
+    expect(document.body.textContent).not.toMatch(/\d\s?°/u);
+  });
+
+  it('is absent behind a load error: « Sans météo » on every card, no temperature, no weather task', async () => {
+    sceneIn(locationFixture({ key: '45.77,4.77', name: 'Écully' }));
+    vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('synthetic'));
+
+    await renderPage('fr');
+
+    await waitFor(() => expect(document.querySelectorAll('[data-novice-weather-unavailable]')).toHaveLength(3));
+    expect(temperatures()).toHaveLength(0);
+    expect(forecastTasks()).toEqual([]);
+    expect(screen.queryByRole('note')).toBeNull();
     expect(disclaimers()).toHaveLength(0);
   });
 });

@@ -14,8 +14,13 @@ import { DASHBOARD_BLOCK_KEYS, DASHBOARD_LEVELS, DEFAULT_DASHBOARD_LEVEL } from 
 const EIGHT = DASHBOARD_BLOCK_KEYS.filter((key) => key !== 'keyfigures');
 
 describe('the served presets (SMA-336, SMA-448)', () => {
-  it('the novice preset lists the eight widgets of its formula in the canonical order — never the Key figures band', () => {
-    expect(presetFor('novice').map((block) => block.key)).toEqual(EIGHT);
+  // SMA-448, lot F2 — the Novice's page is one card per garden, not a grid:
+  // it has NO widget (V3-01: « Aucun »; contract v3 § 3.1), so its preset is
+  // empty and its capabilities serve no widget and no size.
+  it('the novice preset lists no widget: the Novice page is not a grid (SMA-448, lot F2)', () => {
+    expect(presetFor('novice')).toEqual([]);
+    expect(capabilitiesFor('novice').widgets).toEqual([]);
+    expect(capabilitiesFor('novice').sizes).toEqual({});
   });
 
   // R1 (V3-01: « Les statistiques — Non · Non · Oui »).
@@ -27,19 +32,6 @@ describe('the served presets (SMA-336, SMA-448)', () => {
     expect(presetFor('expert')).toEqual([
       { key: 'keyfigures', size: 'wide', hidden: false },
       ...EIGHT.map((key) => ({ key, size: 'large', hidden: false })),
-    ]);
-  });
-
-  it('Novice shows Weather M, Gardens M, Tips S, This month S and hides the rest', () => {
-    expect(presetFor('novice')).toEqual([
-      { key: 'weather', size: 'medium', hidden: false },
-      { key: 'gardens', size: 'medium', hidden: false },
-      { key: 'tips', size: 'small', hidden: false },
-      { key: 'month', size: 'small', hidden: false },
-      { key: 'todo', size: 'medium', hidden: true },
-      { key: 'counters', size: 'medium', hidden: true },
-      { key: 'stats', size: 'large', hidden: true },
-      { key: 'harvest', size: 'large', hidden: true },
     ]);
   });
 

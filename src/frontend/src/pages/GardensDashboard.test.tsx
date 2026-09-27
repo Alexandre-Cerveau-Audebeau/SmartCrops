@@ -271,12 +271,17 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
   });
 
   it('renders the Gardens widget at the stored SIZE — Medium is the compact list', async () => {
-    servePreferences('novice');
+    // A stored Gardener layout with Gardens in Medium — what the Novice
+    // preset used to show, before the Novice had a page of its own (SMA-448,
+    // lot F2).
+    servePreferences(
+      'gardener',
+      presetFor('gardener').map((block) => (block.key === 'gardens' ? { ...block, size: 'medium' } : block))
+    );
 
     renderPage();
 
-    // Novice puts Gardens in Medium: one-line link rows, not the Large
-    // comparison table.
+    // Gardens in Medium: one-line link rows, not the Large comparison table.
     //
     // ADAPTED by round 2 (V12). This used to read the ABSENCE of the Delete
     // button as the sign of a Medium widget, because the frozen design put
@@ -702,7 +707,7 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     // media query is involved, which is what makes the rule hold at EVERY
     // width — the mobile lot let the phone row GROW past 200px, it did not
     // let a panel need it.
-    servePreferences('novice');
+    servePreferences('gardener');
 
     renderPage();
 
@@ -724,7 +729,7 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
   });
 
   it('gives the invitation icon a fixed disc that never squeezes the text', async () => {
-    servePreferences('novice');
+    servePreferences('gardener');
 
     renderPage();
 

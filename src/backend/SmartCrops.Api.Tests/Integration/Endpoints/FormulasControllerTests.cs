@@ -125,6 +125,30 @@ public class FormulasControllerTests : IntegrationTestBase
         Assert.Contains("stats", Strings(byKey["expert"].GetProperty("widgets")));
     }
 
+    /// <summary>
+    /// SMA-448, lot F2 — the Novice has NO widget (V3-01: « Aucun »; contract v3
+    /// § 3.1): the wire says so in so many words — no widget, no size row, an
+    /// empty preset — and the weather of each garden's own city on its card
+    /// (<c>gardenCards</c>), without the compact bar (A-9). What the client
+    /// decides the cards page by (R1: a formula IS its capabilities).
+    /// </summary>
+    [Fact]
+    public async Task GetFormulas_Novice_ServesNoWidget_NoSize_AnEmptyPreset_AndTheGardenCardsWeather()
+    {
+        var userId = await SeedUserAsync(formula: "novice");
+        AuthAs(userId);
+
+        using var body = await GetJsonAsync();
+        var novice = body.RootElement.GetProperty("formulas").EnumerateArray()
+            .Single(f => f.GetProperty("key").GetString() == "novice");
+
+        Assert.Empty(novice.GetProperty("widgets").EnumerateArray());
+        Assert.Empty(novice.GetProperty("sizes").EnumerateObject());
+        Assert.Empty(novice.GetProperty("preset").EnumerateArray());
+        Assert.Equal("gardenCards", novice.GetProperty("weather").GetString());
+        Assert.False(novice.GetProperty("compactBar").GetBoolean());
+    }
+
     [Fact]
     public async Task GetFormulas_ANewAccount_HasChosenNothing_AndEveryFormulaFits()
     {

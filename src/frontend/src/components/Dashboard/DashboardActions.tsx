@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
@@ -39,6 +41,26 @@ export interface DashboardActionsProps {
   repeatHidden?: boolean;
   /** The wrapper of the two repeated buttons — what the compact bar's trigger observes (B2). */
   pageActionsRef?: Ref<HTMLDivElement>;
+  /**
+   * SMA-448, lot F2 — the formula's page is one card per garden (the Novice,
+   * SMA-436): no « Modifier », no « Personnaliser », nothing the compact bar
+   * repeats — the chip, the indicator and « Créer un jardin » alone (contract
+   * v3 § 3.1 « En-tête », A-9). And never « · ajustée »: the page has nothing
+   * to adjust (§ 4.1).
+   */
+  cards?: boolean;
+  /**
+   * PROVISIONAL (SMA-448, lot F2, N3) — given, the chip is a BUTTON that
+   * opens the choice of formula: the three signs of § 4.1 (the ▾, the tinted
+   * hover with its tooltip « Changer de formule », the focus ring), the
+   * accessible name « Vue Novice — changer de formule », `aria-haspopup=
+   * "dialog"`. The page gives it at the Novice formula only, whose page has
+   * no other door to a formula; lot F3 makes the chip the door of every
+   * formula, to the choice screen of V3-01.
+   */
+  onChangeFormula?: () => void;
+  /** « Créer un jardin » — where the page puts the focus back when the chooser closed on a switch (N3). */
+  createRef?: Ref<HTMLButtonElement>;
 }
 
 export interface PageActionButtonsProps {
@@ -145,10 +167,67 @@ export default function DashboardActions({
   onCreate,
   repeatHidden = false,
   pageActionsRef,
+  cards = false,
+  onChangeFormula,
+  createRef,
 }: DashboardActionsProps) {
   const { t } = useTranslation();
   const tk = useDashboardTokens();
   const levelName = t(`dashboard.levels.${level}.name`);
+  // In Novice, never « · ajustée » (§ 4.1): the page draws no layout.
+  const chipAdjusted = adjusted && !cards;
+  const chipText = t(chipAdjusted ? 'dashboard.levelChipAdjusted' : 'dashboard.levelChip', { level: levelName });
+
+  /** The chip — a plain one, or the button that opens the choice of formula (N3). */
+  const chip = (
+    <Chip
+      data-level-chip
+      icon={<TuneOutlinedIcon />}
+      label={
+        onChangeFormula ? (
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+            {chipText}
+            {/* The ▾ of § 4.1 (V3-04): the one sign that the chip opens
+                something, decorative — the name says it. */}
+            <ArrowDropDownIcon aria-hidden sx={{ fontSize: 20, mr: '-6px' }} />
+          </Box>
+        ) : (
+          chipText
+        )
+      }
+      variant="outlined"
+      onClick={onChangeFormula}
+      aria-haspopup={onChangeFormula ? 'dialog' : undefined}
+      aria-label={onChangeFormula ? t('dashboard.formulaChooser.chipLabel', { level: levelName }) : undefined}
+      // `.lvl` verbatim (round 6, N5-5): `height: 32px; padding: 0 13px
+      // 0 10px; border-radius: 16px; gap: 7px; font-size: 13px;
+      // font-weight: 600`. A `size="small"` chip was 24 px high.
+      sx={{
+        height: 32,
+        borderRadius: '16px',
+        fontSize: 13,
+        fontWeight: 600,
+        // `.lvl { border: 1px solid var(--chip-bd); background: var(--card) }`
+        borderColor: tk.chipBorder,
+        backgroundColor: 'background.paper',
+        '& .MuiChip-icon': { color: 'primary.main', fontSize: 18, ml: '10px', mr: 0 },
+        '& .MuiChip-label': { pl: '7px', pr: '13px' },
+        ...(onChangeFormula
+          ? {
+              // § 4.1, the signs of a chip that opens: the tinted ground and
+              // the green border under the pointer, the ring at the keyboard.
+              '&:hover': { backgroundColor: tk.tint, borderColor: 'primary.main' },
+              '&.Mui-focusVisible': {
+                backgroundColor: 'background.paper',
+                outline: '2px solid',
+                outlineColor: 'primary.main',
+                outlineOffset: 2,
+              },
+            }
+          : null),
+      }}
+    />
+  );
 
   return (
     <Box
@@ -182,7 +261,7 @@ export default function DashboardActions({
           flexBasis: { sm: '100%', lg: 'auto' },
         }}
       >
-        {!unavailable && (
+        {!unavailable &&
           /* A GLYPH before the label (round 5, A10-11). `Main.dc.html` puts
              one in front of each of the four header elements, and this was
              the one without: `<span class="lvl"><svg class="ic" …/>Vue
@@ -190,31 +269,19 @@ export default function DashboardActions({
              matched attribute for attribute. `.lvl .ic { color: var(--prim) }`
              — the glyph is the chip's one coloured mark, like the glyph of a
              widget header. The outline stays: `.lvl` is the one chip of the
-             page the artboard draws with a border rather than a fill. */
-          <Chip
-            data-level-chip
-            icon={<TuneOutlinedIcon />}
-            label={t(
-              adjusted ? 'dashboard.levelChipAdjusted' : 'dashboard.levelChip',
-              { level: levelName }
-            )}
-            variant="outlined"
-            // `.lvl` verbatim (round 6, N5-5): `height: 32px; padding: 0 13px
-            // 0 10px; border-radius: 16px; gap: 7px; font-size: 13px;
-            // font-weight: 600`. A `size="small"` chip was 24 px high.
-            sx={{
-              height: 32,
-              borderRadius: '16px',
-              fontSize: 13,
-              fontWeight: 600,
-              // `.lvl { border: 1px solid var(--chip-bd); background: var(--card) }`
-              borderColor: tk.chipBorder,
-              backgroundColor: 'background.paper',
-              '& .MuiChip-icon': { color: 'primary.main', fontSize: 18, ml: '10px', mr: 0 },
-              '& .MuiChip-label': { pl: '7px', pr: '13px' },
-            }}
-          />
-        )}
+             page the artboard draws with a border rather than a fill.
+
+             The button chip carries the tooltip of § 4.1 — « Changer de
+             formule », which confirms without explaining — under the pointer
+             and at the keyboard, never at the touch: the chip must suffice
+             alone there. */
+          (onChangeFormula ? (
+            <Tooltip title={t('dashboard.formulaChooser.tooltip')} describeChild disableTouchListener>
+              {chip}
+            </Tooltip>
+          ) : (
+            chip
+          ))}
         {/* The save indicator's live region: mounted ONCE and born EMPTY, the
             same node then carrying « Enregistrement… », « Enregistré » or the
             failure (A-10.6 — the rule of #278, A-6). A region inserted already
@@ -242,25 +309,29 @@ export default function DashboardActions({
           side from 600 px. While the bar shows them, this wrapper is `inert`
           and `aria-hidden` — `aria-hidden` too because Testing Library knows
           nothing of `inert`, and a browser drops an inert subtree from the
-          accessibility tree anyway (pre-flight, technical decision 6). */}
-      <Box
-        ref={pageActionsRef}
-        data-page-actions
-        inert={repeatHidden}
-        aria-hidden={repeatHidden || undefined}
-        sx={{
-          display: { xs: 'grid', sm: 'flex' },
-          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))' },
-          gap: { xs: '8px', sm: '12px' },
-        }}
-      >
-        <PageActionButtons
-          editing={editing}
-          unavailable={unavailable}
-          onEditingChange={onEditingChange}
-          onCustomize={onCustomize}
-        />
-      </Box>
+          accessibility tree anyway (pre-flight, technical decision 6).
+          Not drawn at all on the cards page (SMA-448, lot F2): the Novice has
+          neither « Modifier » nor « Personnaliser » — not disabled, ABSENT. */}
+      {!cards && (
+        <Box
+          ref={pageActionsRef}
+          data-page-actions
+          inert={repeatHidden}
+          aria-hidden={repeatHidden || undefined}
+          sx={{
+            display: { xs: 'grid', sm: 'flex' },
+            gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))' },
+            gap: { xs: '8px', sm: '12px' },
+          }}
+        >
+          <PageActionButtons
+            editing={editing}
+            unavailable={unavailable}
+            onEditingChange={onEditingChange}
+            onCustomize={onCustomize}
+          />
+        </Box>
+      )}
       {/* In BOTH modes, and active (A-7 amended — Alexandre, 25/09, fix
           round 1 of #291): the header keeps its arrangement when the page
           enters Edit mode. On a phone « Créer un jardin » keeps its line under
@@ -274,6 +345,7 @@ export default function DashboardActions({
           zone stretches its parts (`.vp.ph .acts > .btn`). `Add` (round 6,
           N5-7): the path `Main.dc.html` draws on « Créer un jardin ». */}
       <Button
+        ref={createRef}
         data-create-garden
         variant="contained"
         startIcon={<AddIcon />}

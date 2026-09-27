@@ -190,11 +190,30 @@ export async function openPage(binary, outDir, { label, width, height, mobile })
   return {
     evaluate,
     waitFor,
-    /** Loads the page with `query` and waits until it reports ready. */
+    /**
+     * Loads the page with `query` and waits until it reports ready — or
+     * rejects AT ONCE, naming it, when the page reports a failure
+     * (`__page.failed()`: its load error on screen — PR #296, fix round 1,
+     * the Extension's second draw): a page showing an error is never waited
+     * out, and never measured as if it were drawn.
+     */
     async navigate(query) {
       const url = `${pathToFileURL(join(outDir, 'page-harness.html')).href}?${query}`;
       await call('Page.navigate', { url });
-      await waitFor('window.__page && window.__page.ready()', `the page ${query} becoming ready`);
+      const started = Date.now();
+      for (;;) {
+        const state = await evaluate(
+          `(() => { if (!window.__page) return 'pending'; const failed = window.__page.failed(); if (failed) return 'failed: ' + failed; return window.__page.ready() ? 'ready' : 'pending'; })()`
+        ).catch(() => 'pending');
+        if (state === 'ready') return;
+        if (typeof state === 'string' && state.startsWith('failed: ')) {
+          throw new Error(`${label}: the page ${query} failed before it was ready — ${state.slice('failed: '.length)}`);
+        }
+        if (Date.now() - started > PAGE_WAIT_MS) {
+          throw new Error(`${label}: the page ${query} becoming ready did not happen within ${PAGE_WAIT_MS} ms.`);
+        }
+        await evaluate('new Promise((resolve) => requestAnimationFrame(() => resolve(true)))').catch(() => undefined);
+      }
     },
     /** A real key, through the browser's input pipeline, to the focused element. */
     async press(name) {

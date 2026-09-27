@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import {
+  coverPlantInset,
   fitPreviewBox,
   plantInsetPx,
   type PreviewFit,
@@ -49,8 +50,18 @@ interface FittedProps extends CommonProps {
    *
    * The cell and the gap are measured together by `fitPreview` — see there for
    * why one cannot be derived from the other.
+   *
+   * Or COVER the frame it is mounted in (`{ cover: true }` — SMA-448, lot F2,
+   * PR #296, fix round 1, V1: the plan band of a Novice card, Alexandre's
+   * finding of 27/09): the plan fills its frame from edge to edge on both
+   * axes, its ratio kept, centred, cropped by the frame — `object-fit: cover`
+   * for a grid. In CSS, not in numbers: fluid tracks, both minimum sizes at
+   * 100 % of the frame and the plan's aspect ratio, which the engine
+   * transfers from the axis that binds to the other (CSS Sizing 4); the
+   * frame — positioned, `overflow: hidden` — crops the rest. No box to
+   * measure, no observer: the frame's size is whatever the card gives it.
    */
-  fitTo: { maxW: number; maxH: number };
+  fitTo: { maxW: number; maxH: number } | { cover: true };
   resolvePlantId?: never;
   cellPx?: never;
 }
@@ -106,8 +117,9 @@ function TemplatePreview(props: Props) {
   //
   // Depends on the two NUMBERS rather than on the `fitTo` object, for the same
   // reason: the object is rebuilt by the caller on every render.
-  const maxW = props.fitTo?.maxW;
-  const maxH = props.fitTo?.maxH;
+  const cover = props.fitTo !== undefined && 'cover' in props.fitTo;
+  const maxW = props.fitTo && 'maxW' in props.fitTo ? props.fitTo.maxW : undefined;
+  const maxH = props.fitTo && 'maxH' in props.fitTo ? props.fitTo.maxH : undefined;
   const cellPx = props.cellPx;
   const box = useMemo(
     () =>
@@ -132,8 +144,23 @@ function TemplatePreview(props: Props) {
   // a box of the scaled size — the layout sees the box, the eye sees the whole
   // plan downsampled into it. See `fitPreviewBox` for why a scale and not a
   // crop.
-  const bounded =
-    box && box.scale < 1
+  const bounded = cover
+    ? ({
+        // COVER (V1): the smallest box of the plan's ratio that is at least
+        // the frame on both axes, centred in it — the frame crops the rest.
+        // A SIZE CONTAINER (U2): the plantings' insets are container units
+        // of ONE cell — its size owes nothing to its contents, so containing
+        // it changes nothing of the box above.
+        containerType: 'size',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        minWidth: '100%',
+        minHeight: '100%',
+        aspectRatio: `${template.cols} / ${template.rows}`,
+      } as const)
+    : box && box.scale < 1
       ? {
           width: box.width,
           height: box.height,
@@ -141,6 +168,16 @@ function TemplatePreview(props: Props) {
           transformOrigin: 'top left',
         }
       : { width: 'fit-content' };
+  // Fluid tracks under cover — the frame decides the cell —, fixed ones otherwise.
+  const tracks = cover
+    ? {
+        gridTemplateColumns: `repeat(${template.cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${template.rows}, minmax(0, 1fr))`,
+      }
+    : {
+        gridTemplateColumns: `repeat(${template.cols}, ${fit.cellPx}px)`,
+        gridTemplateRows: `repeat(${template.rows}, ${fit.cellPx}px)`,
+      };
 
   /**
    * The string `getPlantColor` hashes for one block.
@@ -162,8 +199,7 @@ function TemplatePreview(props: Props) {
       data-testid="template-preview"
       sx={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${template.cols}, ${fit.cellPx}px)`,
-        gridTemplateRows: `repeat(${template.rows}, ${fit.cellPx}px)`,
+        ...tracks,
         gap: `${fit.gapPx}px`,
         p: `${fit.gapPx}px`,
         bgcolor: cellColors?.frame ?? tk.cellOnBd,
@@ -221,7 +257,15 @@ function TemplatePreview(props: Props) {
             // Conditional, per the frozen design: below a 4 px cell a 1x1 block
             // inset by 2 px on each side measures zero, and the Large table's
             // thumbnails would stop showing any planting at all.
-            m: `${inset}px`,
+            // Under cover the cell is the frame's to decide: a share of it
+            // — 7 % of a 28 px cell is the 2 px inset, and nothing of a cell
+            // too small to keep one (the rule of `plantInsetPx`, in CSS) —
+            // in container units of ONE cell on each axis, never a
+            // percentage: a percentage margin resolves on the inline size of
+            // the planting's own grid AREA, top and bottom included, and a
+            // planting wider than tall lost its height with its span (PR
+            // #296, fix round 2, U2 — GitHub `4115367541`).
+            m: cover ? coverPlantInset(template.rows, template.cols, fit.gapPx) : `${inset}px`,
             borderRadius: '3px',
             bgcolor: getPlantColor(plantColorKey(i)),
           }}

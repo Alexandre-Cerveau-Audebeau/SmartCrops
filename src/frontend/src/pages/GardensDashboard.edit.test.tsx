@@ -1251,9 +1251,16 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
   });
 
   it('keeps the hidden widgets in their slots when the visible ones move', async () => {
-    // Novice hides To do and Counts BETWEEN the visible widgets and the last
-    // two: a reorder must not push them to the end of the layout.
-    await enterEditMode('novice');
+    // A layout that hides To do and Counts BETWEEN the visible widgets and
+    // the last one (as the Novice preset did, before the Novice had a page of
+    // its own — SMA-448, lot F2): a reorder must not push them to the end of
+    // the layout.
+    await enterEditMode(
+      'gardener',
+      presetFor('gardener').map((block) =>
+        block.key === 'todo' || block.key === 'counters' ? { ...block, hidden: true } : block
+      )
+    );
 
     const handle = screen.getByRole('button', { name: 'Move Weather' });
     handle.focus();
@@ -1271,7 +1278,6 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
       'month',
       'todo',
       'counters',
-      'stats',
       'harvest',
     ]);
   });

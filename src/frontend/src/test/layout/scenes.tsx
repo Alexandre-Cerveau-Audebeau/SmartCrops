@@ -13,11 +13,12 @@ import { placement } from '../fixtures/placements';
 import { linkFixture, locationFixture, weatherFixture, weekFixture } from '../fixtures/weather';
 import { gardenViewOf, type GardenView } from '../../utils/gardenStats';
 import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOptions';
+import { cardBearsWeather, noviceCardsOf, type NoviceCard } from '../../components/Dashboard/noviceCards';
 import { LAYOUT_NOW_MS } from './clock';
 import { presetFor } from '../fixtures/formulas';
 import type { SaveState } from '../../hooks/useDashboardPreferences';
 import type { DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
-import type { DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
+import type { DashboardData, DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
 import type { DashboardWeatherData } from '../../types/DashboardWeather';
 
 /**
@@ -87,6 +88,9 @@ const plant = (plantId: string, row: number, col: number) =>
 /** The same variety on several cells. */
 const many = (plantId: string, cells: Array<[number, number]>) =>
   cells.map(([row, col]) => plant(plantId, row, col));
+/** One planting over `spanRows` × `spanCols` cells from its top-left corner (PR #296, fix round 2, U2: the elongated ones). */
+const spread = (plantId: string, row: number, col: number, spanRows: number, spanCols: number) =>
+  placement({ id: `${plantId}-${row}-${col}-${spanRows}x${spanCols}`, plantId, startRow: row, startCol: col, spanRows, spanCols });
 
 const terrasse = gardenFixture({
   id: 'g1',
@@ -326,6 +330,141 @@ export const GRID_SCENES: GridScene[] = [
     ] satisfies GridScene['blocks'],
   })),
 ];
+
+/**
+ * SMA-448, lot F2, step N5 (V5: « toute forme nouvelle devient une scène ») —
+ * THE NOVICE PAGE as a scene: the header (the title, its meta line, the chip
+ * that opens the choice of formula, « Créer un jardin »), one card per garden,
+ * the foot message and the weather warning — with 0, 1 and 3 gardens, 5 (an
+ * account beyond the Novice's limit keeps its gardens — « Votre formule —
+ * conservée »), very long garden names, and a garden without a city.
+ */
+export interface NoviceScene {
+  /** `novice-0`, `novice-1`, `novice-3`, `novice-5`, `novice-3-long`, `novice-3-partial`. */
+  name: string;
+  /** How many gardens the page shows. */
+  count: 0 | 1 | 3 | 5;
+  /** Garden names far longer than V34's probe: the one ellipsis a source allows (SMA-436), the task and the plants wrapping. */
+  long?: boolean;
+  /** Balcon sud without a city: the dashed « Ajouter une ville » in a foot. */
+  weather: 'all' | 'partial';
+}
+
+export const NOVICE_SCENES: NoviceScene[] = [
+  { name: 'novice-0', count: 0, weather: 'all' },
+  { name: 'novice-1', count: 1, weather: 'all' },
+  { name: 'novice-3', count: 3, weather: 'all' },
+  { name: 'novice-5', count: 5, weather: 'all' },
+  { name: 'novice-3-long', count: 3, long: true, weather: 'all' },
+  { name: 'novice-3-partial', count: 3, weather: 'partial' },
+];
+
+/**
+ * Two more gardens, on the product's own fields — a greenhouse, a small
+ * square of thyme. The greenhouse carries the ELONGATED plantings (PR #296,
+ * fix round 2, U2 — GitHub `4115367541`): a row of courgettes over 1 × 7
+ * cells, a bean trellis over 7 × 1, a lettuce strip over 1 × 3, a potato bed
+ * over 4 × 4, beside 1 × 1 herbs — the shapes a planting must keep in the
+ * band, whatever it spans. Under the crop, at every width of the page.
+ */
+const serre: DashboardGardenData = {
+  ...terrasse,
+  id: 'g4',
+  name: 'Serre nord',
+  description: null,
+  width: 8,
+  height: 8,
+  cellsJson: null,
+  config: { ...terrasse.config, gardenType: 'greenhouse' },
+  placements: [
+    spread('courgette', 0, 0, 1, 7),
+    spread('bean', 1, 7, 7, 1),
+    spread('lettuce', 2, 0, 1, 3),
+    spread('potato', 3, 2, 4, 4),
+    ...many('mint', [[1, 0], [1, 1]]),
+    ...many('basil', [[2, 4], [2, 5], [2, 6]]),
+    ...many('thyme', [[7, 0], [7, 1], [7, 2], [7, 3]]),
+  ],
+  placementCount: 13,
+  varietyCount: 7,
+  occupiedCells: 42,
+  updatedAt: '2026-09-18T08:00:00Z',
+};
+const carre: DashboardGardenData = {
+  ...potager,
+  id: 'g5',
+  name: 'Carré aromatique',
+  width: 4,
+  height: 4,
+  cellSize: '25cm',
+  config: { ...potager.config, gardenType: 'inground' },
+  placements: [...many('thyme', [[0, 0], [0, 1], [1, 0]]), ...many('rosemary', [[2, 2], [3, 3]])],
+  placementCount: 5,
+  varietyCount: 2,
+  occupiedCells: 5,
+  updatedAt: '2026-09-11T16:00:00Z',
+};
+
+/** The very long names of the long scene — real sentences a gardener might type. */
+export const NOVICE_LONG_NAMES = [
+  'Le grand potager derrière la maison de mes grands-parents, côté verger',
+  'Balcon sud de l’appartement du troisième étage, au-dessus de la rue',
+  'Petite serre en verre tout au fond du jardin, près du vieux cerisier',
+] as const;
+const gardensVeryLong: DashboardGardenData[] = [
+  { ...terrasse, name: NOVICE_LONG_NAMES[0] },
+  { ...balcon, name: NOVICE_LONG_NAMES[1] },
+  { ...potager, name: NOVICE_LONG_NAMES[2] },
+];
+
+/** The weather of a Novice scene: every garden in Écully — but Balcon sud when partial. */
+const noviceWeather = (list: readonly DashboardGardenData[], partial: boolean): DashboardWeatherData =>
+  weatherFixture(
+    [ecully],
+    list.map((garden) =>
+      partial && garden.id === 'g2'
+        ? linkFixture({ gardenId: garden.id, locationKey: null, source: null })
+        : linkFixture({ gardenId: garden.id, locationKey: ecully.key, source: garden.id === 'g3' ? 'garden' : 'profile' })
+    )
+  );
+
+/**
+ * A Novice scene: its gardens, its cards as the page derives them, the
+ * header's figures, whether the warning shows — and what the page launcher's
+ * `fetch` serves the REAL page for it (PR #296, fix round 1, S1): the
+ * aggregate and the weather the cards above are derived from, so what the
+ * page draws and what the suite expects come from the same data.
+ */
+export interface NoviceSceneData {
+  gardens: DashboardGardenData[];
+  cards: NoviceCard[];
+  figures: { gardens: number; plants: number; surfaceM2: number };
+  /** V1: a card shows a temperature — every scene but the empty one. */
+  warning: boolean;
+  /** `/api/dashboard` for this scene. */
+  data: DashboardData;
+  /** `/api/dashboard/weather` for this scene. */
+  weather: DashboardWeatherData;
+}
+
+export function noviceSceneData(scene: NoviceScene): NoviceSceneData {
+  const list = scene.long ? gardensVeryLong : [...gardens, serre, carre].slice(0, scene.count);
+  const sceneViews = new Map(list.map((garden) => [garden.id, gardenViewOf(garden)]));
+  const weather = noviceWeather(list, scene.weather === 'partial');
+  const cards = noviceCardsOf(list, varieties, sceneViews, weather, 'ready');
+  return {
+    gardens: list,
+    cards,
+    data: dashboardFixture(list, { varieties }),
+    weather,
+    figures: {
+      gardens: list.length,
+      plants: list.reduce((sum, garden) => sum + garden.placementCount, 0),
+      surfaceM2: list.reduce((sum, garden) => sum + (sceneViews.get(garden.id)?.surfaceM2 ?? 0), 0),
+    },
+    warning: cards.some(cardBearsWeather),
+  };
+}
 
 /** The scene of one card of a grid scene: the widget at its size, on every garden located. */
 export const gridCardScene = (grid: GridScene, block: GridScene['blocks'][number]): LayoutScene => ({

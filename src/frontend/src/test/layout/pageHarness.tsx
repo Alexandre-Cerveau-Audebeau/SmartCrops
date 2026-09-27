@@ -13,8 +13,8 @@ import { LanguageProvider } from '../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { capabilitiesFor, presetFor } from '../fixtures/formulas';
 import type { DashboardLevel } from '../../types/Dashboard';
-import { SCENE_DATA, weatherAll } from './scenes';
-import { measureCard, wrappedTexts } from './measure';
+import { NOVICE_SCENES, SCENE_DATA, noviceSceneData, weatherAll, type NoviceScene } from './scenes';
+import { measureCard, wrappedTexts, type CardMeasure } from './measure';
 
 /**
  * SMA-437, lot V39, PR B, step B9 — the BROWSER side of the page launcher
@@ -32,11 +32,30 @@ import { measureCard, wrappedTexts } from './measure';
  * `settle()`, the focus and the clicks, the marks that tell one node from
  * another, the saves held and released, and the PROBES that break the page on
  * purpose so the suite can prove its checks see a break.
+ *
+ * SMA-448, lot F2 — PR #296, fix round 1, S1: the Novice page is measured
+ * HERE, on the page the app mounts, and no longer on a tree the scenes'
+ * harness rebuilt beside it (the Extension's two comments on `noviceTree`: a
+ * harness that could stay green while the real page broke). `scene=<name>`
+ * names a Novice scene of `scenes.tsx`, whose gardens and weather `fetch`
+ * serves the REAL page; `measureNovice()` reads the page as one card and card
+ * by card; `fail=gardens` answers the aggregate with a 500, for the proof
+ * that a page showing its load error is never taken for ready.
  */
 
 const params = new URLSearchParams(location.search);
 const level = (params.get('level') ?? 'expert') as DashboardLevel;
 const prefsPending = params.get('prefs') === 'pending';
+
+const sceneName = params.get('scene');
+const scene: NoviceScene | null = sceneName
+  ? (NOVICE_SCENES.find((candidate) => candidate.name === sceneName) ?? null)
+  : null;
+if (sceneName && !scene) throw new Error(`No Novice scene ${sceneName}`);
+/** What `fetch` serves the page for the scene: its aggregate and its weather — the same data the scene's expected cards are derived from. */
+const served = scene ? noviceSceneData(scene) : null;
+/** The gardens' aggregate answered 500: the page shows its load error, and must never be measured as if it were drawn. */
+const failGardens = params.get('fail') === 'gardens';
 
 /** A JSON answer. */
 const json = (body: unknown) =>
@@ -76,8 +95,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       capabilities: capabilitiesFor(level),
     });
   }
-  if (url.startsWith('/api/dashboard/weather')) return json(weatherAll());
-  if (url.startsWith('/api/dashboard')) return json(SCENE_DATA);
+  if (url.startsWith('/api/dashboard/weather')) return json(served ? served.weather : weatherAll());
+  if (url.startsWith('/api/dashboard')) {
+    if (failGardens) return new Response(null, { status: 500 });
+    return json(served ? served.data : SCENE_DATA);
+  }
   // A visitor: the navbar of someone not signed in, as the pre-flight measured it.
   if (url.startsWith('/api/auth/')) return new Response(null, { status: 401 });
   return new Response(null, { status: 404 });
@@ -143,6 +165,64 @@ export interface PageMeasure {
   fontLoaded: boolean;
 }
 
+/**
+ * SMA-448, lot F2 — PR #296, fix round 1, V1 (Alexandre's finding of 27/09):
+ * the plan in a card's band. `frame` is the slot the plan must fill — the
+ * `data-novice-plan` frame, or the band less its padding —, `drawn` the box
+ * the plan is drawn at (before the frame crops it), and `covered` whether
+ * the drawing reaches every edge of the frame, to half a pixel.
+ */
+export interface PlanMeasure {
+  frame: Rect;
+  drawn: Rect;
+  covered: boolean;
+}
+
+/**
+ * A planting of a plan (PR #296, fix round 2, U2 — GitHub `4115367541`):
+ * what it spans, the cell it is drawn from, the area its cells make, and the
+ * box it draws — all relative to the preview, to a tenth of a pixel. The
+ * suite computes the box it OWES from the rule — a share of ONE cell on each
+ * side under cover, `plantInsetPx` contained — and compares; this reads.
+ */
+export interface PlantingMeasure {
+  /** `${rows}x${cols}`. */
+  span: string;
+  /** The cell at its top-left corner: the unit its inset is a share of. */
+  cell: { w: number; h: number };
+  /** The union of the cells it spans. */
+  area: Rect;
+  /** The box it draws. */
+  drawn: Rect;
+}
+
+/**
+ * SMA-448, lot F2 (N5; PR #296, fix round 1, S1) — the Novice page measured
+ * as one card — the `Container` of `GardensDashboard`, every atom against
+ * every other — and card by card (each card as a card, its box relative to
+ * the page). `body` is the gardens' own zone (`data-novice-page`: the cards,
+ * or the empty state, and the foot message), not the container's last child
+ * — the warning, when it shows (the Extension's second draw, `04a18a9d…`).
+ */
+export interface NoviceMeasure extends CardMeasure {
+  scene: string;
+  viewport: number;
+  /** The gardens' zone, relative to the page: what `body` measures. */
+  content: Rect;
+  /** Each card: its measure, its box relative to the page, its plan band (V1), the plantings the plan draws (U2) and its foot (S3). */
+  cards: Array<CardMeasure & { id: string; box: Rect; plan: PlanMeasure | null; plantings: PlantingMeasure[]; foot: Rect }>;
+  /** Every pair of cards whose boxes intersect by more than a pixel (S3 — as `measureGrid` reads the grid's). */
+  cardOverlaps: string[];
+  /** The header's zone texts drawn over more than one line — none belongs on two. */
+  wrapped: string[];
+  /** The weather warning under the cards, drawn or not (V1). */
+  warning: boolean;
+  /** The chip is the button of N3 — the provisional door to another formula. */
+  chipButton: boolean;
+  /** How many columns the cards take: their distinct left edges. */
+  columns: number;
+}
+
 declare global {
   interface Window {
     __page?: typeof page;
@@ -157,7 +237,89 @@ const rectOf = (element: Element): Rect => {
   return { x: round(box.left), y: round(box.top), w: round(box.width), h: round(box.height) };
 };
 
+/** A box to a tenth of a pixel, relative to `origin`. */
+const rectWithin = (element: Element, origin: DOMRect): Rect => {
+  const box = element.getBoundingClientRect();
+  return { x: round(box.left - origin.left), y: round(box.top - origin.top), w: round(box.width), h: round(box.height) };
+};
+
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+/**
+ * The plan of a Novice card and its slot (V1): the `data-novice-plan` frame
+ * — or, before it existed, the band's content box, the slot the mock-up's
+ * `.thumb { width: 100%; height: 100% }` fills — and the preview drawn in it.
+ * Null when the card draws no plan (the garden has none).
+ */
+function planOf(card: HTMLElement, origin: DOMRect): PlanMeasure | null {
+  const slot = card.querySelector<HTMLElement>('[data-novice-plan]') ?? card.querySelector<HTMLElement>('[data-novice-band]');
+  const preview = slot?.querySelector<HTMLElement>('[data-testid="template-preview"]');
+  if (!slot || !preview) return null;
+  const style = getComputedStyle(slot);
+  const box = slot.getBoundingClientRect();
+  const inner = {
+    left: box.left + (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.paddingLeft) || 0),
+    top: box.top + (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.paddingTop) || 0),
+    right: box.right - (parseFloat(style.borderRightWidth) || 0) - (parseFloat(style.paddingRight) || 0),
+    bottom: box.bottom - (parseFloat(style.borderBottomWidth) || 0) - (parseFloat(style.paddingBottom) || 0),
+  };
+  const drawn = preview.getBoundingClientRect();
+  return {
+    frame: {
+      x: round(inner.left - origin.left),
+      y: round(inner.top - origin.top),
+      w: round(inner.right - inner.left),
+      h: round(inner.bottom - inner.top),
+    },
+    drawn: rectWithin(preview, origin),
+    covered:
+      drawn.left <= inner.left + 0.5 &&
+      drawn.top <= inner.top + 0.5 &&
+      drawn.right >= inner.right - 0.5 &&
+      drawn.bottom >= inner.bottom - 0.5,
+  };
+}
+
+/**
+ * The plantings a preview draws (U2 — GitHub `4115367541`): for each, the
+ * cells it spans — read from its grid lines —, the area those cells make,
+ * the box it draws, and the cell at its corner, the unit its inset is a
+ * share of. Relative to the preview's own box, so a transform on the preview
+ * (the cover's centring) cancels out. Nothing of the rule lives here: the
+ * suite says what the box must be, this reads what it is.
+ */
+function plantingsOf(preview: HTMLElement | null): PlantingMeasure[] {
+  if (!preview) return [];
+  const origin = preview.getBoundingClientRect();
+  const cells = new Map<string, DOMRect>();
+  for (const cell of preview.querySelectorAll<HTMLElement>('[data-testid="template-preview-cell"]')) {
+    const style = getComputedStyle(cell);
+    cells.set(`${style.gridRowStart}:${style.gridColumnStart}`, cell.getBoundingClientRect());
+  }
+  const spanOf = (end: string) => (end.startsWith('span ') ? Number(end.slice('span '.length)) : 1);
+  return [...preview.querySelectorAll<HTMLElement>('[data-testid="template-preview-plant"]')].map((plant) => {
+    const style = getComputedStyle(plant);
+    const row = Number(style.gridRowStart);
+    const col = Number(style.gridColumnStart);
+    const rows = spanOf(style.gridRowEnd);
+    const cols = spanOf(style.gridColumnEnd);
+    const first = cells.get(`${row}:${col}`);
+    const last = cells.get(`${row + rows - 1}:${col + cols - 1}`);
+    if (!first || !last) throw new Error(`No cell under the planting at row ${row}, column ${col}, spanning ${rows} × ${cols}.`);
+    const drawn = plant.getBoundingClientRect();
+    return {
+      span: `${rows}x${cols}`,
+      cell: { w: round(first.width), h: round(first.height) },
+      area: {
+        x: round(first.left - origin.left),
+        y: round(first.top - origin.top),
+        w: round(last.right - first.left),
+        h: round(last.bottom - first.top),
+      },
+      drawn: { x: round(drawn.left - origin.left), y: round(drawn.top - origin.top), w: round(drawn.width), h: round(drawn.height) },
+    };
+  });
+}
 
 /** The `n`-th element `selector` finds, or a throw that names it. */
 function nth<T extends Element = Element>(selector: string, n: number): T {
@@ -170,7 +332,14 @@ function nth<T extends Element = Element>(selector: string, n: number): T {
 const markOf = (element: Element | null) => (element as (Element & { __mark?: string }) | null)?.__mark ?? null;
 
 const barOf = () => document.querySelector<HTMLElement>('[data-compact-bar]');
-const headerRowOf = () => document.querySelector<HTMLElement>('[data-dashboard-header] [data-page-actions]');
+/**
+ * The header's repeated buttons — their wrapper — or, on the Novice page,
+ * which repeats none (SMA-448, lot F2: no « Modifier », no « Personnaliser »),
+ * the header's whole actions zone: the row the scenarios scroll past.
+ */
+const headerRowOf = () =>
+  document.querySelector<HTMLElement>('[data-dashboard-header] [data-page-actions]') ??
+  document.querySelector<HTMLElement>('[data-dashboard-header] [data-dashboard-actions]');
 const gridCards = () =>
   [...document.querySelectorAll<HTMLElement>('[data-widget]')].filter((card) => !card.closest('[data-drag-overlay]'));
 
@@ -229,12 +398,31 @@ function describeActive(): ActiveMeasure {
 }
 
 const page = {
-  /** The page has drawn what the scenario needs: the fonts in, the grid laid out — or, while the layout never arrives, the header. */
+  /**
+   * The page has drawn what the scenario needs: the fonts in, the grid laid
+   * out — or the Novice page DRAWN, its cards or its empty state (SMA-448,
+   * lot F2), never its load error (PR #296, fix round 1: the Extension's
+   * second draw, `11595896…` — the error screen rendered the page's root
+   * without a card nor a skeleton, and passed for ready) — or, while the
+   * layout never arrives, the header.
+   */
   ready(): boolean {
     if (document.fonts.status !== 'loaded') return false;
     if (!document.querySelector('[data-site-navbar]') || !headerRowOf()) return false;
     if (prefsPending) return true;
-    return gridCards().length > 0 && document.querySelectorAll('.MuiSkeleton-root').length === 0;
+    if (page.failed()) return false;
+    const drawn =
+      gridCards().length > 0 || document.querySelector('[data-novice-cards], [data-novice-empty]') !== null;
+    return drawn && document.querySelectorAll('.MuiSkeleton-root').length === 0;
+  },
+
+  /**
+   * Why the page will never be ready — its Novice load error on screen —, or
+   * null. The launcher's `navigate` rejects on it at once, naming it, rather
+   * than waiting out its delay on a page that shows an error.
+   */
+  failed(): string | null {
+    return document.querySelector('[data-novice-error]') ? 'the Novice page shows its load error (data-novice-error)' : null;
   },
 
   /** Waits `frames` frames: the observers report at a frame, React commits, the effects run. */
@@ -281,6 +469,67 @@ const page = {
       firstCard: card ? { key: card.getAttribute('data-widget') ?? '', top: round(card.getBoundingClientRect().top) } : null,
       fontLoaded: document.fonts.check('16px Inter'),
     };
+  },
+
+  /**
+   * SMA-448, lot F2 — PR #296, fix round 1, S1: the Novice page AS THE APP
+   * MOUNTS IT, measured as one card and card by card. The page is the
+   * `Container` of `GardensDashboard` — its two plain ancestors, `<main>` and
+   * the layout's column, are what `measureCard` walks. `body` is the gardens'
+   * zone, not the container's last child.
+   */
+  measureNovice(): NoviceMeasure {
+    const header = document.querySelector<HTMLElement>('[data-dashboard-header]');
+    const container = header?.parentElement;
+    const zone = document.querySelector<HTMLElement>('[data-dashboard-actions]');
+    const content = document.querySelector<HTMLElement>('[data-novice-page]');
+    if (!header || !container || !zone || !content) {
+      throw new Error('The Novice page drew no header, no actions zone or no gardens zone to measure.');
+    }
+    const origin = container.getBoundingClientRect();
+    const cards = [...container.querySelectorAll<HTMLElement>('[data-novice-card]')].map((card) => ({
+      id: card.getAttribute('data-novice-card') ?? '',
+      box: rectWithin(card, origin),
+      plan: planOf(card, origin),
+      plantings: plantingsOf(card.querySelector<HTMLElement>('[data-novice-plan] [data-testid="template-preview"]')),
+      foot: rectWithin(card.querySelector('[data-novice-foot]') ?? card, origin),
+      ...measureCard(card),
+    }));
+    const cardOverlaps: string[] = [];
+    cards.forEach((a, index) => {
+      for (const b of cards.slice(index + 1)) {
+        const w = Math.min(a.box.x + a.box.w, b.box.x + b.box.w) - Math.max(a.box.x, b.box.x);
+        const h = Math.min(a.box.y + a.box.h, b.box.y + b.box.h) - Math.max(a.box.y, b.box.y);
+        if (w > 1 && h > 1) cardOverlaps.push(`${a.id} ∩ ${b.id} = ${Math.round(w)}×${Math.round(h)}`);
+      }
+    });
+    const measured = measureCard(container);
+    return {
+      ...measured,
+      body: {
+        h: round(content.getBoundingClientRect().height),
+        scrollH: content.scrollHeight,
+        overflow: Math.max(0, content.scrollHeight - content.clientHeight),
+        beyondCard: measured.body.beyondCard,
+      },
+      scene: sceneName ?? '',
+      viewport: innerWidth,
+      content: rectWithin(content, origin),
+      cards,
+      cardOverlaps,
+      wrapped: wrappedTexts(zone),
+      warning: document.querySelector('[data-weather-disclaimer]') !== null,
+      chipButton: document.querySelector('[data-level-chip]')?.getAttribute('role') === 'button',
+      columns: new Set(cards.map((card) => card.box.x)).size,
+    };
+  },
+
+  /**
+   * Every planting of every preview on the page (U2's control): on the grid
+   * page, the Gardens widget's thumbnails — CONTAINED, their inset in px.
+   */
+  measurePlantings(): PlantingMeasure[] {
+    return [...document.querySelectorAll<HTMLElement>('[data-testid="template-preview"]')].flatMap((preview) => plantingsOf(preview));
   },
 
   /**

@@ -28,7 +28,11 @@
  *   vertical one cuts its left and right edges for good, and a single flag
  *   for both axes made that cut pass for a fold;
  * - the text wider than its own block (a spill), the ellipsized lines, the
- *   scrolling zones and their excess, the smallest font drawn.
+ *   scrolling zones and their excess, the smallest font drawn;
+ * - a CROP BY DESIGN (`data-crop` — SMA-448, PR #296, fix round 1, V1): a
+ *   picture that covers its frame and is cut by it, the Novice card's plan
+ *   band, is read as the frame shows it, never as a clip; a text the frame
+ *   cuts is a clip still.
  *
  * A chevauchement is VISIBLE from {@link VISIBLE_OVERLAP_PX} in both
  * dimensions; below that, two line boxes touch without their glyphs meeting
@@ -117,7 +121,13 @@ export interface CardMeasure {
   ellipsized: EllipsisMeasure[];
   scrollers: ScrollerMeasure[];
   minFont: number;
-  smallFonts: { label: string; px: number }[];
+  /**
+   * Every text or glyph under 14 px, with whether it belongs to a chip, a
+   * pill or a missing-data mark of the design — the one exception V11
+   * grants to 13 px (PR #296, fix round 1, S2: the exception is theirs, not
+   * every 13 px text's).
+   */
+  smallFonts: { label: string; px: number; chip: boolean }[];
   fontLoaded: boolean;
 }
 
@@ -415,6 +425,13 @@ export function measureCard(card: HTMLElement): CardMeasure {
       kind = el.children.length === 0 ? 'box' : 'panel';
       label = `${kind}:${tag}[${dataTag(el, card)}]`;
     }
+    // A CROP BY DESIGN (`data-crop` — V1: the plan covering its frame,
+    // `object-fit: cover`): what the frame cuts of a painted box or a glyph
+    // is the design, asserted by the frame's own measure (the plan covers
+    // it), so the atom is read as the frame shows it. A TEXT the frame cuts
+    // stays a clip: a crop is for a picture, never for words.
+    const crop = kind === 'text' ? null : el.parentElement?.closest('[data-crop]');
+    if (crop && crop !== card && card.contains(crop)) rect = intersect(rect, paddingBox(crop));
     if (rect.width <= 0.5 || rect.height <= 0.5) continue;
     const vis = occlude(intersect(rect, clipBoxFor(el, card, kind === 'text')), el, sticky);
     atoms.push({ el, kind, rect, vis, label, fontSize: parseFloat(cs.fontSize), display: cs.display });
@@ -451,7 +468,7 @@ export function measureCard(card: HTMLElement): CardMeasure {
 
   const clipped: ClipMeasure[] = [];
   const spills: SpillMeasure[] = [];
-  const smallFonts: { label: string; px: number }[] = [];
+  const smallFonts: { label: string; px: number; chip: boolean }[] = [];
   let minFont = 999;
   let maxBottom = -Infinity;
   for (const at of atoms) {
@@ -517,7 +534,13 @@ export function measureCard(card: HTMLElement): CardMeasure {
         }
       }
       if (at.fontSize < minFont) minFont = at.fontSize;
-      if (at.fontSize < 14) smallFonts.push({ label: at.label, px: at.fontSize });
+      if (at.fontSize < 14) {
+        smallFonts.push({
+          label: at.label,
+          px: at.fontSize,
+          chip: at.el.closest('.MuiChip-root, [data-pill], [data-missing-mark]') !== null,
+        });
+      }
     }
     // Below the card's edge and NOT in a scrolling zone: lost, where a zone's
     // fold is reachable (rule 5: « défile à l'intérieur de la carte »). A zone

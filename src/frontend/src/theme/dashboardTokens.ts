@@ -158,6 +158,13 @@ export interface DashboardTokens {
   stageSow: string;
   stageFlower: string;
   stageHarvest: string;
+  /**
+   * The ground of the plan band of a Novice card (SMA-448, lot F2 — SMA-436,
+   * V3-00 / V3-02: `#FBFDFA` by day, `#0F2038` at night). The contract v3
+   * (§ 5.2) names it among « les jetons qui manquent aux surfaces v3 — à
+   * créer au lot avec leurs valeurs de planche »: created here with them.
+   */
+  noviceBandBg: string;
 }
 
 const LIGHT: DashboardTokens = {
@@ -200,6 +207,7 @@ const LIGHT: DashboardTokens = {
   stageSow: '#8FB996',
   stageFlower: '#E0A93B',
   stageHarvest: '#A0522D',
+  noviceBandBg: '#FBFDFA',
 };
 
 const DARK: DashboardTokens = {
@@ -238,6 +246,7 @@ const DARK: DashboardTokens = {
   // The one lane the artboards lighten at night, so an earth brown stays
   // visible on the dark card (`_spec.md` § 5).
   stageHarvest: '#C8744A',
+  noviceBandBg: '#0F2038',
 };
 
 export function getDashboardTokens(mode: DashboardThemeMode): DashboardTokens {
@@ -290,6 +299,46 @@ export const DASHBOARD_TYPE = {
   bigSmall: 28,
   /** Garden name on a Gardens card. */
   gardenName: 15,
+  /** …and on a card of the Novice page: 17 px / 800 (SMA-436; contract v3 § 5.3). */
+  noviceGardenName: 17,
+} as const;
+
+/**
+ * T6 — the Novice page's measures (SMA-448, lot F2; SMA-436), in px, from
+ * V3-00's `.gcard*` CSS as the contract v3 transcribes it (§ 4.3): the plan
+ * band, the body, the chips, the task band, the foot; the card grid's three
+ * columns on a desktop (its gutter is the grid's, `DASHBOARD_SPACING`).
+ */
+export const DASHBOARD_NOVICE = {
+  /** `.gcards { grid-template-columns: repeat(3, …) }` from 1 200 px. */
+  columns: 3,
+  /** `.gcard-band`: 58 px high, 6 px of padding, a rule under it. */
+  band: 58,
+  bandPadding: 6,
+  /** `.gcard-b { padding: 14px 16px 12px; gap: 10px }`. */
+  bodyPadding: '14px 16px 12px',
+  bodyGap: 10,
+  /** `.gcard-n { gap: 8px }`. */
+  nameGap: 8,
+  /** `.gcard-chips { gap: 6px }`. */
+  chipGap: 6,
+  /** The plants listed before « +N » (V3-00: « Tomate, Laitue, Poireau, Carotte +9 »). */
+  plantsShown: 4,
+  /** `.gcard-task { border-radius: 10px; padding: 9px 12px; gap: 9px }`, its glyph 18 px. */
+  taskRadius: 10,
+  taskPadding: '9px 12px',
+  taskGap: 9,
+  taskIcon: 18,
+  /** `.gcard-f { padding: 11px 16px; gap: 10px }`, the chevron 20 px. */
+  footPadding: '11px 16px',
+  footGap: 10,
+  chevron: 20,
+  /** The skeleton of a card while the gardens load. */
+  skeletonHeight: 220,
+  /** `.novfoot { margin-top: 26px }`: the foot message under the cards. */
+  footMessageGap: 26,
+  /** V3-00's empty state: `.inv { max-width: 640px }`. */
+  inviteMaxW: 640,
 } as const;
 
 /**

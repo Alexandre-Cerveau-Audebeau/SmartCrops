@@ -24,6 +24,7 @@ import {
 } from '../test/fixtures/dashboard';
 import { at, placement } from '../test/fixtures/placements';
 import { declaredAtBreakpoint, rulesFor } from '../test/dashboardDom';
+import type { DashboardBlock } from '../types/Dashboard';
 import type {
   DashboardData,
   DashboardGardenData,
@@ -102,6 +103,14 @@ const gardenWith = (
 
 // The aggregate around them comes from the shared `dashboardFixture` (round 7,
 // S02): totals derived from the gardens, once, for the three page suites.
+
+/**
+ * The Gardener's preset with the Gardens widget at `size` — the Medium list
+ * these tests look at, which the Novice preset used to show before the Novice
+ * had a page of its own (SMA-448, lot F2).
+ */
+const gardensAt = (size: 'small' | 'medium'): DashboardBlock[] =>
+  presetFor('gardener').map((block) => (block.key === 'gardens' ? { ...block, size } : block));
 
 /** The Gardens widget — the frozen design's own `data-widget` handle. */
 const gardensWidget = () =>
@@ -999,10 +1008,10 @@ describe('Gardens widget — the garden description (V10, V18)', () => {
     // away, on the Large table.
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
-      level: 'novice',
-      capabilities: capabilitiesFor('novice'),
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: true,
-      blocks: presetFor('novice'),
+      blocks: gardensAt('medium'),
       updatedAt: null,
     });
     vi.mocked(fetchDashboardData).mockResolvedValue(
@@ -1051,13 +1060,13 @@ async function renderExpert() {
   await screen.findAllByText('Casa Lolo');
 }
 
-async function renderNovice() {
+async function renderMedium() {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
-    level: 'novice',
-    capabilities: capabilitiesFor('novice'),
+    level: 'gardener',
+    capabilities: capabilitiesFor('gardener'),
     isPreset: true,
-    blocks: presetFor('novice'),
+    blocks: gardensAt('medium'),
     updatedAt: null,
   });
   renderPage();
@@ -1065,29 +1074,33 @@ async function renderNovice() {
 }
 
 /**
- * The same Novice page under the PRODUCT theme, in either mode (round 5, C3).
+ * The same Medium list under the PRODUCT theme, in either mode (round 5, C3).
  *
  * `renderPage` carries no `ThemeProvider`, so a token only resolves there
  * because MUI's default palette happens to be light. A dark-mode assertion needs
  * the real theme, and so does any claim that a token — rather than a coincidence
  * — is what put a colour on screen.
  */
-async function renderNoviceIn(mode: 'light' | 'dark') {
-  await renderIn('novice', mode);
+async function renderMediumIn(mode: 'light' | 'dark') {
+  await renderIn('gardener', mode, gardensAt('medium'));
 }
 
 /**
  * Any level, either mode, under the product theme (round 6, Extension #4-13):
- * the V18 contrast assertion needs the Large table, which the Novice preset
+ * the V18 contrast assertion needs the Large table, which the Medium list
  * does not draw.
  */
-async function renderIn(level: 'novice' | 'gardener' | 'expert', mode: 'light' | 'dark') {
+async function renderIn(
+  level: 'gardener' | 'expert',
+  mode: 'light' | 'dark',
+  blocks: DashboardBlock[] = presetFor(level)
+) {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level,
     capabilities: capabilitiesFor(level),
-    isPreset: true,
-    blocks: presetFor(level),
+    isPreset: false,
+    blocks,
     updatedAt: null,
   });
   render(
@@ -1129,7 +1142,7 @@ describe('Gardens Medium row — the artboard’s own five elements (A4)', () =>
       // real application theme: `.pill.ok` is the artboards' `--chip-ok-bg` /
       // `--chip-ok-tx`, and the night pair is a different pair, not a filtered
       // version of the day one.
-      await renderNoviceIn(mode as 'light' | 'dark');
+      await renderMediumIn(mode as 'light' | 'dark');
       const widget = within(gardensWidget());
 
       const pill = widget.getByText('3 plants');
@@ -1147,7 +1160,7 @@ describe('Gardens Medium row — the artboard’s own five elements (A4)', () =>
     // `.pill.n { background: var(--pill-bg); color: var(--pill-tx) }`. Every
     // header chip of the eight widgets is filled in the artboards; Gardens and
     // Statistics take this neutral pair, Counters the green `.pill.ok`.
-    await renderNovice();
+    await renderMedium();
 
     const chip = within(gardensWidget())
       .getByText('1 garden')
@@ -1164,7 +1177,7 @@ describe('Gardens Medium row — the artboard’s own five elements (A4)', () =>
     // been lost: the Large table's PLANTES column still carries it, which is
     // rule 3 of the design contract — more information as the widget grows,
     // never different information.
-    await renderNovice();
+    await renderMedium();
     const widget = within(gardensWidget());
 
     expect(widget.queryByText(/3 var\./)).toBeNull();
@@ -1188,7 +1201,7 @@ describe('Gardens Medium row — the artboard’s own five elements (A4)', () =>
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith([gardenWith(3, { height: 6 })])
     );
-    await renderNovice();
+    await renderMedium();
 
     const preview = within(gardensWidget()).getAllByTestId(
       'template-preview'
@@ -1218,7 +1231,7 @@ describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
         gardenWith(1, { id: 'g3', name: 'Potager' }),
       ])
     );
-    await renderNovice();
+    await renderMedium();
 
     const rules = gardensWidget().querySelectorAll('[data-row-divider]');
     expect(rules).toHaveLength(2);
@@ -1255,12 +1268,12 @@ describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
     // `System.Text.Json` omits zero fractional seconds, so « 10:00:00Z » sorts
     // AFTER the later « 10:00:00.1Z » as a string. The Small card named the
     // wrong garden on exactly that pair.
-    const blocks = presetFor('novice');
+    const blocks = presetFor('gardener');
     blocks.find((block) => block.key === 'gardens')!.size = 'small';
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
-      level: 'novice',
-      capabilities: capabilitiesFor('novice'),
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks,
       updatedAt: null,
@@ -1287,12 +1300,12 @@ describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
     // and a chevron labelled « Ouvrir le dernier jardin modifié » — everything
     // except WHICH garden. The MINIMUM only: the Small card's redesign (a
     // compact list of named gardens, the carousel) stays SMA-432.
-    const blocks = presetFor('novice');
+    const blocks = presetFor('gardener');
     blocks.find((block) => block.key === 'gardens')!.size = 'small';
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
-      level: 'novice',
-      capabilities: capabilitiesFor('novice'),
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks,
       updatedAt: null,
@@ -1569,12 +1582,12 @@ describe('Gardens rows — rename and delete at EVERY size (V12)', () => {
     );
   });
 
-  it('a Medium row carries both buttons — the Novice preset shows this widget in Medium', async () => {
+  it('a Medium row carries both buttons — the Medium list is where a garden was out of reach', async () => {
     // The reason this is an amendment to the frozen design and not a bug fix
     // against it: the design gives a Medium row five elements and neither of
-    // these two. But Novice is the preset that shows Gardens in Medium, so a
-    // Novice account had no way at all to rename or delete a garden.
-    await renderNovice();
+    // these two. But the Medium list — the Novice preset's, before the Novice
+    // had a page of its own — gave no way at all to rename or delete a garden.
+    await renderMedium();
     const widget = within(gardensWidget());
 
     expect(
@@ -1588,7 +1601,7 @@ describe('Gardens rows — rename and delete at EVERY size (V12)', () => {
   });
 
   it('opens the rename dialog from a Medium row', async () => {
-    await renderNovice();
+    await renderMedium();
 
     fireEvent.click(
       within(gardensWidget()).getByRole('button', { name: 'Edit Casa Lolo' })
@@ -1601,7 +1614,7 @@ describe('Gardens rows — rename and delete at EVERY size (V12)', () => {
   });
 
   it('opens the type-the-name delete dialog from a Medium row', async () => {
-    await renderNovice();
+    await renderMedium();
 
     fireEvent.click(
       within(gardensWidget()).getByRole('button', { name: 'Delete Casa Lolo' })
@@ -1613,7 +1626,7 @@ describe('Gardens rows — rename and delete at EVERY size (V12)', () => {
   });
 
   it('puts them OUTSIDE the row link — a button inside an anchor is invalid', async () => {
-    await renderNovice();
+    await renderMedium();
     const widget = within(gardensWidget());
 
     const link = widget.getByRole('link', { name: 'Open Casa Lolo' });
@@ -1623,7 +1636,7 @@ describe('Gardens rows — rename and delete at EVERY size (V12)', () => {
   });
 
   it.each([
-    ['medium', renderNovice],
+    ['medium', renderMedium],
     ['large', renderExpert],
   ])(
     'at %s the trailing group is rename, delete, chevron — in that order',
@@ -1662,7 +1675,7 @@ describe('Gardens Medium row — the description, for zero pixels', () => {
     const text = 'Le coin sud, refait au printemps.';
     vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(text));
 
-    await renderNovice();
+    await renderMedium();
     const widget = within(gardensWidget());
 
     // Not printed anywhere: a Medium row is one 44 px line and has none to give.
@@ -1683,7 +1696,7 @@ describe('Gardens Medium row — the description, for zero pixels', () => {
     const text = 'Balcon plein sud, arrosage tous les deux jours.';
     vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(text));
 
-    await renderNovice();
+    await renderMedium();
     const link = within(gardensWidget()).getByRole('link', {
       name: 'Open Casa Lolo',
     });
@@ -1700,7 +1713,7 @@ describe('Gardens Medium row — the description, for zero pixels', () => {
     const text = 'Le coin sud, refait au printemps.';
     vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(text));
 
-    await renderNovice();
+    await renderMedium();
 
     fireEvent.mouseOver(
       within(gardensWidget()).getByRole('link', { name: 'Open Casa Lolo' })
@@ -1713,7 +1726,7 @@ describe('Gardens Medium row — the description, for zero pixels', () => {
     const text = 'Balcon plein sud, arrosage tous les deux jours.';
     vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(text));
 
-    await renderNovice();
+    await renderMedium();
 
     fireEvent.touchStart(
       within(gardensWidget()).getByRole('link', { name: 'Open Casa Lolo' })
@@ -1725,7 +1738,7 @@ describe('Gardens Medium row — the description, for zero pixels', () => {
   it('says nothing at all when the garden has no description', async () => {
     vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(null));
 
-    await renderNovice();
+    await renderMedium();
     const link = within(gardensWidget()).getByRole('link', {
       name: 'Open Casa Lolo',
     });
@@ -1818,16 +1831,19 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
   const chevron = () =>
     gardensWidget().querySelector('[data-row-chevron]') as HTMLElement;
 
-  it.each([
-    ['medium', 'novice'],
-    ['large', 'expert'],
-  ])('at %s it is a link to the planner', async (_size, level) => {
+  /** The Medium list (a Gardener layout with Gardens in Medium) and the Large table (the Expert's preset). */
+  const AT_SIZES: Array<[string, 'gardener' | 'expert', DashboardBlock[]]> = [
+    ['medium', 'gardener', gardensAt('medium')],
+    ['large', 'expert', presetFor('expert')],
+  ];
+
+  it.each(AT_SIZES)('at %s it is a link to the planner', async (_size, level, blocks) => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
-      level: level as 'novice' | 'expert',
-      capabilities: capabilitiesFor(level as 'novice' | 'expert'),
-      isPreset: true,
-      blocks: presetFor(level as 'novice' | 'expert'),
+      level,
+      capabilities: capabilitiesFor(level),
+      isPreset: false,
+      blocks,
       updatedAt: null,
     });
 
@@ -1838,16 +1854,13 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
     expect(chevron()).toHaveAttribute('href', '/gardens/g1/planner');
   });
 
-  it.each([
-    ['medium', 'novice'],
-    ['large', 'expert'],
-  ])('at %s clicking it really navigates', async (_size, level) => {
+  it.each(AT_SIZES)('at %s clicking it really navigates', async (_size, level, blocks) => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
-      level: level as 'novice' | 'expert',
-      capabilities: capabilitiesFor(level as 'novice' | 'expert'),
-      isPreset: true,
-      blocks: presetFor(level as 'novice' | 'expert'),
+      level,
+      capabilities: capabilitiesFor(level),
+      isPreset: false,
+      blocks,
       updatedAt: null,
     });
 
@@ -1908,7 +1921,7 @@ describe('Gardens rows — the N5 finishes (round 6, partie D)', () => {
         }),
       ])
     );
-    await renderNovice();
+    await renderMedium();
 
     const chip = within(gardensWidget()).getByText('Terrace').closest('.MuiChip-root')!;
     expect(chip.querySelector('svg[data-testid="DeckIcon"]')).not.toBeNull();
@@ -1923,7 +1936,7 @@ describe('Gardens rows — the N5 finishes (round 6, partie D)', () => {
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith([gardenWith(3, { isEdible: false })])
     );
-    await renderNovice();
+    await renderMedium();
     const medium = within(gardensWidget()).getByText('Ornamental').closest('.MuiChip-root')!;
     expect(medium.querySelector('svg[data-testid="FilterVintageOutlinedIcon"]')).not.toBeNull();
     expect(rulesFor(medium).replace(/\s+/g, '')).toContain('height:26px');
@@ -1962,7 +1975,7 @@ describe('Gardens rows — the N5 finishes (round 6, partie D)', () => {
 
   it('stacks the Medium rows in a plain column, 6 px of air each, the link at the bottom (N5-8)', async () => {
     vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(3)]));
-    await renderNovice();
+    await renderMedium();
 
     const link = within(gardensWidget()).getByRole('link', { name: 'Open Casa Lolo' });
     const row = link.parentElement!;
@@ -1979,7 +1992,7 @@ describe('Gardens rows — the N5 finishes (round 6, partie D)', () => {
 
   it('sets the garden name’s line-height to 1.25 (N5-10)', async () => {
     vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(3)]));
-    await renderNovice();
+    await renderMedium();
 
     const name = within(gardensWidget()).getByText('Casa Lolo');
     expect(rulesFor(name).replace(/\s+/g, '')).toContain('line-height:1.25');
@@ -2044,12 +2057,12 @@ describe('Gardens rows — the closing findings (round 7)', () => {
     // The seed branch accepted a first garden whose `updatedAt` parsed to
     // `NaN`, and every later `>` against `NaN` is false: that garden was named
     // for good, whatever the others' timestamps.
-    const blocks = presetFor('novice');
+    const blocks = presetFor('gardener');
     blocks.find((block) => block.key === 'gardens')!.size = 'small';
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
-      level: 'novice',
-      capabilities: capabilitiesFor('novice'),
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks,
       updatedAt: null,
@@ -2085,12 +2098,12 @@ describe('Gardens — an unreadable `updatedAt` is never displayed as « now » 
     gardenWith(3, { id: 'g1', name: 'Casa Lolo', updatedAt: 'not a date' });
 
   it('the Small card', async () => {
-    const blocks = presetFor('novice');
+    const blocks = presetFor('gardener');
     blocks.find((block) => block.key === 'gardens')!.size = 'small';
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
-      level: 'novice',
-      capabilities: capabilitiesFor('novice'),
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks,
       updatedAt: null,
@@ -2191,7 +2204,7 @@ describe('Gardens Medium row on a phone — the A9 line, the actions kept (mobil
 
   it('draws the thumbnail in A9’s 40 × 34 box', async () => {
     stubPhone();
-    await renderNovice();
+    await renderMedium();
 
     // A 4 × 6 plan is HEIGHT-limited: (34 − 7) / 6 = 4.5 → 4 px cells with a
     // 1 px gap, where the desktop's 48 × 40 box gives 5 px (the test above).
@@ -2205,7 +2218,7 @@ describe('Gardens Medium row on a phone — the A9 line, the actions kept (mobil
 
   it('stacks the name over its chips (A9 l. 294), the type chip bare, no « Ornamental », the pill on the chips line', async () => {
     stubPhone();
-    await renderNovice();
+    await renderMedium();
     const widget = gardensWidget();
 
     const group = widget.querySelector('[data-garden-row-group]')!;
@@ -2233,7 +2246,7 @@ describe('Gardens Medium row on a phone — the A9 line, the actions kept (mobil
 
   it('keeps the pencil, the bin and the chevron where they are (A3, arbitrage 5)', async () => {
     stubPhone();
-    await renderNovice();
+    await renderMedium();
     const widget = within(gardensWidget());
 
     expect(widget.getByRole('button', { name: 'Edit Casa Lolo' })).toBeInTheDocument();
@@ -2243,7 +2256,7 @@ describe('Gardens Medium row on a phone — the A9 line, the actions kept (mobil
   });
 
   it('on a desktop the row is A2’s: 48 × 40, the glyph on the chip, « Ornamental », the pill at the end of the row', async () => {
-    await renderNovice();
+    await renderMedium();
     const widget = gardensWidget();
 
     const preview = within(widget).getAllByTestId('template-preview')[0]!;

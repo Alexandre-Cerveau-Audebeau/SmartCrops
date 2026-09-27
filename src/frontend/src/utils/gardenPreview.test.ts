@@ -3,6 +3,8 @@ import { placement } from '../test/fixtures/placements';
 import { serializeCellsJson, type CellData } from '../types/GardenLayout';
 import type { ExposureCategory } from './exposure';
 import {
+  COVER_PLANT_INSET,
+  coverPlantInset,
   drawnPx,
   fitPreview,
   fitPreviewBox,
@@ -15,6 +17,19 @@ import { placementCoverage } from './gardenStats';
 // SMA-336 PR 2/5 — the adapter that lets TemplatePreview draw a real garden,
 // and the two sizing rules the frozen design fixes (48 px on a card, 2 px in
 // the comparison table).
+
+describe('coverPlantInset — a share of ONE cell, in container units (PR #296, fix round 2, U2)', () => {
+  it('writes the cell from the grid’s content box less the gaps between the tracks, by the tracks — cqh for the rows, cqw for the columns', () => {
+    expect(coverPlantInset(8, 10, 1)).toBe('calc((100cqh - 7px) / 8 * 0.07) calc((100cqw - 9px) / 10 * 0.07)');
+  });
+
+  it('is the share COVER_PLANT_INSET — 7 %, the 2 px of plantInsetPx at a 28 px cell — whatever the plan', () => {
+    expect(COVER_PLANT_INSET).toBe(0.07);
+    expect(coverPlantInset(1, 1, 0)).toBe('calc((100cqh - 0px) / 1 * 0.07) calc((100cqw - 0px) / 1 * 0.07)');
+    expect(coverPlantInset(30, 40, 1)).toContain('cqh');
+    expect(coverPlantInset(30, 40, 1)).not.toContain('%');
+  });
+});
 
 describe('gardenToPreview', () => {
   it('carries the grid size, whatever the plan says', () => {

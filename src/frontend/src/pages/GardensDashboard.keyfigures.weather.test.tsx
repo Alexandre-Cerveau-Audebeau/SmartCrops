@@ -44,7 +44,7 @@ import { fetchDashboardWeather } from '../services/weatherApi';
 import { fetchProfile } from '../services/profileApi';
 import GardensDashboard from './GardensDashboard';
 import { fetchDashboardData, fetchDashboardPreferences, saveDashboardPreferences } from '../services/dashboardApi';
-import { capabilitiesFor } from '../test/fixtures/formulas';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 
 // SMA-437 lot 1, PR B, round 1, É8 — A PAGE NEVER CONTRADICTS ITSELF: the Key
 // figures band reads the weather the page reads. Each tile that depends on the
@@ -485,5 +485,92 @@ describe('a widget that says the weather is unavailable counts nothing from it (
       underTheTodoNote: todoNote ? drawn.tasks : [],
       underTheTipsNote: tipsNote ? drawn.tips : [],
     }).toEqual({ underTheTodoNote: [], underTheTipsNote: [] });
+  });
+});
+
+/**
+ * SMA-448, lot F2 — THE NOVICE PAGE reads the weather the page reads: the
+ * temperature and the task of the day of each card come through
+ * `displayWeather` (A-4), like the band and the widgets. So a card that says
+ * « Sans météo » — the aggregate failed, or a refresh failed and the last
+ * aggregate is kept — counts nothing from a forecast: no temperature, no
+ * watering, no cold; the calendar tasks alone, from the plans. And the
+ * weather warning follows the figures (V1): there where a card shows one,
+ * absent where none does. In the five states of the matrix.
+ */
+describe('the Novice page reads the weather the page reads — a card that says the weather is unavailable counts nothing from it (SMA-448, F2)', () => {
+  const serveNovice = () =>
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'novice',
+      capabilities: capabilitiesFor('novice'),
+      isPreset: true,
+      blocks: presetFor('novice'),
+      updatedAt: null,
+    });
+  const cardsOf = () => [...document.querySelectorAll<HTMLElement>('[data-novice-card]')];
+  /** The kind of the task each card shows, in the gardens' order — null for none. */
+  const cardTasks = () =>
+    cardsOf().map((card) => card.querySelector('[data-novice-task]')?.getAttribute('data-novice-task') ?? null);
+  const count = (selector: string) => document.querySelectorAll(selector).length;
+
+  /** The first task of each garden of the scene through `weather` — what its card shows. */
+  const firstTasks = (weather: DashboardWeatherData) => {
+    const tasks = todoTasks(sceneGardens, sceneVarieties, weather);
+    return sceneGardens.map((garden) => tasks.find((task) => task.gardenId === garden.id)?.kind ?? null);
+  };
+
+  /** The Novice page, in one real state of its weather. */
+  async function noviceIn(state: WeatherState) {
+    serveNovice();
+    if (state === 'first load') vi.mocked(fetchDashboardWeather).mockImplementation(() => new Promise(() => undefined));
+    if (state === 'ready' || state === 'failed refresh, aggregate kept') vi.mocked(fetchDashboardWeather).mockResolvedValue(weatherAll());
+    if (state === 'error, nothing kept') vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('provider down'));
+    if (state === 'no city') vi.mocked(fetchDashboardWeather).mockResolvedValue(nowhere());
+    localStorage.setItem('smartcrops-language', state === 'failed refresh, aggregate kept' ? 'en' : 'fr');
+    renderPage();
+    await waitFor(() => expect(cardsOf()).toHaveLength(3));
+
+    if (state === 'first load') await waitFor(() => expect(count('[data-novice-weather-loading]')).toBe(3));
+    if (state === 'ready' || state === 'failed refresh, aggregate kept') {
+      await waitFor(() => expect(count('[data-novice-weather]')).toBe(3));
+    }
+    if (state === 'no city') await waitFor(() => expect(count('[data-novice-weather-add]')).toBe(3));
+    if (state === 'error, nothing kept') await waitFor(() => expect(count('[data-novice-weather-unavailable]')).toBe(3));
+    if (state === 'failed refresh, aggregate kept') {
+      const pending = deferredWeather();
+      fireEvent.click(screen.getByText('switch-language-probe'));
+      await waitFor(() => expect(pending.length).toBe(1));
+      await act(async () => {
+        pending[0]!.reject(new Error('provider down'));
+      });
+      await waitFor(() => expect(count('[data-novice-weather-unavailable]')).toBe(3));
+    }
+  }
+
+  it.each(MATRIX)('$state: the cards show a temperature and a forecast task only where the page shows a forecast — and the warning with them', async (row) => {
+    await noviceIn(row.state);
+
+    const counted = firstTasks(row.forecastCounted ? weatherAll() : EMPTY_WEATHER_DATA);
+    expect(cardTasks()).toEqual(counted);
+    expect(count('[data-novice-weather]')).toBe(row.forecastCounted ? 3 : 0);
+    if (row.forecastCounted) {
+      // The proof bites: through the forecast, a card waters tonight.
+      expect(cardTasks()).toContain('water');
+    } else {
+      expect(cardTasks().filter((kind) => FORECAST_TASKS.includes(kind ?? ''))).toEqual([]);
+    }
+    expect(document.querySelector('[data-weather-disclaimer]') !== null, 'the weather warning').toBe(row.forecastCounted);
+  });
+
+  it('failed refresh, aggregate kept: the last aggregate feeds no card — « Sans météo » on each, the calendar tasks alone (round 2, É8, on the cards)', async () => {
+    await noviceIn('failed refresh, aggregate kept');
+    // Counted, the kept aggregate would put a watering task on two cards: the
+    // case is only a proof if it would.
+    expect(firstTasks(weatherAll())).not.toEqual(firstTasks(EMPTY_WEATHER_DATA));
+    expect(cardTasks()).toEqual(firstTasks(EMPTY_WEATHER_DATA));
+    expect(count('[data-novice-weather]')).toBe(0);
+    expect(count('[data-novice-weather-unavailable]')).toBe(3);
+    expect(document.querySelector('[data-weather-disclaimer]')).toBeNull();
   });
 });
