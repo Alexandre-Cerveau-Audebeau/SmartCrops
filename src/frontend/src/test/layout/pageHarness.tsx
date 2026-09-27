@@ -191,8 +191,10 @@ export interface NoviceMeasure extends CardMeasure {
   viewport: number;
   /** The gardens' zone, relative to the page: what `body` measures. */
   content: Rect;
-  /** Each card: its measure, its box relative to the page, and its plan band (V1). */
-  cards: Array<CardMeasure & { id: string; box: Rect; plan: PlanMeasure | null }>;
+  /** Each card: its measure, its box relative to the page, its plan band (V1) and its foot (S3). */
+  cards: Array<CardMeasure & { id: string; box: Rect; plan: PlanMeasure | null; foot: Rect }>;
+  /** Every pair of cards whose boxes intersect by more than a pixel (S3 — as `measureGrid` reads the grid's). */
+  cardOverlaps: string[];
   /** The header's zone texts drawn over more than one line — none belongs on two. */
   wrapped: string[];
   /** The weather warning under the cards, drawn or not (V1). */
@@ -430,8 +432,17 @@ const page = {
       id: card.getAttribute('data-novice-card') ?? '',
       box: rectWithin(card, origin),
       plan: planOf(card, origin),
+      foot: rectWithin(card.querySelector('[data-novice-foot]') ?? card, origin),
       ...measureCard(card),
     }));
+    const cardOverlaps: string[] = [];
+    cards.forEach((a, index) => {
+      for (const b of cards.slice(index + 1)) {
+        const w = Math.min(a.box.x + a.box.w, b.box.x + b.box.w) - Math.max(a.box.x, b.box.x);
+        const h = Math.min(a.box.y + a.box.h, b.box.y + b.box.h) - Math.max(a.box.y, b.box.y);
+        if (w > 1 && h > 1) cardOverlaps.push(`${a.id} ∩ ${b.id} = ${Math.round(w)}×${Math.round(h)}`);
+      }
+    });
     const measured = measureCard(container);
     return {
       ...measured,
@@ -445,6 +456,7 @@ const page = {
       viewport: innerWidth,
       content: rectWithin(content, origin),
       cards,
+      cardOverlaps,
       wrapped: wrappedTexts(zone),
       warning: document.querySelector('[data-weather-disclaimer]') !== null,
       chipButton: document.querySelector('[data-level-chip]')?.getAttribute('role') === 'button',

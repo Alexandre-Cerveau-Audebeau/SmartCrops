@@ -796,15 +796,34 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
       }
     });
 
-    it('aligns the feet of the cards of one row: the cards of a row share one height (V3-00, `flex: 1`)', () => {
+    it('aligns the feet of the cards of one row: the cards of a row share one height, and their feet one top and one bottom (V3-00, `flex: 1` — S3)', () => {
+      // GitHub `4112917722`: the heights alone let a foot sit lower than its
+      // row's while the cards still stretched to one height.
       for (const run of NOVICE_RUNS) {
         for (const scene of NOVICE_SCENES.filter((candidate) => candidate.count > 1)) {
-          const rows = new Map<number, number[]>();
-          for (const card of pageOf(run, scene.name).cards) rows.set(card.box.y, [...(rows.get(card.box.y) ?? []), card.box.h]);
-          for (const [y, heights] of rows) {
-            expect(new Set(heights).size, `${run.id} ${scene.name} row at ${y}`).toBe(1);
+          const rows = new Map<number, Array<{ id: string; h: number; footTop: number; footBottom: number }>>();
+          for (const card of pageOf(run, scene.name).cards) {
+            rows.set(card.box.y, [
+              ...(rows.get(card.box.y) ?? []),
+              { id: card.id, h: card.box.h, footTop: card.foot.y, footBottom: card.foot.y + card.foot.h },
+            ]);
+          }
+          for (const [y, row] of rows) {
+            const label = `${run.id} ${scene.name} row at ${y}: ${row.map((card) => `${card.id} h ${card.h} foot ${card.footTop}–${card.footBottom}`).join(', ')}`;
+            expect(new Set(row.map((card) => card.h)).size, label).toBe(1);
+            expect(new Set(row.map((card) => card.footTop)).size, label).toBe(1);
+            expect(new Set(row.map((card) => card.footBottom)).size, label).toBe(1);
           }
         }
+      }
+    });
+
+    it.each(NOVICE_RUNS.map((run) => run.id))('%s: no two cards meet — their boxes compared two by two, as the grid’s are (S3)', (id) => {
+      // GitHub `4112917722`: `measureCard` skips a pair of painted boxes
+      // — two cards could overlap without a text of theirs meeting.
+      const run = noviceRunOf(id);
+      for (const scene of NOVICE_SCENES) {
+        expect(pageOf(run, scene.name).cardOverlaps, `${id} ${scene.name}`).toEqual([]);
       }
     });
 
