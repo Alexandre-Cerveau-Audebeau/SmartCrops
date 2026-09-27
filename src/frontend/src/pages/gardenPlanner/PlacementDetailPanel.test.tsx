@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import i18n from '../../i18n/i18n';
@@ -126,6 +126,10 @@ function FootprintHarness(props: {
 }
 
 afterEach(async () => {
+  // Unmount before the language reset (SMA-174): this hook runs before Testing
+  // Library's automatic cleanup, and the reset used to re-render the mounted
+  // panel outside act() — 131 React warnings per CI run.
+  cleanup();
   await i18n.changeLanguage('en');
 });
 

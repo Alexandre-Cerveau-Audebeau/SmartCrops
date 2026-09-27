@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -63,6 +64,14 @@ beforeEach(() => {
 afterEach(async () => {
   vi.clearAllMocks();
   vi.useRealTimers();
+  // Unmount FIRST (SMA-174). Vitest runs afterEach hooks in reverse order of
+  // registration, so this hook used to run before Testing Library's automatic
+  // cleanup — and the language reset below fired `languageChanged` into a tree
+  // still mounted: every `useTranslation` re-rendered outside act(), 28 to 35
+  // React warnings per test (1 405 per run), 70 to 180 ms of stack capture and
+  // console output each. Unmounted, the reset re-renders nothing; the automatic
+  // cleanup that follows finds nothing left to unmount.
+  cleanup();
   localStorage.clear();
   delete (window as { matchMedia?: unknown }).matchMedia;
   // A test below flips the language; reset the shared i18next singleton so the
@@ -108,6 +117,15 @@ const makeMany = (n: number) =>
       scientificName: `Plant ${String(i).padStart(2, '0')}`,
     })
   );
+
+// SMA-174 — the catalogue of the tests that assert nothing about the NUMBER of
+// cards: the facet chips, the sliders, the active-filter row, the rail's own
+// controls. In jsdom a 24-card page costs ~150 ms per render and ~100 to 200 ms
+// more on every re-render (every click re-renders the whole page), for cards the
+// test never looks at. Every test that counts cards or pages, reads the « N
+// plants » copy, or presses Load more keeps its 50-plant catalogue: there the
+// number IS the assertion.
+const SMALL_CATALOGUE = 3;
 
 // Serves PER_PAGE-item pages out of `catalog`, mirroring the finder contract.
 // Slice math derives from the component's own constant so a page-size change
@@ -245,7 +263,7 @@ describe('PlantLibrary', () => {
   });
 
   it('quick type chips mirror the rail Type facet — one plantTypeIds state, "All" clears', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([
       { id: 1, name: 'Vegetable', description: null },
     ]);
@@ -327,7 +345,7 @@ describe('PlantLibrary', () => {
   });
 
   it('the grouped Vivace chip sums both counts and toggles both wire values atomically', async () => {
-    mockFinderCatalog(makeMany(50), {
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE), {
       facetCounts: [
         {
           field: 'lifeCycle',
@@ -418,7 +436,7 @@ describe('PlantLibrary', () => {
   });
 
   it('the rail header X closes the rail and keeps the selection', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     const user = userEvent.setup();
@@ -439,7 +457,7 @@ describe('PlantLibrary', () => {
   });
 
   it('omits the zero-hit vocabulary values: no Biennial chip, no High watering chip', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     const user = userEvent.setup();
@@ -462,7 +480,7 @@ describe('PlantLibrary', () => {
   });
 
   it('debounces typing — keystrokes coalesce into one fetch 300ms after the last', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
@@ -561,7 +579,7 @@ describe('PlantLibrary', () => {
   });
 
   it('selections across two facets combine (AND) — both param arrays sent', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([
       { id: 4, name: 'Ornamental', description: null },
     ]);
@@ -590,7 +608,7 @@ describe('PlantLibrary', () => {
   });
 
   it('Reset clears every facet selection but keeps the search text', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
@@ -632,7 +650,7 @@ describe('PlantLibrary', () => {
   });
 
   it('facet chips carry live counts from facetCounts; absent values render count-less but stay clickable', async () => {
-    mockFinderCatalog(makeMany(50), {
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE), {
       facetCounts: [
         {
           field: 'careLevel',
@@ -694,7 +712,7 @@ describe('PlantLibrary', () => {
   });
 
   it('checking a boolean sends its wire param, bumps the button count and grows a bare-label active chip (T3)', async () => {
-    mockFinderCatalog(makeMany(50), {
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE), {
       facetCounts: [
         {
           field: 'isEdible',
@@ -736,7 +754,7 @@ describe('PlantLibrary', () => {
   });
 
   it('an enum selection grows a "Section : Value" active chip whose delete toggles the value off (T3)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     const user = userEvent.setup();
@@ -769,7 +787,7 @@ describe('PlantLibrary', () => {
   });
 
   it('the grouped Vivace active chip is ONE chip whose delete removes BOTH wire values (T3)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     const user = userEvent.setup();
@@ -803,7 +821,7 @@ describe('PlantLibrary', () => {
   });
 
   it('"Clear all" clears every facet — enums and booleans — but keeps the search text (T3)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
@@ -866,7 +884,7 @@ describe('PlantLibrary', () => {
     screen.getAllByRole('slider', { name });
 
   it('committing the height slider sends the mapped cm range, grows the chip, delete resets to full (T4)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
@@ -914,7 +932,7 @@ describe('PlantLibrary', () => {
   });
 
   it('the height top thumb on "3 m +" sends NO max param and reads the open label (T4)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
@@ -941,7 +959,7 @@ describe('PlantLibrary', () => {
   });
 
   it('the hardiness slider sends the USDA zone bounds and chips "zones 4 – 9" (T4 mockup example)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
@@ -965,7 +983,7 @@ describe('PlantLibrary', () => {
   });
 
   it('"More filters" is collapsed by default with its hint, expands to the secondary sliders and traits (T4)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
@@ -1027,7 +1045,7 @@ describe('PlantLibrary', () => {
   });
 
   it('the spacing slider maps its cm track to wire inches (T4)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
@@ -1055,7 +1073,7 @@ describe('PlantLibrary', () => {
   });
 
   it('the Coming-soon block renders disabled previews that never fetch (T4)', async () => {
-    mockFinderCatalog(makeMany(50));
+    mockFinderCatalog(makeMany(SMALL_CATALOGUE));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     renderLibrary();
