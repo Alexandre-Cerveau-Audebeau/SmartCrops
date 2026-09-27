@@ -37,13 +37,20 @@ public record DashboardBlockDto(
 /// <c>GET /api/formulas</c> serves it: the client draws from this rather than
 /// from a copy of its own, in the same read as the layout it applies it to.
 /// </param>
+/// <param name="FormulaChosen">
+/// SMA-448, lot F3 — whether the account has ever CHOSEN its formula
+/// (<c>FormulaChosenAt</c> set): false until its first deliberate choice, the
+/// choice screen's cue to show itself once (N18). Read in the same statement
+/// as the formula and the layout.
+/// </param>
 public record DashboardPreferencesResponse(
     int SchemaVersion,
     string Level,
     bool IsPreset,
     List<DashboardBlockDto> Blocks,
     DateTime? UpdatedAt,
-    FormulaDto Capabilities);
+    FormulaDto Capabilities,
+    bool FormulaChosen);
 
 /// <summary>
 /// SMA-336 — one block of a layout being saved.

@@ -30,6 +30,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     [
         "blocks",
         "capabilities",
+        "formulaChosen",
         "isPreset",
         "level",
         "schemaVersion",
@@ -94,6 +95,33 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(DashboardLayout.Sizes.Large, Block(body, DashboardLayout.Blocks.Gardens).Size);
         Assert.False(Block(body, DashboardLayout.Blocks.Gardens).Hidden);
         Assert.True(Block(body, DashboardLayout.Blocks.Harvest).Hidden);
+    }
+
+    /// <summary>
+    /// SMA-448, lot F3, step L2 — the layout's read says whether the account
+    /// has ever CHOSEN its formula (<c>FormulaChosenAt</c>), in the same joined
+    /// statement as the formula and the layout: what the choice screen is
+    /// shown once on (N18, Alexandre 26/09), read with the page, without a
+    /// second request and without a second instant.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_SaysWhetherTheFormulaWasChosen_FalseUntilAChoice_TrueAfterOne()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var before = await Client.GetFromJsonAsync<JsonElement>(Url);
+        Assert.False(before.GetProperty("formulaChosen").GetBoolean());
+
+        // « Garder Jardinier »: the formula the account is on, chosen deliberately.
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (await Client.PutAsJsonAsync("/api/formulas/current", new { formula = "gardener" })).StatusCode);
+
+        var after = await Client.GetFromJsonAsync<JsonElement>(Url);
+        Assert.True(after.GetProperty("formulaChosen").GetBoolean());
+        Assert.Equal("gardener", after.GetProperty("level").GetString());
     }
 
     [Fact]

@@ -31,6 +31,14 @@ public class FormulasController(SmartCropsDbContext context) : ControllerBase
     /// formula, whether it has ever chosen one, its gardens counted and
     /// measured, and which formula it may choose, with the reasons one is too
     /// small. 200 for any authenticated caller.
+    ///
+    /// <para>SMA-448, lot F3, step L2 — E9 (PR #293, fix round 1): the account
+    /// and its gardens in ONE statement, the account left-joined to them. Under
+    /// READ COMMITTED each statement sees the database as of its own start, so
+    /// two reads could straddle a switch of formula and a creation, and pair
+    /// the formula of before with the gardens of after — a Novice « beyond its
+    /// limit » that the account never was; one statement answers from one
+    /// instant. The pattern of <c>GET /api/dashboard/preferences</c> (S4).</para>
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<FormulasResponse>> GetFormulas(CancellationToken ct = default)
@@ -38,14 +46,27 @@ public class FormulasController(SmartCropsDbContext context) : ControllerBase
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-        var account = await context.Users
-            .AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => new { u.Formula, u.FormulaChosenAt })
-            .SingleOrDefaultAsync(ct);
-        if (account is null) return Unauthorized();
+        var rows = await (
+            from user in context.Users.AsNoTracking()
+            where user.Id == userId
+            join garden in context.Gardens.AsNoTracking() on user.Id equals garden.UserId into owned
+            from garden in owned.DefaultIfEmpty()
+            select new
+            {
+                user.Formula,
+                user.FormulaChosenAt,
+                GardenId = (Guid?)garden.Id,
+                garden.LayoutWidth,
+                garden.LayoutHeight,
+            })
+            .ToListAsync(ct);
+        if (rows.Count == 0) return Unauthorized();
 
-        var gardens = await LoadGardenDimensionsAsync(userId, ct);
+        var account = rows[0];
+        var gardens = rows
+            .Where(row => row.GardenId is not null)
+            .Select(row => new GardenDimensions(row.GardenId!.Value, row.LayoutWidth, row.LayoutHeight))
+            .ToList();
 
         return Ok(new FormulasResponse(
             [.. FormulaCatalog.All.Select(FormulaDtos.From)],

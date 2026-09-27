@@ -95,7 +95,7 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
         var request = new SaveLayoutRequestDto(
             Width: 10,
             Height: 10,
-            CellSize: "M",
+            CellSize: "50cm",
             CellsJson: "{}",
             Placements:
             [
@@ -124,7 +124,7 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
         await SeedPlacementsAsync(gardenId, plantId, count: 5);
         AuthAs(userId);
 
-        var request = new SaveLayoutRequestDto(10, 10, "M", null, []);
+        var request = new SaveLayoutRequestDto(10, 10, "50cm", null, []);
 
         var response = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/layout", request);
 
@@ -147,7 +147,7 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
 
         var bogusPlantId = Guid.NewGuid();
         var request = new SaveLayoutRequestDto(
-            10, 10, "M", null,
+            10, 10, "50cm", null,
             [new SavePlacementRequestDto(bogusPlantId, 0, 0, 1, 1, "x")]);
 
         var response = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/layout", request);
@@ -171,7 +171,7 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
         AuthAs(otherUserId);
 
         var request = new SaveLayoutRequestDto(
-            10, 10, "M", null,
+            10, 10, "50cm", null,
             [new SavePlacementRequestDto(plantId, 0, 0, 1, 1, null)]);
 
         var response = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/layout", request);
@@ -182,9 +182,51 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
     [Fact]
     public async Task SaveLayout_NoAuthHeader_Returns401()
     {
-        var request = new SaveLayoutRequestDto(10, 10, "M", null, []);
+        var request = new SaveLayoutRequestDto(10, 10, "50cm", null, []);
         var response = await Client.PutAsJsonAsync($"/api/gardens/{Guid.NewGuid()}/layout", request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>
+    /// SMA-448, lot F3, step L2 (pre-flight, constat 7) — the cell size is a
+    /// whitelist on the server too: 25cm, 50cm or 1m, the three the planner
+    /// offers. Any other value was stored as it came, and read as 25 cm by
+    /// the client; it is refused now, and nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task SaveLayout_UnknownCellSize_Returns400_AndChangesNothing()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/gardens/{gardenId}/layout",
+            new SaveLayoutRequestDto(10, 10, "M", null, []));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("cellSize", await response.Content.ReadAsStringAsync());
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var garden = await db.Gardens.AsNoTracking().SingleAsync(g => g.Id == gardenId);
+        Assert.Null(garden.LayoutWidth);
+        Assert.Null(garden.CellSize);
+    }
+
+    [Theory]
+    [InlineData("25cm")]
+    [InlineData("50cm")]
+    [InlineData("1m")]
+    public async Task SaveLayout_KnownCellSizes_Return204(string cellSize)
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/gardens/{gardenId}/layout",
+            new SaveLayoutRequestDto(10, 10, cellSize, null, []));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
     [Fact]
@@ -202,7 +244,7 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
         }
 
         AuthAs(userId);
-        var request = new SaveLayoutRequestDto(7, 8, "L", "{\"cells\":[]}", []);
+        var request = new SaveLayoutRequestDto(7, 8, "1m", "{\"cells\":[]}", []);
         var response = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/layout", request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
@@ -211,7 +253,7 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
         var garden = await db2.Gardens.SingleAsync(g => g.Id == gardenId);
         Assert.Equal(7, garden.LayoutWidth);
         Assert.Equal(8, garden.LayoutHeight);
-        Assert.Equal("L", garden.CellSize);
+        Assert.Equal("1m", garden.CellSize);
         Assert.Equal("{\"cells\":[]}", garden.CellsJson);
         Assert.True(
             garden.UpdatedAt > beforeUpdatedAt,

@@ -443,6 +443,12 @@ public class GardensController(
 
         if (garden == null) return NotFound();
 
+        // SMA-448, lot F3, step L2 (pre-flight, constat 7): the cell size is a
+        // whitelist here too — the three the planner offers. An unknown value
+        // used to be stored as it came and read as 25 cm by the client.
+        if (!AllowedCellSizes.Contains(request.CellSize))
+            return BadRequest("cellSize must be one of 25cm, 50cm, 1m.");
+
         var definition = FormulaCatalog.For(formula);
         var current = garden.LayoutWidth is { } storedWidth && garden.LayoutHeight is { } storedHeight
             ? new GardenSize(storedWidth, storedHeight)
@@ -521,6 +527,9 @@ public class GardensController(
         ["balcony", "terrace", "inground", "greenhouse", "indoor"];
     private static readonly string[] AllowedHemispheres = ["N", "S"];
     private static readonly string[] AllowedLatitudeBands = ["low", "mid", "high"];
+
+    /// <summary>The cell sizes of a plan (SMA-448, lot F3, L2) — the planner's `CELL_SIZES`, its twin.</summary>
+    private static readonly string[] AllowedCellSizes = ["25cm", "50cm", "1m"];
 
     private static string? ValidateConfig(GardenConfigDto config)
     {
