@@ -130,6 +130,51 @@ afterEach(() => {
   localStorage.clear();
 });
 
+// SMA-448, lot F3, step L6 — THE CHIP-BUTTON at every formula (V3-04;
+// contract v3 § 4.1): the door to the choice screen, in Gardener and Expert
+// as in Novice — the arrow, the tooltip, the focus ring, the accessible
+// name, `aria-haspopup="dialog"` — and the focus back on it when the screen
+// closes.
+describe('the chip-button at every formula (SMA-448, lot F3, L6)', () => {
+  it.each(['gardener', 'expert'] as const)('%s: the chip is a button that opens the screen — the current formula « Keep » —, and closing gives it the focus back', async (level) => {
+    serve(level, { chosen: true, gardenCount: 4 });
+    renderPage();
+
+    const name = level === 'gardener' ? 'Gardener' : 'Expert';
+    const chip = await screen.findByRole('button', { name: `${name} view — change formula` }, PATIENCE);
+    expect(chip).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull();
+    chip.focus();
+    fireEvent.click(chip);
+
+    const screenOfChoice = await dialog();
+    await within(screenOfChoice).findByRole('button', { name: `Keep ${name}` }, PATIENCE);
+    expect(within(screenOfChoice).getByRole('button', { name: 'Close without changing formula' })).toBeInTheDocument();
+    fireEvent.click(within(screenOfChoice).getByRole('button', { name: 'Close without changing formula' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    await waitFor(() => expect(document.activeElement).toBe(chip), PATIENCE);
+    expect(changeFormula).not.toHaveBeenCalled();
+  });
+
+  it('the Expert chooses Gardener from the chip: the switch goes through, the page becomes the Gardener grid, the chip still the button, the focus on it', async () => {
+    const server = serve('expert', { chosen: true, gardenCount: 4 });
+    renderPage();
+    const chip = await screen.findByRole('button', { name: 'Expert view — change formula' }, PATIENCE);
+    chip.focus();
+    fireEvent.click(chip);
+    const screenOfChoice = await dialog();
+
+    fireEvent.click(await within(screenOfChoice).findByRole('button', { name: 'Choose Gardener' }, PATIENCE));
+
+    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('gardener'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    expect(server.formula).toBe('gardener');
+    const chipAfter = await screen.findByRole('button', { name: 'Gardener view — change formula' }, PATIENCE);
+    await waitFor(() => expect(document.activeElement).toBe(chipAfter), PATIENCE);
+  });
+});
+
 describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
   it('an account that never chose sees the screen with the page, mandatory: no close button, Escape does nothing, the three offers to choose from, Novice recommended', async () => {
     serve('gardener', { chosen: false, gardenCount: 0 });

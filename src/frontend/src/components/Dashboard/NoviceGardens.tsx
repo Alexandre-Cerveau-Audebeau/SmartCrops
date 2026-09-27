@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -35,9 +35,10 @@ interface Props {
   /**
    * The foot's « Passer à la formule Jardinier → » (contract § 4.3, the link
    * decided by Alexandre on 22/09 16:39): the same choice of formula the chip
-   * opens — PROVISIONAL until lot F3 (N3).
+   * opens — the choice screen of lot F3 —, handed the click so the page gives
+   * the focus back to the link when the screen closes.
    */
-  onChangeFormula: () => void;
+  onChangeFormula: (event: MouseEvent<HTMLElement>) => void;
 }
 
 /** The skeleton cards drawn while the gardens load: the Novice's three at most. */

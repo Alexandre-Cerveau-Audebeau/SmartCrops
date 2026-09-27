@@ -370,8 +370,12 @@ export default function GardensDashboard() {
     () => (location.state as GardensNavState)?.formulas === true
   );
   const chooserOpener = useRef<Element | null>(null);
-  /** Opens the choice; `opener` is where the focus returns to when it closes — the active element by default. */
-  const openChooser = (opener: Element | null = document.activeElement) => {
+  /**
+   * Opens the choice; `opener` is where the focus returns to when it closes
+   * — the control that opened it, handed by its own click (a clicked button
+   * is not focused in every browser, so the active element would not do).
+   */
+  const openChooser = (opener: Element | null) => {
     chooserOpener.current = opener;
     setChooserOpen(true);
   };
@@ -389,16 +393,20 @@ export default function GardensDashboard() {
     // a button on click, nothing ever held it: either way the focus would
     // fall to the body. It goes to the one action the page offers.
     retryRef.current?.focus();
-    // N3 — the chooser closed on a switch that LANDED: the page is a grid
-    // now, and the chip it was opened from opens nothing there (until lot
-    // F3), so the dialog's own restoring of the focus finds nothing to give
-    // it back to. It goes to « Créer un jardin », which every formula's
-    // header has — never to the body. Closed on the Novice page itself (a
-    // refusal, « Fermer »), the dialog gives the chip back by itself.
+    // SMA-448, lot F3 (L6) — the chip is the door at EVERY formula, so the
+    // element the choice was opened from is still there after a switch (the
+    // same node, the header re-rendered in place), and the focus returns to
+    // it (contract v3 § 4.1: « à la fermeture, le focus lui revient »).
+    // Gone with the dialog it stood in — « Voir les formules » of the
+    // creation's refusal, whose opener is « Créer un jardin » —, or
+    // unreachable, it goes to « Créer un jardin », which every formula's
+    // header has — never to the body.
     const from = chooserOpener.current;
     chooserOpener.current = null;
-    if (from && !cardsPage && !retryRef.current) createRef.current?.focus();
-  }, [panelOpen, chooserOpen, cardsPage, refocus]);
+    if (!from || retryRef.current) return;
+    if (from instanceof HTMLElement && from !== document.body && document.contains(from)) from.focus();
+    else createRef.current?.focus();
+  }, [panelOpen, chooserOpen, refocus]);
 
   // SMA-448, PR #293, fix round 2 (R2-E1) — the choice of a formula, and what
   // the page does when the switch ends on no layout: the panel is closed
@@ -1014,9 +1022,9 @@ export default function GardensDashboard() {
           repeatHidden={actionBar.shown}
           pageActionsRef={actionBar.repeatedRef}
           cards={cardsPage}
-          // PROVISIONAL (N3): the chip opens the choice at the Novice formula
-          // only — the grid formulas keep the panel's choice until lot F3.
-          onChangeFormula={cardsPage ? openChooser : undefined}
+          // SMA-448, lot F3 (L6) — the chip is a button at every formula
+          // (V3-04; contract v3 § 4.1): the door to the choice screen.
+          onChangeFormula={(event) => openChooser(event.currentTarget)}
           createRef={createRef}
         />
       </Box>
@@ -1085,7 +1093,7 @@ export default function GardensDashboard() {
           onLocate={openLocate}
           onChanged={refetch}
           onDeleted={handleDeleted}
-          onChangeFormula={openChooser}
+          onChangeFormula={(event) => openChooser(event.currentTarget)}
         />
       )}
 

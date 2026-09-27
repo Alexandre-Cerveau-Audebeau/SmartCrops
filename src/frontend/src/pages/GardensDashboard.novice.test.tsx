@@ -342,7 +342,7 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     expect(within(dialog).getByText(/you can change at any time/)).toBeInTheDocument();
   });
 
-  it('the chip of the grid formulas stays a plain chip — their door is the panel, until lot F3', async () => {
+  it('the chip of the grid formulas is the same button (lot F3, L6): « Gardener view — change formula », a dialog behind it, the screen it opens', async () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'gardener',
@@ -352,10 +352,15 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
       blocks: presetFor('gardener'),
       updatedAt: null,
     });
+    vi.mocked(fetchFormulas).mockResolvedValue(catalogFor('gardener', { gardenCount: 3 }));
     renderPage();
 
     expect(await screen.findByText('Gardener view')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /change formula/u })).toBeNull();
+    const chip = screen.getByRole('button', { name: 'Gardener view — change formula' });
+    expect(chip).toHaveAttribute('aria-haspopup', 'dialog');
+    fireEvent.click(chip);
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    expect(await within(dialog).findByRole('button', { name: 'Keep Gardener' }, PATIENCE)).toBeInTheDocument();
   });
 
   it('closing the chooser changes nothing: the page stays the Novice page, the focus back on the chip', async () => {
@@ -398,15 +403,14 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     // A Novice has no layout to write before the switch: nothing was sent.
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
-    // The Gardener's chip — « · adjusted », its layout being rearranged — a
-    // plain chip again, not a button.
+    // The Gardener's chip — « · adjusted », its layout being rearranged —
+    // a button still (lot F3, L6): the door of every formula.
     expect(await screen.findByText('Gardener view · adjusted', {}, PATIENCE)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /change formula/u })).toBeNull();
+    const chipAfter = screen.getByRole('button', { name: 'Gardener view — change formula' });
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
-    // The chip the chooser was opened from opens nothing now: the focus goes
-    // to « Create Garden », the control every formula's header has — never
-    // to the body.
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Create Garden' })), PATIENCE);
+    // The chip the chooser was opened from is still there: the focus returns
+    // to it (contract v3 § 4.1) — never to the body.
+    await waitFor(() => expect(document.activeElement).toBe(chipAfter), PATIENCE);
   });
 
   it('a formula the server refuses is said in the chooser, with each reason served — the formula stays, the chip stays a button, the indicator says nothing false', async () => {
