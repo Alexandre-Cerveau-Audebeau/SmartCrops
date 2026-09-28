@@ -1239,6 +1239,27 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
       }
     });
 
+    // SMA-448, PR #297, fix round 1 (S3 — GitHub G2): the tone of a cell of
+    // the comparison comes from its MEANING, never from its text. Read from
+    // the text, « No limit » — the best value of its row — was drawn in the
+    // muted tone of a « No », and the two languages looked different.
+    it('colours the comparison by meaning, not by text: « No limit » / « Sans limite » in the tone of a yes, unlike a « No » / « Non »; a figure in neither (S3)', () => {
+      const WORDS = {
+        'en@1280': { yes: 'Yes', no: 'No', unlimited: 'No limit', figure: 'Up to 3' },
+        'fr@1280': { yes: 'Oui', no: 'Non', unlimited: 'Sans limite', figure: 'Jusqu’à 3' },
+      } as const;
+      for (const [id, words] of Object.entries(WORDS)) {
+        const screen = choiceOf(id, 'choice-change');
+        const cell = (text: string) => screen.compareCells.find((candidate) => candidate.text === text) ?? { text, color: 'no such cell', weight: 'no such cell', tone: null };
+        const [yes, no, unlimited, figure] = [cell(words.yes), cell(words.no), cell(words.unlimited), cell(words.figure)];
+        expect({ color: unlimited.color, weight: unlimited.weight }, `${id}: ${JSON.stringify({ yes, no, unlimited })}`).toEqual({ color: yes.color, weight: yes.weight });
+        expect(unlimited.color, `${id}: ${JSON.stringify({ no, unlimited })}`).not.toBe(no.color);
+        expect(yes.color, `${id}: a yes and a no alike — ${JSON.stringify({ yes, no })}`).not.toBe(no.color);
+        expect(figure.color, `${id}: ${JSON.stringify({ figure, yes })}`).not.toBe(yes.color);
+        expect(figure.color, `${id}: ${JSON.stringify({ figure, no })}`).not.toBe(no.color);
+      }
+    });
+
     it('reads the same screen in French and in English at 1 280 px: the same tags, the same buttons live, box widths alike (language parity)', () => {
       for (const name of SCENE_NAMES) {
         const fr = choiceOf('fr@1280', name);

@@ -37,8 +37,28 @@ interface Props {
   onChoose: (level: DashboardLevel) => void;
 }
 
-/** The comparison's ten static rows, in the order of V3-01 — its two limit rows come from the catalogue. */
-const STATIC_ROWS = ['home', 'task', 'weather', 'month', 'tips', 'counters', 'stats', 'keyfigures', 'resize', 'widgets'] as const;
+/**
+ * The tone of a cell of the comparison (SMA-448, PR #297, fix round 1, S3 —
+ * GitHub G2): « Oui » in green, « Non » muted, a figure or a name as it is —
+ * decided by the cell's MEANING, never by its text. Read from the text, the
+ * English « No limit » took the tone of a « No »: the best value of its row
+ * drawn as the worst, and the two languages apart.
+ */
+type Tone = 'yes' | 'no' | 'neutral';
+
+/** The comparison's ten static rows, in the order of V3-01 — its two limit rows come from the catalogue —, each cell's meaning per formula. */
+const STATIC_ROWS: Array<{ key: string; tones: Record<DashboardLevel, Tone> }> = [
+  { key: 'home', tones: { novice: 'neutral', gardener: 'neutral', expert: 'neutral' } },
+  { key: 'task', tones: { novice: 'neutral', gardener: 'neutral', expert: 'neutral' } },
+  { key: 'weather', tones: { novice: 'neutral', gardener: 'neutral', expert: 'neutral' } },
+  { key: 'month', tones: { novice: 'no', gardener: 'yes', expert: 'yes' } },
+  { key: 'tips', tones: { novice: 'no', gardener: 'yes', expert: 'yes' } },
+  { key: 'counters', tones: { novice: 'no', gardener: 'yes', expert: 'yes' } },
+  { key: 'stats', tones: { novice: 'no', gardener: 'no', expert: 'yes' } },
+  { key: 'keyfigures', tones: { novice: 'no', gardener: 'no', expert: 'yes' } },
+  { key: 'resize', tones: { novice: 'no', gardener: 'yes', expert: 'yes' } },
+  { key: 'widgets', tones: { novice: 'no', gardener: 'yes', expert: 'yes' } },
+];
 
 /** An i18n array, checked: `returnObjects` is typed as a string. */
 function stringsOf(value: unknown): string[] {
@@ -525,40 +545,40 @@ interface ComparisonProps {
 
 function Comparison({ catalog, nameOf }: ComparisonProps) {
   const { t } = useTranslation();
-  const yes = t('dashboard.choice.compare.yes');
-  const no = t('dashboard.choice.compare.no');
 
-  /** The rows: the two limits from the catalogue, then the ten of V3-01, as the language says them. */
-  const rows: Array<{ key: string; label: string; cells: string[] }> = [
+  /** The rows: the two limits from the catalogue, then the ten of V3-01, as the language says them — each cell with its meaning. */
+  const rows: Array<{ key: string; label: string; cells: Array<{ text: string; tone: Tone }> }> = [
     {
       key: 'gardens',
       label: t('dashboard.choice.compare.rows.gardens'),
+      // « Sans limite » is the best value of its row — the tone of a yes; a number is a figure.
       cells: catalog.formulas.map((formula) =>
         formula.gardenLimit === null
-          ? t('dashboard.choice.compare.unlimited')
-          : t('dashboard.choice.compare.upTo', { count: formula.gardenLimit })
+          ? { text: t('dashboard.choice.compare.unlimited'), tone: 'yes' as const }
+          : { text: t('dashboard.choice.compare.upTo', { count: formula.gardenLimit }), tone: 'neutral' as const }
       ),
     },
     {
       key: 'size',
       label: t('dashboard.choice.compare.rows.size'),
-      cells: catalog.formulas.map((formula) =>
-        t('dashboard.choice.compare.upToSize', { width: formula.maxGardenSize.width, height: formula.maxGardenSize.height })
-      ),
+      cells: catalog.formulas.map((formula) => ({
+        text: t('dashboard.choice.compare.upToSize', { width: formula.maxGardenSize.width, height: formula.maxGardenSize.height }),
+        tone: 'neutral' as const,
+      })),
     },
-    ...STATIC_ROWS.map((key) => ({
+    ...STATIC_ROWS.map(({ key, tones }) => ({
       key,
       label: t(`dashboard.choice.compare.rows.${key}.label`),
-      cells: catalog.formulas.map((formula) => t(`dashboard.choice.compare.rows.${key}.${formula.key}`)),
+      cells: catalog.formulas.map((formula) => ({ text: t(`dashboard.choice.compare.rows.${key}.${formula.key}`), tone: tones[formula.key] })),
     })),
   ];
 
-  /** « Oui » in green, « Non » muted — the value's first word, as V3-01 colours it. */
-  const cellSx = (value: string) => ({
+  /** « Oui » in green, « Non » muted, a figure as it is — as V3-01 colours them, by the cell's MEANING (S3). */
+  const cellSx = (tone: Tone) => ({
     fontSize: `${DASHBOARD_TYPE.secondary}px`,
     lineHeight: 1.45,
-    fontWeight: value.startsWith(yes) || value.startsWith(no) ? 700 : 500,
-    color: value.startsWith(yes) ? 'primary.dark' : value.startsWith(no) ? 'text.secondary' : 'text.primary',
+    fontWeight: tone === 'neutral' ? 500 : 700,
+    color: tone === 'yes' ? 'primary.dark' : tone === 'no' ? 'text.secondary' : 'text.primary',
   });
 
   return (
@@ -607,9 +627,9 @@ function Comparison({ catalog, nameOf }: ComparisonProps) {
           {rows.map((row) => (
             <tr key={row.key}>
               <th scope="row">{row.label}</th>
-              {row.cells.map((value, index) => (
-                <Box component="td" key={index} sx={cellSx(value)}>
-                  {value}
+              {row.cells.map((cell, index) => (
+                <Box component="td" key={index} data-compare-tone={cell.tone} sx={cellSx(cell.tone)}>
+                  {cell.text}
                 </Box>
               ))}
             </tr>
@@ -637,8 +657,12 @@ function Comparison({ catalog, nameOf }: ComparisonProps) {
                   <Box component="dt" sx={{ flex: '0 0 47%', fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.4, color: 'text.secondary', fontWeight: 600 }}>
                     {row.label}
                   </Box>
-                  <Box component="dd" sx={{ m: 0, flex: 1, minWidth: 0, ...cellSx(row.cells[column] ?? ''), bgcolor: 'transparent' }}>
-                    {row.cells[column]}
+                  <Box
+                    component="dd"
+                    data-compare-tone={row.cells[column]?.tone ?? 'neutral'}
+                    sx={{ m: 0, flex: 1, minWidth: 0, ...cellSx(row.cells[column]?.tone ?? 'neutral'), bgcolor: 'transparent' }}
+                  >
+                    {row.cells[column]?.text}
                   </Box>
                 </Box>
               ))}

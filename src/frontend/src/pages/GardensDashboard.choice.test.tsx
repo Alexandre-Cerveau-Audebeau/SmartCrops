@@ -370,6 +370,51 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
     });
   });
 
+  // SMA-448, PR #297, fix round 1 (S3 — GitHub G2): the tone of a cell comes
+  // from its meaning — the English « No limit » is the best value of its row,
+  // not a « No » —, declared on the cell for the harness to read its colour.
+  describe('the comparison declares the tone of each cell by its meaning, never by its text (S3)', () => {
+    const cellOf = (table: HTMLElement, label: string, column: number) => {
+      const row = [...table.querySelectorAll('tbody tr')].find((candidate) => candidate.querySelector('th')?.textContent === label);
+      const cell = row?.querySelectorAll('td')[column];
+      return cell ? { text: cell.textContent, tone: cell.getAttribute('data-compare-tone') } : { text: 'no such row', tone: null };
+    };
+
+    it('in English: « No limit » is a yes, « Up to 3 » a figure, a « No — … » a no, a name neither', async () => {
+      serve('gardener', { chosen: true, gardenCount: 2 });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Gardener view — change formula' }, PATIENCE));
+      const screenOfChoice = await dialog();
+      await within(screenOfChoice).findByRole('button', { name: 'Choose Expert' }, PATIENCE);
+      const table = within(screenOfChoice).getByRole('table');
+
+      expect(cellOf(table, 'Number of gardens', 2)).toEqual({ text: 'No limit', tone: 'yes' });
+      expect(cellOf(table, 'Number of gardens', 0)).toEqual({ text: 'Up to 3', tone: 'neutral' });
+      expect(cellOf(table, 'Garden size', 2)).toEqual({ text: 'Up to 100 × 100 cells', tone: 'neutral' });
+      expect(cellOf(table, 'Statistics', 1)).toEqual({ text: 'No', tone: 'no' });
+      expect(cellOf(table, 'Statistics', 2)).toEqual({ text: 'Yes', tone: 'yes' });
+      expect(cellOf(table, 'Move and resize widgets', 0)).toEqual({ text: 'No — there is nothing to set', tone: 'no' });
+      expect(cellOf(table, 'Each garden’s weather', 1)).toEqual({ text: 'The Weather widget, for one city', tone: 'neutral' });
+      // The lists under 900 px declare the same tones.
+      expect(document.querySelector('[data-formula-compare-list="expert"] dd[data-compare-tone="yes"]')?.textContent).toBe('No limit');
+    });
+
+    it('en français : « Sans limite » est un oui, son texte inchangé ; « Jusqu’à 3 » un chiffre ; « Non » un non', async () => {
+      localStorage.setItem('smartcrops-language', 'fr');
+      serve('gardener', { chosen: true, gardenCount: 2 });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Vue Jardinier — changer de formule' }, PATIENCE));
+      const screenOfChoice = await screen.findByRole('dialog', { name: 'Choisissez votre formule' }, PATIENCE);
+      await within(screenOfChoice).findByRole('button', { name: 'Choisir Expert' }, PATIENCE);
+      const table = within(screenOfChoice).getByRole('table');
+
+      expect(cellOf(table, 'Nombre de jardins', 2)).toEqual({ text: 'Sans limite', tone: 'yes' });
+      expect(cellOf(table, 'Nombre de jardins', 0)).toEqual({ text: 'Jusqu’à 3', tone: 'neutral' });
+      expect(cellOf(table, 'Les statistiques', 0)).toEqual({ text: 'Non', tone: 'no' });
+      expect(cellOf(table, 'Les statistiques', 2)).toEqual({ text: 'Oui', tone: 'yes' });
+    });
+  });
+
   it('a choice the server refuses is said in the region, with its reasons — the screen stays, mandatory as it was', async () => {
     serve('gardener', { chosen: false, gardenCount: 5, unavailable: { novice: [{ kind: 'gardens', have: 5, limit: 3 }] } });
     // The server says it, whatever the screen shows (R8): the button is

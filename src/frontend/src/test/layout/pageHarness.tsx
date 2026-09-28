@@ -330,6 +330,12 @@ export interface ChoiceMeasure extends DialogMeasure {
   titleClear: boolean;
   /** V1: no weather warning on the screen, ever. */
   warning: boolean;
+  /**
+   * The comparison's cells as DRAWN — the table's from 900 px, the lists'
+   * under it —, each with its computed colour and weight and the tone it
+   * declares (SMA-448, PR #297, fix round 1, S3: the tone by meaning).
+   */
+  compareCells: Array<{ text: string; color: string; weight: string; tone: string | null }>;
 }
 
 /** The planner's shape mode at the formula's limit: the note that says why, the four add buttons inert, the four remove buttons live. */
@@ -712,6 +718,10 @@ const page = {
       title: titleBox ? { x: round(titleBox.left), y: round(titleBox.top), w: round(titleBox.width), h: round(titleBox.height) } : null,
       titleClear: titleBox !== null && paperBox.top >= titleBox.bottom - 0.5,
       warning: paper.querySelector('[data-weather-disclaimer]') !== null,
+      compareCells: (drawn(table) ? [...table!.querySelectorAll<HTMLElement>('tbody td')] : [...paper.querySelectorAll<HTMLElement>('[data-formula-compare-list] dd')]).map((cell) => {
+        const style = getComputedStyle(cell);
+        return { text: cell.textContent ?? '', color: style.color, weight: style.fontWeight, tone: cell.getAttribute('data-compare-tone') };
+      }),
     };
   },
 
