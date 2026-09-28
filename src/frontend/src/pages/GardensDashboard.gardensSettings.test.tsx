@@ -93,8 +93,6 @@ const rowNames = (): string[] =>
     (row) => row.querySelector('th a')?.textContent ?? ''
   );
 
-const RENDER_TIMEOUT = { timeout: 10000 };
-
 function withGardens(level: DashboardLevel, blocks: DashboardBlock[]) {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
@@ -133,7 +131,7 @@ async function renderWith(
       </UnitSystemProvider>
     </LanguageProvider>
   );
-  await screen.findAllByText(awaited, {}, RENDER_TIMEOUT);
+  await screen.findAllByText(awaited);
 }
 
 beforeEach(() => {
@@ -336,14 +334,14 @@ describe('the Medium list is unchanged (A-N4)', () => {
 describe('the widget’s « Créer un jardin » door', () => {
   it('in Edit mode, ends the mode FIRST, then opens the dialog — like the header’s', async () => {
     await renderWith('gardener', null, 'medium');
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).toBeEnabled());
     fireEvent.click(edit);
-    await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    await screen.findByRole('button', { name: 'Done' });
 
     fireEvent.click(within(widget()).getByRole('button', { name: 'Create Garden' }));
 
-    await screen.findByRole('dialog', { name: 'Create a new garden' }, RENDER_TIMEOUT);
+    await screen.findByRole('dialog', { name: 'Create a new garden' });
     // The mode is over: « Edit » is back in the header, « Done » gone — read
     // through the dialog's veil (MUI hides the page from assistive technology
     // while a modal is open), hence `hidden: true`.

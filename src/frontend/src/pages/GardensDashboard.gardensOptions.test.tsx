@@ -73,8 +73,6 @@ const data = dashboardFixture(GARDENS);
 
 const widget = () => document.querySelector('[data-widget="gardens"]') as HTMLElement;
 
-const RENDER_TIMEOUT = { timeout: 10000 };
-
 /** The last layout the debounced save sent. */
 const lastSaved = () => {
   const calls = vi.mocked(saveDashboardPreferences).mock.calls;
@@ -111,11 +109,11 @@ function renderPage(level: DashboardLevel, options: Record<string, unknown> | nu
 /** Edit mode on, the Gardens gear open: the panel's dialog. */
 async function openGardensOptions(level: DashboardLevel, options: Record<string, unknown> | null = null) {
   renderPage(level, options);
-  await screen.findAllByText('Terrasse', {}, RENDER_TIMEOUT);
-  const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-  await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+  await screen.findAllByText('Terrasse');
+  const edit = await screen.findByRole('button', { name: 'Edit' });
+  await waitFor(() => expect(edit).toBeEnabled());
   fireEvent.click(edit);
-  await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+  await screen.findByRole('button', { name: 'Done' });
   fireEvent.click(screen.getByRole('button', { name: 'Gardens options' }));
   return await screen.findByRole('dialog', { name: 'Gardens Widget options' });
 }
@@ -282,8 +280,8 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Done' }));
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Customize' }, RENDER_TIMEOUT));
-    fireEvent.click(await screen.findByRole('button', { name: /Reset to the Expert level/ }, RENDER_TIMEOUT));
+    fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Reset to the Expert level/ }));
 
     await waitFor(() => expect(gardensOptionsOf(lastSaved().blocks)).toBeUndefined());
     expect(saveGardenOrder).not.toHaveBeenCalled();
