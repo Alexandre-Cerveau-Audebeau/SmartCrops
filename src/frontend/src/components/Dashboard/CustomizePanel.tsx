@@ -1,4 +1,3 @@
-import type { MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -48,7 +47,7 @@ interface Props {
    * click so the page gives the focus back to the link when the screen
    * closes.
    */
-  onChangeFormula: (event: MouseEvent<HTMLElement>) => void;
+  onChangeFormula: (event: React.MouseEvent<HTMLElement>) => void;
   onReset: () => void;
   onShow: (key: DashboardBlockKey) => void;
 }
