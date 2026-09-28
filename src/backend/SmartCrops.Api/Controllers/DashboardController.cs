@@ -783,7 +783,7 @@ public class DashboardController(
                 : preset.First(p => p.Key == block.Key).Size;
             var hidden = block.Hidden && block.Key != DashboardLayout.NonHidableBlock;
 
-            blocks.Add(new DashboardBlockDto(block.Key, size, hidden, block.Options));
+            blocks.Add(new DashboardBlockDto(block.Key, size, hidden, Readable(block.Key, block.Options, level)));
         }
 
         // In preset order, so each insertion finds the ones before it in place.
@@ -797,6 +797,30 @@ public class DashboardController(
         }
 
         return blocks;
+    }
+
+    /// <summary>
+    /// A stored block's options as this server READS them at the account's
+    /// level — the forgiving half of the Gardens widget's settings (SMA-448,
+    /// lot F5-a; A-N3, A-N4): a <c>count</c> not of the list, or a <c>sort</c>
+    /// the formula does not serve — the Expert's custom order read as a
+    /// Gardener, since the layout archive keeps a formula's document verbatim
+    /// —, is DROPPED, so the client falls back to its default; every other key
+    /// passes as stored, and the document is never an error. Any other block's
+    /// options pass through untouched, as they always did.
+    /// </summary>
+    private static Dictionary<string, JsonElement>? Readable(string key, Dictionary<string, JsonElement>? options, string level)
+    {
+        if (key != DashboardLayout.Blocks.Gardens || options is null) return options;
+
+        var dropped = new List<string>(2);
+        if (options.TryGetValue("count", out var count) && !IsGardensCount(count)) dropped.Add("count");
+        if (options.TryGetValue("sort", out var sort) && !IsGardensSort(sort, level)) dropped.Add("sort");
+        if (dropped.Count == 0) return options;
+
+        return options
+            .Where(entry => !dropped.Contains(entry.Key, StringComparer.Ordinal))
+            .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
     }
 
     // ── Validation ───────────────────────────────────────────────────────────
@@ -862,7 +886,7 @@ public class DashboardController(
                 return $"block '{block.Key}' cannot be hidden";
             }
 
-            if (Validate(block) is { } optionsError) return optionsError;
+            if (Validate(block, request.Level) is { } optionsError) return optionsError;
         }
 
         return null;
@@ -882,9 +906,12 @@ public class DashboardController(
     /// <summary>
     /// Bounds one block's options document. BOTH ceilings are needed: the key
     /// count stops a wide document, the byte size stops a deep or a
-    /// long-valued one, and neither implies the other.
+    /// long-valued one, and neither implies the other. Then the block's own
+    /// keys, where it has some: the band's four figures, the Gardens widget's
+    /// count and sort — the latter against the account's formula,
+    /// <paramref name="level"/> (SMA-448, lot F5-a).
     /// </summary>
-    private static string? Validate(SaveDashboardBlockRequest block)
+    private static string? Validate(SaveDashboardBlockRequest block, string level)
     {
         if (block.Options is not { Count: > 0 } options) return null;
 
@@ -896,8 +923,49 @@ public class DashboardController(
         var bytes = JsonSerializer.SerializeToUtf8Bytes(options, JsonWeb).Length;
         if (bytes > MaxOptionsBytesPerBlock) return $"options for block '{block.Key}' are too large";
 
-        return block.Key == DashboardLayout.Blocks.KeyFigures ? ValidateKeyFigures(options) : null;
+        return block.Key switch
+        {
+            DashboardLayout.Blocks.KeyFigures => ValidateKeyFigures(options),
+            DashboardLayout.Blocks.Gardens => ValidateGardens(options, level),
+            _ => null,
+        };
     }
+
+    /// <summary>
+    /// The Gardens widget's own options (SMA-448, lot F5-a — A-N3, A-N4, decided
+    /// by Alexandre on 28/09): <c>count</c>, when present, is 5, 8, 10 or the
+    /// string <c>"all"</c>; <c>sort</c>, when present, is one of the sorts the
+    /// account's FORMULA serves (<see cref="FormulaDefinition.GardenSorts"/>) —
+    /// the custom order and the creation date are the Expert's, and a Gardener
+    /// asking for them is refused here, never only in the interface (R8). The
+    /// widget's other keys are bounded like any block's, and nothing more: a
+    /// key a newer client adds must not be refused by this server.
+    /// </summary>
+    private static string? ValidateGardens(Dictionary<string, JsonElement> options, string level)
+    {
+        if (options.TryGetValue("count", out var count) && !IsGardensCount(count))
+        {
+            return $"count for block '{DashboardLayout.Blocks.Gardens}' must be 5, 8, 10 or 'all'";
+        }
+
+        if (options.TryGetValue("sort", out var sort) && !IsGardensSort(sort, level))
+        {
+            var named = sort.ValueKind == JsonValueKind.String ? $"'{sort.GetString()}'" : sort.GetRawText();
+            return $"sort {named} for block '{DashboardLayout.Blocks.Gardens}' is not available at level '{level}'";
+        }
+
+        return null;
+    }
+
+    /// <summary>5, 8, 10 — a whole number of the list — or the string « all ».</summary>
+    private static bool IsGardensCount(JsonElement count) =>
+        (count.ValueKind == JsonValueKind.Number && count.TryGetInt32(out var number) && DashboardGardensSettings.IsCount(number))
+        || (count.ValueKind == JsonValueKind.String && count.GetString() == DashboardGardensSettings.CountAll);
+
+    /// <summary>A string, and one of the sorts the level's formula serves.</summary>
+    private static bool IsGardensSort(JsonElement sort, string level) =>
+        sort.ValueKind == JsonValueKind.String
+        && FormulaCatalog.For(level).GardenSorts.Contains(sort.GetString()!, StringComparer.Ordinal);
 
     /// <summary>
     /// The Key figures band's own option (SMA-437 lot 1, PR B, step B2 —

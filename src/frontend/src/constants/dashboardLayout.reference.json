@@ -1,5 +1,5 @@
 {
-  "$comment": "PR #287, fix round 1, S2 — the ONE reference of the dashboard layout, shared by the client and the server. Neither reads it at run time: the server keeps its constants (SmartCrops.Core/Dashboard/DashboardLayout.cs, DashboardCapabilities.cs, DashboardPresets.cs, FormulaCatalog.cs) and its tests compare them, and the catalogue it serves, to this file (SmartCrops.Api.Tests/Dashboard/DashboardLayoutReferenceTests.cs and Integration/Endpoints/FormulasControllerTests.cs, which get a copy of it through the .csproj). Since SMA-448 (lot F1, step S5) the client keeps only the VOCABULARY (types/Dashboard.ts, checked by constants/dashboardLayout.reference.test.ts): it draws the sizes, the widgets and the presets from the capabilities the server serves, and its tests serve them through src/test/fixtures/formulas.ts, which reads this file. A change to the layout is made on the server and here, or a suite fails. SMA-437 lot 1, PR B, step B1: whether a level HAS a block is its preset's to say (pre-flight D4) — the Key figures band is in the Expert preset alone, in its one size, the Full width — so a block's sizesFor row at a level whose preset does not list it (the band at novice and gardener: the default three sizes of pre-flight D3) is never read. SMA-448, lot F1, step S2: the server SERVES the capabilities of the formulas (GET /api/formulas; pre-flight § C.2 a, decided on 26/09), and this file becomes the contract of that catalogue — `formulas` holds each formula's garden limits, weather mode and compact bar, its widgets are its preset's blocks, its sizes the sizesFor rows of those widgets. The Gardener has no Statistics (R1, V3-01) and keeps Récolte (question 3 of 26/09). SMA-448, lot F2: the Novice has NO widget — its page is one card per garden, not a grid (V3-01: « Aucun »; contract v3 § 3.1) — so its preset is empty, its served widgets and sizes are none, and its sizesFor rows are never read.",
+  "$comment": "PR #287, fix round 1, S2 — the ONE reference of the dashboard layout, shared by the client and the server. Neither reads it at run time: the server keeps its constants (SmartCrops.Core/Dashboard/DashboardLayout.cs, DashboardCapabilities.cs, DashboardPresets.cs, FormulaCatalog.cs) and its tests compare them, and the catalogue it serves, to this file (SmartCrops.Api.Tests/Dashboard/DashboardLayoutReferenceTests.cs and Integration/Endpoints/FormulasControllerTests.cs, which get a copy of it through the .csproj). Since SMA-448 (lot F1, step S5) the client keeps only the VOCABULARY (types/Dashboard.ts, checked by constants/dashboardLayout.reference.test.ts): it draws the sizes, the widgets and the presets from the capabilities the server serves, and its tests serve them through src/test/fixtures/formulas.ts, which reads this file. A change to the layout is made on the server and here, or a suite fails. SMA-437 lot 1, PR B, step B1: whether a level HAS a block is its preset's to say (pre-flight D4) — the Key figures band is in the Expert preset alone, in its one size, the Full width — so a block's sizesFor row at a level whose preset does not list it (the band at novice and gardener: the default three sizes of pre-flight D3) is never read. SMA-448, lot F1, step S2: the server SERVES the capabilities of the formulas (GET /api/formulas; pre-flight § C.2 a, decided on 26/09), and this file becomes the contract of that catalogue — `formulas` holds each formula's garden limits, weather mode and compact bar, its widgets are its preset's blocks, its sizes the sizesFor rows of those widgets. The Gardener has no Statistics (R1, V3-01) and keeps Récolte (question 3 of 26/09). SMA-448, lot F2: the Novice has NO widget — its page is one card per garden, not a grid (V3-01: « Aucun »; contract v3 § 3.1) — so its preset is empty, its served widgets and sizes are none, and its sizesFor rows are never read. SMA-448, lot F5-a (V3-04; A-N3, A-N4, decided by Alexandre on 28/09): `gardensSettings` is the ONE vocabulary of the Gardens widget's settings — its counts, its sorts, its default sort — pinned on both sides (DashboardGardensSettings.cs, types/Dashboard.ts); each formula's `gardenSorts` is the sorts its widget offers, served by the catalogue and refused by the server (R8): none for the Novice, three for the Gardener, five for the Expert, who alone has the custom order.",
   "levels": ["novice", "gardener", "expert"],
   "defaultLevel": "gardener",
   "sizes": ["small", "medium", "large", "wide"],
@@ -14,6 +14,12 @@
       "noplan", "noorient", "located", "cities"
     ],
     "defaults": ["free", "occupancy", "varieties", "todo"]
+  },
+  "gardensSettings": {
+    "counts": [5, 8, 10],
+    "countAll": "all",
+    "sorts": ["lastOpened", "name", "created", "updated", "custom"],
+    "defaultSort": "lastOpened"
   },
   "sizesFor": {
     "novice": {
@@ -74,8 +80,8 @@
     ]
   },
   "formulas": {
-    "novice": { "gardenLimit": 3, "maxGardenSize": { "width": 20, "height": 20 }, "weather": "gardenCards", "compactBar": false },
-    "gardener": { "gardenLimit": 10, "maxGardenSize": { "width": 50, "height": 50 }, "weather": "singleCity", "compactBar": true },
-    "expert": { "gardenLimit": null, "maxGardenSize": { "width": 100, "height": 100 }, "weather": "allCities", "compactBar": true }
+    "novice": { "gardenLimit": 3, "maxGardenSize": { "width": 20, "height": 20 }, "weather": "gardenCards", "compactBar": false, "gardenSorts": [] },
+    "gardener": { "gardenLimit": 10, "maxGardenSize": { "width": 50, "height": 50 }, "weather": "singleCity", "compactBar": true, "gardenSorts": ["lastOpened", "name", "updated"] },
+    "expert": { "gardenLimit": null, "maxGardenSize": { "width": 100, "height": 100 }, "weather": "allCities", "compactBar": true, "gardenSorts": ["lastOpened", "name", "created", "updated", "custom"] }
   }
 }

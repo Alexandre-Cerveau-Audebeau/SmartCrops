@@ -93,7 +93,36 @@ public class FormulasControllerTests : IntegrationTestBase
                 formula.GetProperty("maxGardenSize").GetProperty("height").GetInt32());
             Assert.Equal(expected.GetProperty("weather").GetString(), formula.GetProperty("weather").GetString());
             Assert.Equal(expected.GetProperty("compactBar").GetBoolean(), formula.GetProperty("compactBar").GetBoolean());
+
+            // …and the sorts its Gardens widget offers are the reference's, in
+            // order (SMA-448, lot F5-a — A-N3), every one of the vocabulary.
+            var sorts = Strings(formula.GetProperty("gardenSorts"));
+            Assert.Equal(Strings(expected.GetProperty("gardenSorts")), sorts);
+            Assert.All(sorts, sort => Assert.Contains(sort, Strings(Reference.GetProperty("gardensSettings").GetProperty("sorts"))));
         }
+    }
+
+    /// <summary>
+    /// SMA-448, lot F5-a — the sorts of the Gardens widget, by formula
+    /// (V3-04; decided by Alexandre on 28/09, question 1 — contract v3 A-N3):
+    /// none for the Novice, who has no widget; three for the Gardener — last
+    /// opened, name, last modified; five for the Expert, who alone adds the
+    /// creation date and the custom order. Literals on purpose: the client
+    /// draws the gear panel by these words, and the server refuses by them.
+    /// </summary>
+    [Fact]
+    public async Task GetFormulas_ServesTheGardenSorts_NoneForTheNovice_ThreeForTheGardener_FiveForTheExpert()
+    {
+        var userId = await SeedUserAsync();
+        AuthAs(userId);
+
+        using var body = await GetJsonAsync();
+        var byKey = body.RootElement.GetProperty("formulas").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("key").GetString()!, f => Strings(f.GetProperty("gardenSorts")));
+
+        Assert.Equal([], byKey["novice"]);
+        Assert.Equal(["lastOpened", "name", "updated"], byKey["gardener"]);
+        Assert.Equal(["lastOpened", "name", "created", "updated", "custom"], byKey["expert"]);
     }
 
     /// <summary>

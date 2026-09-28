@@ -1,6 +1,7 @@
 import reference from '../../constants/dashboardLayout.reference.json';
 import {
   DASHBOARD_LEVELS,
+  isGardenSort,
   isWeatherMode,
   type DashboardBlock,
   type DashboardBlockKey,
@@ -49,6 +50,11 @@ export function capabilitiesFor(level: DashboardLevel): FormulaCapabilities {
   // mode written there that this client does not know is a drift, not a
   // fixture (SMA-448, lot F4).
   if (!isWeatherMode(formula.weather)) throw new Error(`Unknown weather mode ${formula.weather} at ${level}`);
+  // The same rule for the sorts of the Gardens widget (SMA-448, lot F5-a).
+  const gardenSorts = formula.gardenSorts.map((sort) => {
+    if (!isGardenSort(sort)) throw new Error(`Unknown garden sort ${sort} at ${level}`);
+    return sort;
+  });
   return {
     key: level,
     gardenLimit: formula.gardenLimit,
@@ -58,6 +64,7 @@ export function capabilitiesFor(level: DashboardLevel): FormulaCapabilities {
     preset,
     weather: formula.weather,
     compactBar: formula.compactBar,
+    gardenSorts,
   };
 }
 

@@ -42,13 +42,26 @@ public sealed record FormulaShortfall(
 /// <param name="MaxGardenSize">The largest garden the formula allows, in cells.</param>
 /// <param name="Weather">How the formula shows the weather (<see cref="FormulaCatalog.WeatherModes"/>).</param>
 /// <param name="CompactBar">Whether the page draws the compact action bar (A-9).</param>
+/// <param name="GardenSorts">
+/// The sorts its Gardens widget offers, in the gear panel's order
+/// (<see cref="DashboardGardensSettings.Sorts"/>) — SMA-448, lot F5-a, A-N3:
+/// none for the Novice, who has no widget; three for the Gardener; five for
+/// the Expert, who alone has the custom order. Served, drawn, and refused by
+/// (R8): a stored sort outside this list is refused on write and brought back
+/// to the default on read, and <c>PUT /api/gardens/order</c> answers 403
+/// <c>formula.gardenOrder</c> to a formula without the custom order.
+/// </param>
 public sealed record FormulaDefinition(
     string Key,
     int? GardenLimit,
     GardenSize MaxGardenSize,
     string Weather,
-    bool CompactBar)
+    bool CompactBar,
+    IReadOnlyList<string> GardenSorts)
 {
+    /// <summary>Whether the formula has the custom order of its gardens — the write surface of <c>Gardens.SortOrder</c>.</summary>
+    public bool HasCustomGardenOrder => GardenSorts.Contains(DashboardGardensSettings.Sorts.Custom, StringComparer.Ordinal);
+
     /// <summary>The formula's default layout — and the list of the widgets it has.</summary>
     public IReadOnlyList<DashboardPresetBlock> Preset => DashboardPresets.For(Key);
 
@@ -101,14 +114,18 @@ public static class FormulaCatalog
         public const string Size = "size";
     }
 
+    /// <summary>The Gardener's three sorts (A-N3): last opened, name, last modified.</summary>
+    private static readonly IReadOnlyList<string> GardenerSorts =
+        [DashboardGardensSettings.Sorts.LastOpened, DashboardGardensSettings.Sorts.Name, DashboardGardensSettings.Sorts.Updated];
+
     public static readonly FormulaDefinition Novice = new(
-        DashboardLayout.Levels.Novice, 3, new GardenSize(20, 20), WeatherModes.GardenCards, CompactBar: false);
+        DashboardLayout.Levels.Novice, 3, new GardenSize(20, 20), WeatherModes.GardenCards, CompactBar: false, GardenSorts: []);
 
     public static readonly FormulaDefinition Gardener = new(
-        DashboardLayout.Levels.Gardener, 10, new GardenSize(50, 50), WeatherModes.SingleCity, CompactBar: true);
+        DashboardLayout.Levels.Gardener, 10, new GardenSize(50, 50), WeatherModes.SingleCity, CompactBar: true, GardenSorts: GardenerSorts);
 
     public static readonly FormulaDefinition Expert = new(
-        DashboardLayout.Levels.Expert, null, new GardenSize(100, 100), WeatherModes.AllCities, CompactBar: true);
+        DashboardLayout.Levels.Expert, null, new GardenSize(100, 100), WeatherModes.AllCities, CompactBar: true, GardenSorts: DashboardGardensSettings.Sorts.All);
 
     /// <summary>The three formulas, in the order of <see cref="DashboardLayout.Levels.All"/>.</summary>
     public static readonly IReadOnlyList<FormulaDefinition> All = [Novice, Gardener, Expert];
