@@ -83,3 +83,16 @@ export function hasActionBar(capabilities: FormulaCapabilities): boolean {
 export function isCardsPage(capabilities: FormulaCapabilities): boolean {
   return capabilities.weather === 'gardenCards';
 }
+
+/**
+ * SMA-448, lot F4 — whether the Weather widget walks EVERY city of the
+ * account — a navigator in Small and Medium, tabs in Large, every city at
+ * once in the Full width — or shows ONE city, fixed (V3-02; contract v3
+ * § 3.2, [A] 22/09 18:52). The served weather mode says it (`allCities`);
+ * the Gardener's `singleCity` and the Novice's `gardenCards` both answer no.
+ * A difference of interface, not of right (R8's one written exception): the
+ * aggregate serves every place to every formula.
+ */
+export function showsEveryCity(capabilities: FormulaCapabilities): boolean {
+  return capabilities.weather === 'allCities';
+}

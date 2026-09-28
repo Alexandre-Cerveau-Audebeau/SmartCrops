@@ -1,6 +1,7 @@
 import reference from '../../constants/dashboardLayout.reference.json';
 import {
   DASHBOARD_LEVELS,
+  isWeatherMode,
   type DashboardBlock,
   type DashboardBlockKey,
   type DashboardLevel,
@@ -44,6 +45,10 @@ export function capabilitiesFor(level: DashboardLevel): FormulaCapabilities {
   const preset = presetFor(level);
   const widgets = preset.map((block) => block.key);
   const formula = reference.formulas[level];
+  // The reference file is the contract of the served catalogue: a weather
+  // mode written there that this client does not know is a drift, not a
+  // fixture (SMA-448, lot F4).
+  if (!isWeatherMode(formula.weather)) throw new Error(`Unknown weather mode ${formula.weather} at ${level}`);
   return {
     key: level,
     gardenLimit: formula.gardenLimit,

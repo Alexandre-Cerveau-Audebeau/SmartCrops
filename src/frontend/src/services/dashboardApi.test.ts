@@ -497,6 +497,23 @@ describe('fetchDashboardPreferences — the served capabilities decide (SMA-448)
     await expect(fetchDashboardPreferences()).rejects.toThrow();
   });
 
+  // SMA-448, lot F4 — the weather mode is what the page draws the Weather
+  // widget by (one fixed city, or every city): a mode this build does not
+  // know is refused whole, like an unknown widget — never drawn as a guess.
+  it('refuses capabilities whose weather mode this build does not know', async () => {
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: true,
+      formulaChosen: true,
+      blocks: presetFor('gardener'),
+      updatedAt: null,
+      capabilities: { ...capabilitiesFor('gardener'), weather: 'everyCityButOne' },
+    });
+
+    await expect(fetchDashboardPreferences()).rejects.toThrow(/weather mode/);
+  });
+
   it('refuses capabilities that do not hold together — a widget without its sizes', async () => {
     const served = capabilitiesFor('gardener');
     const sizes = { ...served.sizes };

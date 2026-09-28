@@ -6,6 +6,8 @@ import {
   DASHBOARD_SIZES,
   DEFAULT_DASHBOARD_LEVEL,
   NON_HIDABLE_BLOCK,
+  WEATHER_MODES,
+  isWeatherMode,
 } from '../types/Dashboard';
 
 // PR #287, fix round 1, S2 (CodeRabbit, both surfaces) — the dashboard's
@@ -42,5 +44,18 @@ describe('the dashboard layout reference — the client’s vocabulary against t
   it('describes every formula the client knows, and only them', () => {
     expect(Object.keys(reference.formulas)).toEqual([...DASHBOARD_LEVELS]);
     expect(Object.keys(reference.presets)).toEqual([...DASHBOARD_LEVELS]);
+  });
+
+  // SMA-448, lot F4 — the weather mode of each formula is a capability the
+  // page draws by: the file writes a mode the client's vocabulary knows, and
+  // the three formulas use the three modes — the Novice's cards, the
+  // Gardener's one fixed city, the Expert's every city (V3-02, [A] 22/09).
+  it('writes a weather mode the client knows for every formula — the cards, one city, every city', () => {
+    const modes = DASHBOARD_LEVELS.map((level) => reference.formulas[level].weather);
+    for (const mode of modes) expect(isWeatherMode(mode), mode).toBe(true);
+    expect(modes).toEqual([...WEATHER_MODES]);
+    expect(reference.formulas.novice.weather).toBe('gardenCards');
+    expect(reference.formulas.gardener.weather).toBe('singleCity');
+    expect(reference.formulas.expert.weather).toBe('allCities');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasActionBar, isAdjusted, permitsBlock, presetOf, sizesFor } from './dashboardCapabilities';
+import { hasActionBar, isAdjusted, isCardsPage, permitsBlock, presetOf, showsEveryCity, sizesFor } from './dashboardCapabilities';
 import { capabilitiesFor } from '../test/fixtures/formulas';
 import {
   DASHBOARD_BLOCK_KEYS,
@@ -114,6 +114,21 @@ describe('the compact action bar, per formula (A-9)', () => {
       gardener: true,
       expert: true,
     });
+  });
+});
+
+// SMA-448, lot F4 — the Weather widget draws by the served weather mode
+// (V3-02, [A] 22/09 18:52): the Expert walks every city, the Gardener shows
+// one, fixed, the Novice has no widget at all (its cards). Named predicates
+// the page calls, never a literal comparison in a component.
+describe('the weather of each formula, as served (SMA-448, lot F4)', () => {
+  it('the Expert alone walks every city; the Novice alone is the cards page; the Gardener neither — one city, fixed', () => {
+    expect(
+      Object.fromEntries(DASHBOARD_LEVELS.map((level) => [level, showsEveryCity(capabilitiesFor(level))]))
+    ).toEqual({ novice: false, gardener: false, expert: true });
+    expect(
+      Object.fromEntries(DASHBOARD_LEVELS.map((level) => [level, isCardsPage(capabilitiesFor(level))]))
+    ).toEqual({ novice: true, gardener: false, expert: false });
   });
 });
 
