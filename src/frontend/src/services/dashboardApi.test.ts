@@ -274,7 +274,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     ]);
   });
 
-  it('brings a KNOWN size the formula does not permit back to the preset’s — Weather has no Full width yet', async () => {
+  it('brings a KNOWN size the formula does not permit back to the preset’s — Gardens has no Full width yet', async () => {
     mockFetch({
       schemaVersion: 1,
       level: 'expert',
@@ -282,8 +282,8 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       isPreset: false,
       formulaChosen: true,
       blocks: [
-        { key: 'weather', size: 'wide', hidden: false },
-        { key: 'gardens', size: 'medium', hidden: false },
+        { key: 'gardens', size: 'wide', hidden: false },
+        { key: 'weather', size: 'medium', hidden: false },
       ],
       updatedAt: null,
     });
@@ -291,9 +291,35 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     const preferences = await fetchDashboardPreferences();
 
     expect(preferences.blocks).toEqual([
-      { key: 'weather', size: 'large', hidden: false },
-      { key: 'gardens', size: 'medium', hidden: false },
+      { key: 'gardens', size: 'large', hidden: false },
+      { key: 'weather', size: 'medium', hidden: false },
     ]);
+  });
+
+  it('keeps the Expert’s Weather in the Full width — a size its formula permits since lot F4 — and brings the Gardener’s back to Medium', async () => {
+    // SMA-448, lot F4 (V3-02): the served capabilities say the Expert's
+    // Weather takes the Full width; the Gardener's never does (A-N11).
+    mockFetch({
+      schemaVersion: 1,
+      level: 'expert',
+      capabilities: capabilitiesFor('expert'),
+      isPreset: false,
+      formulaChosen: true,
+      blocks: [{ key: 'weather', size: 'wide', hidden: false }],
+      updatedAt: null,
+    });
+    expect((await fetchDashboardPreferences()).blocks).toEqual([{ key: 'weather', size: 'wide', hidden: false }]);
+
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
+      isPreset: false,
+      formulaChosen: true,
+      blocks: [{ key: 'weather', size: 'wide', hidden: false }],
+      updatedAt: null,
+    });
+    expect((await fetchDashboardPreferences()).blocks).toEqual([{ key: 'weather', size: 'medium', hidden: false }]);
   });
 
   it('falls back to the default level when the stored one is unknown', async () => {

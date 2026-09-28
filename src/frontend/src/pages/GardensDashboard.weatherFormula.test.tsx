@@ -214,3 +214,37 @@ describe('the Expert: every city (SMA-448, lot F4, W2)', () => {
     await waitFor(() => expect(tableCities()).toEqual(['Lyon', 'Lyon', 'Annecy']));
   });
 });
+
+// SMA-448, lot F4, step W3 — the Expert's three forms on the page, as the
+// stored layout sizes the widget: the navigator on Medium, the tabs on Large
+// (above), and the FULL WIDTH — a size the served capabilities give the
+// Expert's Weather alone (A-N11) — every city at once.
+describe('the Expert: every city, at every size (SMA-448, lot F4, W3)', () => {
+  it('Weather in the Full width: every city at once — the summary, one column per city — and the table agrees', async () => {
+    serve('expert', 'wide');
+    renderPage();
+    const card = await weatherWidget();
+
+    expect(card.querySelector('[data-weather-summary]')).toHaveTextContent('2 cities · 3 gardens');
+    const columns = [...card.querySelectorAll('[data-weather-cities] > [data-weather-city]')];
+    expect(columns.map((column) => column.querySelector('[data-weather-city-name]')!.textContent)).toEqual(['Lyon', 'Annecy']);
+    expect(columns.map((column) => column.querySelector('[data-weather-temperature]')!.textContent)).toEqual(['24°', '21°']);
+    expect(within(card).queryByRole('tablist')).toBeNull();
+    expect(card.querySelector('[data-weather-honest]')).toBeNull();
+    await waitFor(() => expect(tableCities()).toEqual(['Lyon', 'Lyon', 'Annecy']));
+  });
+
+  it('Weather Medium: the compact navigator — « 1 / 2 », the next chevron shows Annecy', async () => {
+    serve('expert', 'medium');
+    renderPage();
+    const card = await weatherWidget();
+
+    const group = within(card).getByRole('group', { name: 'Change city' });
+    expect(card.querySelector('[data-weather-rank]')).toHaveTextContent('1 / 2');
+    expect(card).toHaveAttribute('aria-label', 'Lyon');
+    fireEvent.click(within(group).getByRole('button', { name: 'Next city' }));
+    expect(card).toHaveAttribute('aria-label', 'Annecy');
+    expect(card.querySelector('[data-weather-temperature]')).toHaveTextContent('21°');
+    expect(card.querySelector('[data-weather-honest]')).toBeNull();
+  });
+});
