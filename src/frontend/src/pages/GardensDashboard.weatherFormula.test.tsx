@@ -6,7 +6,9 @@ import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
-import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
+import { dayFixture, hoursOf, linkFixture, locationFixture, weatherFixture, weekFixture } from '../test/fixtures/weather';
+import { gardens as sceneGardens, varieties as sceneVarieties } from '../test/layout/scenes';
+import { todoTasks } from '../components/Dashboard/blocks/todoTasks';
 import type { DashboardLevel, DashboardSize } from '../types/Dashboard';
 import type { DashboardWeatherData } from '../types/DashboardWeather';
 
@@ -246,5 +248,63 @@ describe('the Expert: every city, at every size (SMA-448, lot F4, W3)', () => {
     expect(card).toHaveAttribute('aria-label', 'Annecy');
     expect(card.querySelector('[data-weather-temperature]')).toHaveTextContent('21°');
     expect(card.querySelector('[data-weather-honest]')).toBeNull();
+  });
+});
+
+// SMA-448, lot F4, step W4 — A PAGE NEVER CONTRADICTS ITSELF (A-4) under the
+// Gardener: the widget shows ONE city, but every derived figure of the page
+// still reads every garden's own city through `displayWeather` — the To-do
+// widget lists the frost task of the garden in Annecy while the Weather
+// widget shows Lyon and says, in its honest line, that Annecy is not shown.
+// R8's exception is a difference of interface, never of data.
+describe('the Gardener: one city shown, every city read (SMA-448, lot F4, W4)', () => {
+  it('the To-do widget lists the frost task of the garden in Annecy; the Weather widget shows Lyon and names Annecy in its honest line; the warning is there', async () => {
+    const annecy = locationFixture({
+      key: ANNECY,
+      name: 'Annecy',
+      days: [
+        dayFixture({ date: '2026-09-12', minTempC: -1, maxTempC: 8, hours: hoursOf('2026-09-12', -1, 8) }),
+        ...weekFixture().slice(1),
+      ],
+    });
+    const weather = weatherFixture(
+      [locationFixture(), annecy],
+      [
+        linkFixture({ gardenId: 'g1' }),
+        linkFixture({ gardenId: 'g2' }),
+        linkFixture({ gardenId: 'g3', locationKey: ANNECY, source: 'garden' }),
+      ]
+    );
+    // The scene's gardens: Potager du fond (g3) has placements to protect.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
+      isPreset: false,
+      formulaChosen: true,
+      blocks: presetFor('gardener').map((block) =>
+        block.key === 'weather' ? { ...block, size: 'large', hidden: false } : block.key === 'todo' ? { ...block, size: 'large', hidden: false } : block
+      ),
+      updatedAt: null,
+    });
+    vi.mocked(fetchFormulas).mockResolvedValue(catalogFor('gardener', { gardenCount: sceneGardens.length }));
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardFixture(sceneGardens));
+    vi.mocked(fetchDashboardWeather).mockResolvedValue(weather);
+    renderPage();
+    const card = await weatherWidget();
+
+    expect(card).toHaveAttribute('aria-label', 'Lyon');
+    expect(card.querySelector('[data-weather-honest]')).toHaveTextContent('Your gardens in Annecy are not shown here.');
+    expect(card.querySelector('[data-weather-band]')).not.toHaveTextContent(/frost/i);
+
+    const todo = document.querySelector('[data-widget="todo"]') as HTMLElement;
+    await waitFor(() => expect(todo.querySelectorAll('[data-todo-task="frost"]')).toHaveLength(1));
+    // The one frost task of the scene is Potager du fond's — its placements, its city's minimum.
+    const expected = todoTasks(sceneGardens, sceneVarieties, weather).find((task) => task.kind === 'frost')!;
+    expect(expected.gardenId).toBe('g3');
+    expect(todo.querySelector('[data-todo-task="frost"]')).toHaveTextContent(`${expected.count} plants`);
+    expect(todo.querySelector('[data-todo-task="frost"]')).toHaveTextContent('-1°');
+    expect(screen.getByRole('note')).toHaveAttribute('data-weather-disclaimer');
+    await waitFor(() => expect(tableCities()).toEqual(['Lyon', 'Lyon', 'Annecy']));
   });
 });
