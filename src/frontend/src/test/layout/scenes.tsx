@@ -15,7 +15,7 @@ import { gardenViewOf, type GardenView } from '../../utils/gardenStats';
 import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOptions';
 import { cardBearsWeather, noviceCardsOf, type NoviceCard } from '../../components/Dashboard/noviceCards';
 import { LAYOUT_NOW_MS } from './clock';
-import { catalogFor, presetFor } from '../fixtures/formulas';
+import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
 import type { GardenLayoutData } from '../../services/gardenLayoutApi';
 import type { Garden } from '../../types/Garden';
 import type { SaveState } from '../../hooks/useDashboardPreferences';
@@ -658,6 +658,8 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
           onChanged={noop}
           onDeleted={noop}
           onExpand={noop}
+          options={null}
+          sorts={capabilitiesFor('expert').gardenSorts}
         />
       );
     case 'counters':

@@ -342,6 +342,12 @@ const isGardenRecord = matches<DashboardGardenData>({
   cellsJson: isNullableString,
   config: isGardenConfig,
   updatedAt: isString,
+  // SMA-448, lot F5-a — the three data the widget sorts by, two of them
+  // null until the first opening and the first ranking: the server before
+  // this lot does not send them, and the promotion goes server first.
+  createdAt: isString,
+  lastOpenedAt: isNullableString,
+  sortOrder: nullable(isWholeNumber),
   placements: arrayOf(isPlacementRecord),
   placementCount: isWholeNumber,
   varietyCount: isWholeNumber,

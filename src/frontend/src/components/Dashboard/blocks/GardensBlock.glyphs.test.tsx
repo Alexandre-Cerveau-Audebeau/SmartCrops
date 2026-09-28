@@ -90,6 +90,7 @@ function mediumCard({ loading = false, loadError = false }: { loading?: boolean;
             onChanged={() => {}}
             onDeleted={() => {}}
             onExpand={() => {}}
+            sorts={['lastOpened', 'name', 'updated']}
           />
         </MemoryRouter>
       </UnitSystemProvider>

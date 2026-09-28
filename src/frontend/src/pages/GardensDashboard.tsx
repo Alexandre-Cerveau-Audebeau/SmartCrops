@@ -657,6 +657,11 @@ export default function GardensDashboard() {
             onExpand={() =>
               patchBlock('gardens', (current) => ({ ...current, size: 'large' }))
             }
+            // SMA-448, lot F5-a — the widget's settings, and the sorts the
+            // formula serves (R8: the panel draws them and the server refuses
+            // by them).
+            options={block.options ?? null}
+            sorts={capabilities?.gardenSorts ?? []}
           />
         );
       case 'counters':

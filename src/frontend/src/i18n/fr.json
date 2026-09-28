@@ -682,7 +682,32 @@
           "modified": "Modifié",
           "actions": "Actions"
         },
-        "columnSoon": "Bientôt"
+        "columnSoon": "Bientôt",
+        "search": {
+          "placeholder": "Rechercher un jardin",
+          "clear": "Effacer la recherche",
+          "clearField": "Effacer le champ",
+          "results_one": "{{count, number}} jardin sur {{total, number}} contient « {{query}} »",
+          "results_other": "{{count, number}} jardins sur {{total, number}} contiennent « {{query}} »",
+          "none": "Aucun jardin ne contient « {{query}} »",
+          "scope_one": "La recherche porte sur le nom de votre jardin, sans tenir compte des majuscules ni des accents.",
+          "scope_other": "La recherche porte sur le nom de vos {{count, number}} jardins, sans tenir compte des majuscules ni des accents.",
+          "beyond_one": "hors du jardin affiché",
+          "beyond_other": "hors des {{count, number}} affichés"
+        },
+        "foot": {
+          "more_one": "+ {{count, number}} autre jardin",
+          "more_other": "+ {{count, number}} autres jardins",
+          "less_one": "Réduire à {{count, number}} jardin",
+          "less_other": "Réduire à {{count, number}} jardins",
+          "sortedBy": {
+            "lastOpened": "Triés par dernière ouverture",
+            "name": "Triés par ordre alphabétique",
+            "created": "Triés par date de création",
+            "updated": "Triés par dernière modification",
+            "custom": "Dans votre ordre"
+          }
+        }
       },
       "tips": {
         "title": "Conseils",

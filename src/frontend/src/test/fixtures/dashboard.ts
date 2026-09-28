@@ -36,6 +36,11 @@ export const gardenFixture = (
     latitudeBand: 'mid',
   },
   updatedAt: '2026-05-01T00:00:00Z',
+  // SMA-448, lot F5-a — created with its last modification, never opened,
+  // not ranked: a test that sorts says what it dates and ranks.
+  createdAt: '2026-05-01T00:00:00Z',
+  lastOpenedAt: null,
+  sortOrder: null,
   placements: [],
   placementCount: 0,
   varietyCount: 0,

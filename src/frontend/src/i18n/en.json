@@ -682,7 +682,32 @@
           "modified": "Modified",
           "actions": "Actions"
         },
-        "columnSoon": "Soon"
+        "columnSoon": "Soon",
+        "search": {
+          "placeholder": "Search a garden",
+          "clear": "Clear the search",
+          "clearField": "Clear the field",
+          "results_one": "{{count, number}} garden of {{total, number}} contains “{{query}}”",
+          "results_other": "{{count, number}} gardens of {{total, number}} contain “{{query}}”",
+          "none": "No garden contains “{{query}}”",
+          "scope_one": "The search covers the name of your garden, regardless of case and accents.",
+          "scope_other": "The search covers the names of your {{count, number}} gardens, regardless of case and accents.",
+          "beyond_one": "beyond the one shown",
+          "beyond_other": "beyond the {{count, number}} shown"
+        },
+        "foot": {
+          "more_one": "+ {{count, number}} more garden",
+          "more_other": "+ {{count, number}} more gardens",
+          "less_one": "Show {{count, number}} garden",
+          "less_other": "Show {{count, number}} gardens",
+          "sortedBy": {
+            "lastOpened": "Sorted by last opened",
+            "name": "Sorted alphabetically",
+            "created": "Sorted by creation date",
+            "updated": "Sorted by last modified",
+            "custom": "In your order"
+          }
+        }
       },
       "tips": {
         "title": "Tips",
