@@ -28,12 +28,14 @@ export type SaveState = 'idle' | 'pending' | 'saved' | 'error';
 /**
  * SMA-448, PR #293, fix round 2 (R2-E1) — how a switch of formula ended, for
  * the page to act on: `switched`; `unsaved`, a layout that could not be
- * written first (S2); `refused`, a formula the server refused (A1);
- * `unread`, a switch that landed but whose layout could not be read back —
- * the page is on its load error (S6); `ignored`, no layout yet or a switch
- * already in flight (S5).
+ * written first (S2); `refused`, a formula the server refused with its
+ * reasons (A1); `failed`, a switch that did not go through for another
+ * reason — the session expired, a right the account lacks, a failure — which
+ * `refusal.kind` names (lot F3, L4 — R3-E1); `unread`, a switch that landed
+ * but whose layout could not be read back — the page is on its load error
+ * (S6); `ignored`, no layout yet or a switch already in flight (S5).
  */
-export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'unread' | 'ignored';
+export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'failed' | 'unread' | 'ignored';
 
 interface Layout {
   level: DashboardLevel;
@@ -63,6 +65,11 @@ export function useDashboardPreferences() {
   // its bar from it. Beside the layout, not in it: the layout is what is
   // WRITTEN, the capabilities are only ever read.
   const [capabilities, setCapabilities] = useState<FormulaCapabilities | null>(null);
+  // SMA-448, lot F3 — whether the account has ever CHOSEN its formula, read
+  // with the layout: false until its first deliberate choice — the choice
+  // screen shows itself once on it (N18) — and null while the layout is not
+  // read. Beside the layout, like the capabilities: read, never written.
+  const [formulaChosen, setFormulaChosen] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -252,6 +259,7 @@ export function useDashboardPreferences() {
         unsavedRef.current = false;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
+        setFormulaChosen(preferences.formulaChosen);
         setLoadError(false);
       })
       .catch(() => {
@@ -259,6 +267,7 @@ export function useDashboardPreferences() {
         layoutRef.current = null;
         setLayout(null);
         setCapabilities(null);
+        setFormulaChosen(null);
         setLoadError(true);
       })
       .finally(() => {
@@ -368,10 +377,12 @@ export function useDashboardPreferences() {
           // its reasons), or the switch failed before it could: the account
           // and its layout are as they were, and nothing is unsaved. The
           // panel says the refusal; the indicator says what it said before,
-          // never « not saved ».
-          setRefusal(refusalOf(error, level));
+          // never « not saved ». R3-E1: a refusal and a failure are two
+          // outcomes — the failure named in the refusal's kind.
+          const refusal = refusalOf(error, level);
+          setRefusal(refusal);
           say(before);
-          return 'refused';
+          return refusal.kind === 'refused' ? 'refused' : 'failed';
         }
         stage = 'reading';
         const preferences = await fetchDashboardPreferences();
@@ -380,6 +391,9 @@ export function useDashboardPreferences() {
         unsavedRef.current = false;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
+        // A choice is deliberate — « Garder » included: the server stamped
+        // it, and the read-back says so; the choice screen closes on it.
+        setFormulaChosen(preferences.formulaChosen);
         say('saved');
         return 'switched';
       } catch {
@@ -394,6 +408,7 @@ export function useDashboardPreferences() {
           unsavedRef.current = false;
           setLayout(null);
           setCapabilities(null);
+          setFormulaChosen(null);
           setLoadError(true);
           say('idle');
         } else {
@@ -430,6 +445,8 @@ export function useDashboardPreferences() {
     blocks,
     /** What the account's formula permits, as served; null until the layout is read. */
     capabilities,
+    /** Whether the account has ever chosen its formula (SMA-448, lot F3); null until the layout is read. */
+    formulaChosen,
     loading,
     loadError,
     saveState,

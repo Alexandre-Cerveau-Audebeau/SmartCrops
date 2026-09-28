@@ -3,33 +3,24 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import FormLabel from '@mui/material/FormLabel';
 import IconButton from '@mui/material/IconButton';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import { BLOCK_ICONS } from './blockIcons';
-import { formulaRefusalText } from './formulaRefusal';
 import { permitsBlock } from '../../constants/dashboardCapabilities';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
-import {
-  DASHBOARD_LEVELS,
-  type DashboardBlock,
-  type DashboardBlockKey,
-  type DashboardLevel,
-  type FormulaCapabilities,
-  type FormulaRefusal,
-  type GalleryPreview,
+import type {
+  DashboardBlock,
+  DashboardBlockKey,
+  DashboardLevel,
+  FormulaCapabilities,
+  GalleryPreview,
 } from '../../types/Dashboard';
 
-/** Stable ids: the drawer names itself by its heading, the group by its label. */
+/** Stable id: the drawer names itself by its heading. */
 const TITLE_ID = 'dashboard-customize-title';
-const LEVEL_LABEL_ID = 'dashboard-customize-level-label';
 
 interface Props {
   open: boolean;
@@ -43,29 +34,33 @@ interface Props {
   blocks: DashboardBlock[];
   /**
    * A switch of formula is in flight (SMA-448, PR #293, fix round 1, S5): the
-   * levels, the reset and the « + » take no gesture until the page stands at
-   * one formula again — none can be made, then lost.
+   * link to the choice, the reset and the « + » take no gesture until the
+   * page stands at one formula again — none can be made, then lost.
    */
   switching: boolean;
-  /**
-   * A formula the server refused (SMA-448, PR #293, fix round 2, A1), with
-   * the reasons it served: said here, under the choice the user just made.
-   */
-  refusal: FormulaRefusal | null;
   /** A hidden widget's headline figure, or null when it has none yet. */
   preview?: (key: DashboardBlockKey) => GalleryPreview | null;
   onClose: () => void;
-  onLevelChange: (level: DashboardLevel) => void;
+  /**
+   * « Changer de formule » (SMA-448, PR #297, fix round 1, A1): opens the
+   * choice screen — the one place where the formula changes —, handed the
+   * click so the page gives the focus back to the link when the screen
+   * closes.
+   */
+  onChangeFormula: (event: React.MouseEvent<HTMLElement>) => void;
   onReset: () => void;
   onShow: (key: DashboardBlockKey) => void;
 }
 
 /**
- * SMA-336 - the Customize panel (_spec.md 8): the three level cards, the note
- * that says what a level does and does not decide, the reset, and the gallery
- * of hidden widgets. Nothing else - no plan, no quota, no upsell: the frozen
- * design carries no mention of a price or a limit anywhere, and neither does
- * this panel.
+ * SMA-336 - the Customize panel (_spec.md 8): the formula the page is on,
+ * named, with the way to the choice screen (SMA-448, PR #297, fix round 1,
+ * A1 — the three level cards the panel had, which switched the account's
+ * formula since lot F1, are gone: the formula changes in ONE place), the
+ * note that says what a level does and does not decide, the reset, and the
+ * gallery of hidden widgets. Nothing else - no plan, no quota, no upsell:
+ * the frozen design carries no mention of a price or a limit anywhere, and
+ * neither does this panel.
  */
 export default function CustomizePanel({
   open,
@@ -73,10 +68,9 @@ export default function CustomizePanel({
   capabilities,
   blocks,
   switching,
-  refusal,
   preview,
   onClose,
-  onLevelChange,
+  onChangeFormula,
   onReset,
   onShow,
 }: Props) {
@@ -87,11 +81,6 @@ export default function CustomizePanel({
   const hidden = blocks.filter(
     (block) => block.hidden && capabilities !== null && permitsBlock(capabilities, block.key)
   );
-
-  // The refusal, in words (A1) — ONE sentence with the Novice page's chooser
-  // (`formulaRefusalText`, SMA-448 lot F2): the formula refused, then each
-  // reason the server served with its numbers.
-  const refusalText = formulaRefusalText(refusal, t);
 
   const sectionTitleSx = {
     fontSize: `${DASHBOARD_TYPE.title}px`,
@@ -139,77 +128,57 @@ export default function CustomizePanel({
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* FormControl + FormLabel rather than a bare Typography (round 1,
-              E5): it is what wires the group's accessible name, so a screen
-              reader announces WHAT the three options choose. */}
-          <FormControl>
-            <FormLabel id={LEVEL_LABEL_ID} sx={sectionTitleSx}>
-              {t('dashboard.panel.levelSection')}
-            </FormLabel>
-            <RadioGroup
-              aria-labelledby={LEVEL_LABEL_ID}
-              value={level}
-              onChange={(event) =>
-                onLevelChange(event.target.value as DashboardLevel)
-              }
-              sx={{ gap: '8px', mt: '12px' }}
-            >
-              {DASHBOARD_LEVELS.map((option) => (
-                <FormControlLabel
-                  key={option}
-                  value={option}
-                  disabled={switching}
-                  control={<Radio size="small" />}
-                  sx={{
-                    m: 0,
-                    p: '12px',
-                    alignItems: 'flex-start',
-                    borderRadius: '10px',
-                    border: '1px solid',
-                    borderColor: option === level ? 'primary.main' : 'borderSubtle',
-                  }}
-                  label={
-                    <Box>
-                      <Typography
-                        sx={{
-                          fontSize: `${DASHBOARD_TYPE.body}px`,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {t(`dashboard.levels.${option}.name`)}
-                      </Typography>
-                      <Typography
-                        sx={{
-                          fontSize: `${DASHBOARD_TYPE.secondary}px`,
-                          color: 'text.secondary',
-                        }}
-                      >
-                        {t(`dashboard.levels.${option}.tagline`)}
-                      </Typography>
-                    </Box>
-                  }
-                />
-              ))}
-            </RadioGroup>
-            {/* The refusal of a formula (A1), said HERE, under the choice the
-                user just made, in a live region born EMPTY and kept mounted —
-                the rule of the save indicator (A-10.6): a region inserted
-                already filled is not announced, and `display: none` while
-                empty would take it out of the accessibility tree. Its margin
-                stands only while it speaks. `polite`, never `assertive`. */}
-            <Typography
-              role="status"
-              aria-live="polite"
-              data-formula-refusal
+          <Typography sx={sectionTitleSx}>
+            {t('dashboard.panel.levelSection')}
+          </Typography>
+          {/* SMA-448, PR #297, fix round 1 (A1) — Alexandre, 27/09: « Pourquoi
+              on peut quand même switch de formule depuis le menu
+              Personnaliser ? Il faut centraliser cette fonctionnalité. » The
+              three level cards (radios) the panel had since SMA-336, which
+              switched the account's formula on the server since lot F1, are
+              gone with the refusal they were said under: the formula is
+              NAMED here — its name and its tagline, as the card of the level
+              drew them — and CHANGED in one place, the choice screen (V3-01),
+              which this link opens as the chip does. The page gives the focus
+              back to the link when the screen closes. */}
+          <Box
+            data-panel-formula
+            sx={{
+              p: '12px',
+              borderRadius: '10px',
+              border: '1px solid',
+              borderColor: 'primary.main',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+            }}
+          >
+            <Typography sx={{ fontSize: `${DASHBOARD_TYPE.body}px`, fontWeight: 700 }}>
+              {t(`dashboard.levels.${level}.name`)}
+            </Typography>
+            <Typography sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary' }}>
+              {t(`dashboard.levels.${level}.tagline`)}
+            </Typography>
+            <Button
+              data-panel-change-formula
+              variant="text"
+              size="small"
+              onClick={onChangeFormula}
+              disabled={switching}
+              aria-haspopup="dialog"
               sx={{
+                mt: '8px',
+                alignSelf: 'flex-start',
+                p: 0,
+                minWidth: 0,
                 fontSize: `${DASHBOARD_TYPE.secondary}px`,
-                color: 'error.main',
-                '&:not(:empty)': { mt: '12px' },
+                fontWeight: 700,
+                textTransform: 'none',
               }}
             >
-              {refusalText}
-            </Typography>
-          </FormControl>
+              {t('dashboard.formulaChooser.title')}
+            </Button>
+          </Box>
           <Typography
             sx={{
               fontSize: `${DASHBOARD_TYPE.secondary}px`,

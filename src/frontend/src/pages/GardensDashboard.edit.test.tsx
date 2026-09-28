@@ -278,6 +278,7 @@ function servePreferences(
     level,
     capabilities: capabilitiesFor(level),
     isPreset: true,
+    formulaChosen: true,
     blocks,
     updatedAt: null,
   });

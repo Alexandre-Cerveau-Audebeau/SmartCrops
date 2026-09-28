@@ -603,10 +603,10 @@ public class DashboardController(
             join preferences in context.UserDashboardPreferences.AsNoTracking()
                 on user.Id equals preferences.UserId into rows
             from row in rows.DefaultIfEmpty()
-            select new { user.Formula, Row = row })
+            select new { user.Formula, user.FormulaChosenAt, Row = row })
             .SingleOrDefaultAsync(ct);
 
-        return Ok(ToResponse(account?.Row, account?.Formula));
+        return Ok(ToResponse(account?.Row, account?.Formula, account?.FormulaChosenAt is not null));
     }
 
     /// <summary>
@@ -680,14 +680,14 @@ public class DashboardController(
     /// account's formula. Every failure mode collapses to the formula's
     /// preset, deliberately and silently.
     /// </summary>
-    private static DashboardPreferencesResponse ToResponse(UserDashboardPreferences? row, string? formula)
+    private static DashboardPreferencesResponse ToResponse(UserDashboardPreferences? row, string? formula, bool formulaChosen)
     {
         // The account's formula decides (SMA-448, S4) — the level the document
         // names is ignored. An unknown value reads as the default formula.
         var level = DashboardPresets.IsKnownLevel(formula) ? formula : DashboardLayout.DefaultLevel;
 
         var stored = Parse(row);
-        if (stored is null) return Preset(level, updatedAt: null);
+        if (stored is null) return Preset(level, updatedAt: null, formulaChosen);
 
         return new DashboardPreferencesResponse(
             DashboardLayout.CurrentSchemaVersion,
@@ -695,7 +695,8 @@ public class DashboardController(
             IsPreset: false,
             Merge(stored.Blocks, level),
             row!.UpdatedAt,
-            FormulaDtos.From(FormulaCatalog.For(level)));
+            FormulaDtos.From(FormulaCatalog.For(level)),
+            formulaChosen);
     }
 
     /// <summary>
@@ -733,13 +734,14 @@ public class DashboardController(
     }
 
     /// <summary>The preset of a level, as a response, with the level's capabilities.</summary>
-    private static DashboardPreferencesResponse Preset(string level, DateTime? updatedAt) =>
+    private static DashboardPreferencesResponse Preset(string level, DateTime? updatedAt, bool formulaChosen) =>
         new(DashboardLayout.CurrentSchemaVersion,
             level,
             IsPreset: true,
             [.. DashboardPresets.For(level).Select(b => new DashboardBlockDto(b.Key, b.Size, b.Hidden, null))],
             updatedAt,
-            FormulaDtos.From(FormulaCatalog.For(level)));
+            FormulaDtos.From(FormulaCatalog.For(level)),
+            formulaChosen);
 
     /// <summary>
     /// Keeps the stored blocks in their stored order, drops keys this server does

@@ -101,6 +101,7 @@ function serve(figures: KeyFigure[], size: 'medium' | 'large' = 'medium') {
     level: 'expert',
     capabilities: capabilitiesFor('expert'),
     isPreset: false,
+    formulaChosen: true,
     blocks,
     updatedAt: null,
   });
@@ -505,6 +506,7 @@ describe('the Novice page reads the weather the page reads — a card that says 
       level: 'novice',
       capabilities: capabilitiesFor('novice'),
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor('novice'),
       updatedAt: null,
     });

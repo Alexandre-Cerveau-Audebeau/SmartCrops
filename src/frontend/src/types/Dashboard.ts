@@ -125,6 +125,12 @@ export interface DashboardPreferences {
   updatedAt: string | null;
   /** What the formula permits (SMA-448): the ONE source the page draws its widgets, sizes and bar from. */
   capabilities: FormulaCapabilities;
+  /**
+   * SMA-448, lot F3 — whether the account has ever CHOSEN its formula: false
+   * until its first deliberate choice, and the cue the choice screen is shown
+   * once on (N18). Read with the layout, in the server's one statement.
+   */
+  formulaChosen: boolean;
 }
 
 /**
@@ -152,10 +158,56 @@ export interface SizeRefusalReason {
 
 export type FormulaRefusalReason = GardensRefusalReason | SizeRefusalReason;
 
-/** A switch of formula that did not go through: the formula asked for, and the reasons served — none for a failure the server did not explain. */
+/**
+ * SMA-448, lot F3, step L4 (R3-E1) — how a switch of formula did not go
+ * through: `refused`, the server refused the formula with its reasons (409
+ * `formula.tooSmall`); `unauthorized`, the session expired (401); `forbidden`,
+ * a right the account lacks (403); `failed`, a failure a retry may cure —
+ * no server, a timeout, a 5xx, a refusal the server did not explain.
+ */
+export type FormulaRefusalKind = 'refused' | 'unauthorized' | 'forbidden' | 'failed';
+
+/** A switch of formula that did not go through: how, the formula asked for, and the reasons served — none but for a refusal. */
 export interface FormulaRefusal {
+  kind: FormulaRefusalKind;
   formula: DashboardLevel;
   reasons: FormulaRefusalReason[];
+}
+
+/**
+ * SMA-448, lot F3 — whether the caller may choose a formula, as
+ * `GET /api/formulas` serves it: the one it is on is always available, even
+ * beyond its limits (« Votre formule — conservée »); its reasons are still
+ * listed, for the screen to say.
+ */
+export interface FormulaAvailability {
+  formula: DashboardLevel;
+  current: boolean;
+  available: boolean;
+  reasons: FormulaRefusalReason[];
+}
+
+/** SMA-448, lot F3 — the caller against the catalogue. */
+export interface FormulaAccount {
+  /** The account's formula. */
+  formula: DashboardLevel;
+  /** Whether the account has ever CHOSEN it — false until its first deliberate choice. */
+  chosen: boolean;
+  /** When, UTC; null until then. */
+  chosenAt: string | null;
+  /** How many gardens the account has. */
+  gardenCount: number;
+  /** The widest width and the tallest height among its gardens with a plan — possibly two gardens; null when none has a plan. */
+  largestGardenSize: { width: number; height: number } | null;
+  /** Each formula, in the catalogue's order. */
+  availability: FormulaAvailability[];
+}
+
+/** `GET /api/formulas`: the three formulas, and the caller against them. */
+export interface FormulasCatalog {
+  /** In the catalogue's order — Novice, Gardener, Expert. */
+  formulas: FormulaCapabilities[];
+  account: FormulaAccount;
 }
 
 /** PUT /api/dashboard/preferences — the layout is replaced wholesale. */

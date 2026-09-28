@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmartCrops.Api.DTOs;
+using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Geo;
@@ -164,12 +165,36 @@ public class GardensController(
         return Ok(ToGardenResponse(garden, await LoadProfileLocationAsync(userId)));
     }
 
+    /// <summary>
+    /// SMA-448, lot F3, step L1 — a garden beyond the formula's number is
+    /// refused: 403 <c>formula.gardenLimit</c> with the limit and the count
+    /// (<see cref="FormulaRefusals.GardenLimit"/>; V3: a limit shown is a
+    /// limit applied). <b>Without a race</b> (pre-flight § C.4.1; constat 8):
+    /// the account's row is locked for the transaction
+    /// (<see cref="AccountFormulaLock"/>, the lock of lot F1), its gardens
+    /// counted under the lock, and the garden inserted before it is released
+    /// — two creations at « limit − 1 » run one after the other, and the
+    /// second counts the first. The limit applies going forward only: an
+    /// account already beyond it keeps every garden it has, and adds none.
+    /// </summary>
     [HttpPost]
-    public async Task<IActionResult> CreateGarden(CreateGardenRequest request)
+    public async Task<IActionResult> CreateGarden(CreateGardenRequest request, CancellationToken ct = default)
     {
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
+
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
+        var formula = await AccountFormulaLock.LockAsync(context, userId, ct);
+        if (formula is null) return Unauthorized();
+
+        var definition = FormulaCatalog.For(formula);
+        if (definition.GardenLimit is { } limit)
+        {
+            var count = await context.Gardens.CountAsync(g => g.UserId == userId, ct);
+            if (count >= limit) return FormulaRefusals.GardenLimit(definition, count);
+        }
 
         var garden = new Garden
         {
@@ -182,7 +207,8 @@ public class GardensController(
         };
 
         context.Gardens.Add(garden);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
 
         return CreatedAtAction(
             nameof(GetGarden),
@@ -387,26 +413,80 @@ public class GardensController(
             placements));
     }
 
+    /// <summary>
+    /// SMA-448, lot F3, step L1 — a plan larger than the formula allows is
+    /// refused: 403 <c>formula.gardenSize</c> with the formula's largest size,
+    /// the garden's stored size and the size asked
+    /// (<see cref="FormulaRefusals.GardenSize"/>). <b>Going forward only</b>
+    /// (Alexandre, 22/09 18:02): the bound of each dimension is the larger of
+    /// the formula's and the garden's stored one, so a garden already beyond
+    /// its formula is saved at its size and shrunk freely, but never grown —
+    /// and, once shrunk, grows back only to the formula's. Under the account's
+    /// lock, like the creation: a resize and a switch of formula of one
+    /// account apply one after the other, so a plan is never measured against
+    /// the formula the account has just left.
+    ///
+    /// <para><b>The order of the answers</b> (SMA-448, PR #297, fix round 1,
+    /// S1): 401 without a caller; then <b>400</b> for a request malformed in
+    /// itself — an unknown cell size, an invalid config —, decided on the
+    /// request alone, BEFORE the transaction and the account's lock (a
+    /// malformed request used to hold the lock for the time of a lock, a
+    /// load and a rejection, and to wait for a release it did not need);
+    /// then, under the lock, 404 for a garden the caller does not own, 403
+    /// <c>formula.gardenSize</c> beyond the formula, and the writes. Two
+    /// consequences, assumed: an invalid cell size on a garden of another
+    /// account answers 400 (it was 404 — a 400 says nothing about the
+    /// garden), and a request at once too large and malformed answers 400
+    /// before the formula's 403.</para>
+    /// </summary>
     [HttpPut("{id:guid}/layout")]
-    public async Task<IActionResult> SaveLayout(Guid id, [FromBody] SaveLayoutRequest request)
+    public async Task<IActionResult> SaveLayout(Guid id, [FromBody] SaveLayoutRequest request, CancellationToken ct = default)
     {
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-        var garden = await context.Gardens
-            .Include(g => g.Placements)
-            .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
-
-        if (garden == null) return NotFound();
+        // What depends on the request alone is decided here, before the
+        // transaction and the lock (S1).
+        // SMA-448, lot F3, step L2 (pre-flight, constat 7): the cell size is a
+        // whitelist here too — the three the planner offers. An unknown value
+        // used to be stored as it came and read as 25 cm by the client.
+        if (!AllowedCellSizes.Contains(request.CellSize))
+            return BadRequest("cellSize must be one of 25cm, 50cm, 1m.");
 
         // Config == null -> the stored config is PRESERVED untouched (the
         // pre-5.3-B save dialog never sends it). Config present -> strict
-        // validation, then full overwrite of the five fields.
+        // validation here, then the full overwrite of the five fields below.
+        if (request.Config is { } configToValidate)
+        {
+            var configError = ValidateConfig(configToValidate);
+            if (configError != null) return BadRequest(configError);
+        }
+
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
+        var formula = await AccountFormulaLock.LockAsync(context, userId, ct);
+        if (formula is null) return Unauthorized();
+
+        var garden = await context.Gardens
+            .Include(g => g.Placements)
+            .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId, ct);
+
+        if (garden == null) return NotFound();
+
+        var definition = FormulaCatalog.For(formula);
+        var current = garden.LayoutWidth is { } storedWidth && garden.LayoutHeight is { } storedHeight
+            ? new GardenSize(storedWidth, storedHeight)
+            : null;
+        if (request.Width > Math.Max(definition.MaxGardenSize.Width, current?.Width ?? 0)
+            || request.Height > Math.Max(definition.MaxGardenSize.Height, current?.Height ?? 0))
+        {
+            return FormulaRefusals.GardenSize(definition, current, new GardenSize(request.Width, request.Height));
+        }
+
+        // Config present — validated above, before the lock (S1) -> the full
+        // overwrite of the five fields; absent -> the stored config is kept.
         if (request.Config is { } config)
         {
-            var configError = ValidateConfig(config);
-            if (configError != null) return BadRequest(configError);
-
             garden.Orientation = config.Orientation;
             garden.GardenType = config.GardenType;
             garden.LightScheduleJson = config.LightSchedule is { Count: > 0 }
@@ -428,7 +508,7 @@ public class GardensController(
         var existingPlantIds = await context.Plants
             .Where(p => plantIds.Contains(p.Id))
             .Select(p => p.Id)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var missingIds = plantIds.Except(existingPlantIds).ToList();
         if (missingIds.Count > 0)
@@ -449,7 +529,8 @@ public class GardensController(
             });
         }
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return NoContent();
     }
 
@@ -466,6 +547,9 @@ public class GardensController(
         ["balcony", "terrace", "inground", "greenhouse", "indoor"];
     private static readonly string[] AllowedHemispheres = ["N", "S"];
     private static readonly string[] AllowedLatitudeBands = ["low", "mid", "high"];
+
+    /// <summary>The cell sizes of a plan (SMA-448, lot F3, L2) — the planner's `CELL_SIZES`, its twin.</summary>
+    private static readonly string[] AllowedCellSizes = ["25cm", "50cm", "1m"];
 
     private static string? ValidateConfig(GardenConfigDto config)
     {

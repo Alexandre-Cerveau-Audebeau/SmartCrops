@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
-import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
+import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture } from '../test/fixtures/dashboard';
 import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { gardens as sceneGardens, varieties as sceneVarieties, weatherAll } from '../test/layout/scenes';
@@ -42,8 +42,12 @@ vi.mock('../services/weatherApi', () => ({
 
 vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
 
+// The catalogue the choice screen draws from (lot F3, L5): the Novice's, three gardens.
+vi.mock('../services/formulasApi', () => ({ fetchFormulas: vi.fn() }));
+
 import { fetchDashboardWeather } from '../services/weatherApi';
 import { fetchProfile } from '../services/profileApi';
+import { fetchFormulas } from '../services/formulasApi';
 import GardensDashboard from './GardensDashboard';
 import {
   changeFormula,
@@ -86,6 +90,7 @@ function serveNovice() {
     level: 'novice',
     capabilities: capabilitiesFor('novice'),
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor('novice'),
     updatedAt: null,
   });
@@ -131,6 +136,7 @@ beforeEach(() => {
   vi.mocked(fetchDashboardData).mockResolvedValue(DATA);
   vi.mocked(fetchDashboardWeather).mockResolvedValue(weatherAll());
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
+  vi.mocked(fetchFormulas).mockResolvedValue(catalogFor('novice', { gardenCount: 3 }));
   serveNovice();
 });
 
@@ -279,6 +285,7 @@ function serveFormulas(formula: DashboardLevel, blocks: DashboardBlock[] | null)
     level: server.formula,
     capabilities: capabilitiesFor(server.formula),
     isPreset: server.current === null,
+    formulaChosen: true,
     blocks: structuredClone(server.current ?? presetFor(server.formula)),
     updatedAt: null,
   }));
@@ -313,39 +320,47 @@ const PATIENCE = { timeout: 10000 };
 // read back. Nothing is lost in either direction (V4).
 describe('the Novice page — the provisional exit: the chip opens a choice of formula, never a dead end (SMA-448 lot F2, N3)', () => {
   const chip = () => screen.getByRole('button', { name: 'Novice view — change formula' });
-  const chooser = () => screen.getByRole('dialog', { name: 'Change formula' });
+  const chooser = () => screen.getByRole('dialog', { name: 'Choose your formula' });
 
-  it('the chip is a button — « Novice view — change formula », a dialog behind it — that opens the three formulas, the current one checked', async () => {
+  it('the chip is a button — « Novice view — change formula », a dialog behind it — that opens the three offers, the current one « Your formula »', async () => {
     renderPage();
 
     const button = await screen.findByRole('button', { name: 'Novice view — change formula' });
     expect(button).toHaveAttribute('aria-haspopup', 'dialog');
     fireEvent.click(button);
 
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
-    expect(within(dialog).getByRole('radiogroup', { name: 'Change formula' })).toBeInTheDocument();
-    expect(within(dialog).getByRole('radio', { name: /Novice/ })).toBeChecked();
-    expect(within(dialog).getByRole('radio', { name: /Gardener/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('radio', { name: /Expert/ })).toBeInTheDocument();
-    expect(within(dialog).getByText('the essentials, nothing more')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    // The choice screen of V3-01 (lot F3, L5) in place of the provisional
+    // radios: the three offers, the current one « Your formula » with
+    // « Keep », the others « Choose » — the same wiring behind.
+    expect(await within(dialog).findByRole('button', { name: 'Keep Novice' }, PATIENCE)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Choose Gardener' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Choose Expert' })).toBeInTheDocument();
+    expect(within(dialog).getByText('Your formula')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Close without changing formula' })).toBeInTheDocument();
-    // The promise of the formulas, kept by lot F1 (V4).
-    expect(within(dialog).getByText('Change whenever you like, in either direction, without losing anything.')).toBeInTheDocument();
+    // The promise of the formulas, kept by lot F1 (V4), said in the lead.
+    expect(within(dialog).getByText(/you can change at any time/)).toBeInTheDocument();
   });
 
-  it('the chip of the grid formulas stays a plain chip — their door is the panel, until lot F3', async () => {
+  it('the chip of the grid formulas is the same button (lot F3, L6): « Gardener view — change formula », a dialog behind it, the screen it opens', async () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor('gardener'),
       updatedAt: null,
     });
+    vi.mocked(fetchFormulas).mockResolvedValue(catalogFor('gardener', { gardenCount: 3 }));
     renderPage();
 
     expect(await screen.findByText('Gardener view')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /change formula/u })).toBeNull();
+    const chip = screen.getByRole('button', { name: 'Gardener view — change formula' });
+    expect(chip).toHaveAttribute('aria-haspopup', 'dialog');
+    fireEvent.click(chip);
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    expect(await within(dialog).findByRole('button', { name: 'Keep Gardener' }, PATIENCE)).toBeInTheDocument();
   });
 
   it('closing the chooser changes nothing: the page stays the Novice page, the focus back on the chip', async () => {
@@ -355,11 +370,11 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     // no focus of its own.
     button.focus();
     fireEvent.click(button);
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close without changing formula' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
     expect(changeFormula).not.toHaveBeenCalled();
     expect(cards()).toHaveLength(3);
     await waitFor(() => expect(document.activeElement).toBe(chip()));
@@ -376,9 +391,9 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     renderPage();
     await waitFor(() => expect(cards()).toHaveLength(3));
     fireEvent.click(chip());
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
 
-    fireEvent.click(within(dialog).getByRole('radio', { name: /Gardener/ }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Gardener' }, PATIENCE));
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(6), PATIENCE);
     expect(renderedKeys().slice(0, 2)).toEqual(['gardens', 'weather']);
@@ -387,16 +402,15 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     expect(changeFormula).toHaveBeenCalledWith('gardener');
     // A Novice has no layout to write before the switch: nothing was sent.
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
-    // The Gardener's chip — « · adjusted », its layout being rearranged — a
-    // plain chip again, not a button.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    // The Gardener's chip — « · adjusted », its layout being rearranged —
+    // a button still (lot F3, L6): the door of every formula.
     expect(await screen.findByText('Gardener view · adjusted', {}, PATIENCE)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /change formula/u })).toBeNull();
+    const chipAfter = screen.getByRole('button', { name: 'Gardener view — change formula' });
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
-    // The chip the chooser was opened from opens nothing now: the focus goes
-    // to « Create Garden », the control every formula's header has — never
-    // to the body.
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Create Garden' })), PATIENCE);
+    // The chip the chooser was opened from is still there: the focus returns
+    // to it (contract v3 § 4.1) — never to the body.
+    await waitFor(() => expect(document.activeElement).toBe(chipAfter), PATIENCE);
   });
 
   it('a formula the server refuses is said in the chooser, with each reason served — the formula stays, the chip stays a button, the indicator says nothing false', async () => {
@@ -410,15 +424,15 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     );
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
 
-    fireEvent.click(within(dialog).getByRole('radio', { name: /Gardener/ }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Gardener' }, PATIENCE));
 
     const said = await within(dialog).findByText('Can’t switch to Gardener: 12 gardens for 10 at most');
     expect(said).toHaveAttribute('role', 'status');
     expect(said).toHaveAttribute('aria-live', 'polite');
-    expect(within(dialog).getByRole('radio', { name: /Novice/ })).toBeChecked();
-    expect(within(dialog).getByRole('radio', { name: /Gardener/ })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Keep Novice' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Choose Gardener' })).toBeEnabled();
     expect(screen.queryByText('Changes not saved')).toBeNull();
     expect(cards()).toHaveLength(3);
     // Behind the open dialog — hidden from the accessibility tree while it is — the chip is still the button.
@@ -428,7 +442,7 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
   it('the chooser’s refusal region is born empty and stays mounted — never assertive', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
 
     const region = within(dialog).getByRole('status');
     expect(region).toHaveTextContent('');
@@ -440,13 +454,13 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     serveFormulas('novice', null);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
     vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
 
-    fireEvent.click(within(dialog).getByRole('radio', { name: /Expert/ }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Expert' }, PATIENCE));
 
     expect(await screen.findByText('Couldn’t load your dashboard.', {}, PATIENCE)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
     const retry = screen.getByRole('button', { name: 'Try again' });
     await waitFor(() => expect(document.activeElement).toBe(retry), PATIENCE);
     expect(screen.queryByText('Changes not saved')).toBeNull();
@@ -455,7 +469,7 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(9), PATIENCE);
     expect(await screen.findByText('Expert view', {}, PATIENCE)).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull();
   });
 
   it('the foot of the page says what the Gardener formula adds, and its link opens the same chooser', async () => {
@@ -468,7 +482,7 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     );
     fireEvent.click(screen.getByRole('button', { name: 'Switch to the Gardener formula →' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Change formula' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Choose your formula' })).toBeInTheDocument();
     expect(chooser()).toBeInTheDocument();
   });
 
@@ -484,9 +498,9 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     );
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Vue Novice — changer de formule' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Changer de formule' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choisissez votre formule' });
 
-    fireEvent.click(within(dialog).getByRole('radio', { name: /Jardinier/ }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choisir Jardinier' }, PATIENCE));
 
     expect(await within(dialog).findByText('Impossible de passer en Jardinier : 12 jardins pour 10 au plus')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Passer à la formule Jardinier →', hidden: true })).toBeInTheDocument();
@@ -585,7 +599,7 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
     expect(document.querySelector('[aria-live="assertive"]')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
     expect(within(dialog).getByRole('status')).toHaveTextContent('');
     expect(document.querySelector('[aria-live="assertive"]')).toBeNull();
   });
@@ -622,24 +636,24 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
     );
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
 
     fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const reopened = await screen.findByRole('dialog', { name: 'Change formula' });
-    fireEvent.click(within(reopened).getByRole('radio', { name: /Expert/ }));
+    const reopened = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    fireEvent.click(await within(reopened).findByRole('button', { name: 'Choose Expert' }, PATIENCE));
     await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
-    for (const name of [/Novice/, /Gardener/, /Expert/]) {
-      expect(within(reopened).getByRole('radio', { name })).toBeDisabled();
+    for (const name of ['Keep Novice', 'Choose Gardener', 'Choose Expert']) {
+      expect(within(reopened).getByRole('button', { name })).toBeDisabled();
     }
     expect(within(reopened).getByRole('button', { name: 'Close without changing formula' })).toBeDisabled();
     fireEvent.keyDown(reopened, { key: 'Escape', code: 'Escape' });
-    expect(screen.getByRole('dialog', { name: 'Change formula' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Choose your formula' })).toBeInTheDocument();
 
     release();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
     expect(await screen.findByText('Expert view', {}, PATIENCE)).toBeInTheDocument();
   });
 

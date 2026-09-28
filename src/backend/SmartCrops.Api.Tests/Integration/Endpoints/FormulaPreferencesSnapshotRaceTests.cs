@@ -1,10 +1,8 @@
-using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using SmartCrops.Api.DTOs;
@@ -42,7 +40,22 @@ public class FormulaPreferencesSnapshotRaceTests : IAsyncLifetime
     private const string PreferencesUrl = "/api/dashboard/preferences";
 
     private readonly PostgresFixture _fixture;
-    private readonly FormulaReadRaceInterceptor _interceptor = new();
+    // The ONE statement that reads the account's formula AND its layout
+    // row — the joined read, and only it: the switch's own lock on the
+    // same row reads `FOR UPDATE`, and a read of the whole user would
+    // carry its other columns. Requiring the layout's table too (PR #293,
+    // fix round 2, R2-G1 — GitHub 4111245319): a `GetPreferences` gone
+    // back to two reads, the row first, would have let the old predicate
+    // fire on the formula read that came SECOND — after both reads, where
+    // the switch could no longer pair anything wrongly — and the test
+    // would have passed on a regression. Now no statement of a split read
+    // matches, `Fired` stays false, and the test says so.
+    private readonly FormulaReadRaceInterceptor _interceptor = new(text =>
+        text.Contains("FROM \"AspNetUsers\"", StringComparison.Ordinal)
+        && text.Contains("\"Formula\"", StringComparison.Ordinal)
+        && text.Contains("\"UserDashboardPreferences\"", StringComparison.Ordinal)
+        && !text.Contains("FOR UPDATE", StringComparison.Ordinal)
+        && !text.Contains("\"NormalizedUserName\"", StringComparison.Ordinal));
     private WebApplicationFactory<Program> _factory = default!;
     private HttpClient _client = default!;
 
@@ -227,68 +240,5 @@ public class FormulaPreferencesSnapshotRaceTests : IAsyncLifetime
             VALUES ({0}, {0}, {0}, NULL, NULL, FALSE, NULL, NULL, NULL, FALSE, FALSE, FALSE, 0, 'gardener');",
             userId);
         return userId;
-    }
-}
-
-/// <summary>
-/// Runs the armed race the instant the preferences' read of the account's
-/// formula comes back — before the request reads anything else. Fires at most
-/// once, and only while armed; the race's own commands pass through untouched.
-/// </summary>
-internal sealed class FormulaReadRaceInterceptor : DbCommandInterceptor
-{
-    private Func<Task>? _race;
-    private int _fired;
-    private int _seen;
-
-    public bool Fired => Volatile.Read(ref _fired) == 1;
-
-    /// <summary>How many commands passed through while armed — zero means the interceptor was never wired.</summary>
-    public int Seen => Volatile.Read(ref _seen);
-
-    public void Arm(Func<Task> race)
-    {
-        Volatile.Write(ref _fired, 0);
-        Volatile.Write(ref _seen, 0);
-        _race = race;
-    }
-
-    public override async ValueTask<DbDataReader> ReaderExecutedAsync(
-        DbCommand command,
-        CommandExecutedEventData eventData,
-        DbDataReader result,
-        CancellationToken cancellationToken = default)
-    {
-        // AFTER the read, not before: under READ COMMITTED a statement's
-        // snapshot is taken when it starts, so a switch committed before the
-        // formula read would simply be part of it and prove nothing.
-        var race = _race;
-        if (race is null) return await base.ReaderExecutedAsync(command, eventData, result, cancellationToken);
-
-        Interlocked.Increment(ref _seen);
-
-        // The ONE statement that reads the account's formula AND its layout
-        // row — the joined read, and only it: the switch's own lock on the
-        // same row reads `FOR UPDATE`, and a read of the whole user would
-        // carry its other columns. Requiring the layout's table too (PR #293,
-        // fix round 2, R2-G1 — GitHub 4111245319): a `GetPreferences` gone
-        // back to two reads, the row first, would have let the old predicate
-        // fire on the formula read that came SECOND — after both reads, where
-        // the switch could no longer pair anything wrongly — and the test
-        // would have passed on a regression. Now no statement of a split read
-        // matches, `Fired` stays false, and the test says so.
-        var text = command.CommandText;
-        if (text.Contains("FROM \"AspNetUsers\"", StringComparison.Ordinal)
-            && text.Contains("\"Formula\"", StringComparison.Ordinal)
-            && text.Contains("\"UserDashboardPreferences\"", StringComparison.Ordinal)
-            && !text.Contains("FOR UPDATE", StringComparison.Ordinal)
-            && !text.Contains("\"NormalizedUserName\"", StringComparison.Ordinal)
-            && Interlocked.Exchange(ref _fired, 1) == 0)
-        {
-            _race = null;
-            await race();
-        }
-
-        return await base.ReaderExecutedAsync(command, eventData, result, cancellationToken);
     }
 }

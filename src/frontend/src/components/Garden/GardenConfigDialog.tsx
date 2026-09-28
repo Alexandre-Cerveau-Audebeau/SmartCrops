@@ -61,6 +61,15 @@ interface Props {
    * "Réglages" instance ONLY — never on first setup, whose Cancel already
    * leaves for /gardens. */
   onDeleteRequest?: () => void;
+  /**
+   * SMA-448, lot F3, step L3 — the columns and rows the plan may reach: the
+   * formula's largest size, or the stored size of a garden already beyond it
+   * (`planSizeBound`). The 50 of before while the catalogue is not read.
+   */
+  maxCols?: number;
+  maxRows?: number;
+  /** Why the dimensions stop there, said under them — the formula's limit, or the garden kept beyond it. */
+  limitNote?: string | null;
 }
 
 const CELL_SIZES = ['25cm', '50cm', '1m'];
@@ -81,10 +90,14 @@ function cellSizeToMeters(cellSize: string): number {
   return 0.25;
 }
 
+/** The ceiling of a dimension while no formula bounds it — the planner's of before SMA-448. */
+const DEFAULT_MAX_GRID = 50;
+
 // Grid dimensions are whole cells: truncate any decimal the number input lets
-// through before clamping to the 2–50 bounds (SMA-17 R6).
-function clampGridDimension(value: string): number {
-  return Math.max(2, Math.min(50, Math.trunc(Number(value)) || 2));
+// through before clamping to the 2–max bounds (SMA-17 R6) — the max being the
+// formula's, or the stored size of a garden kept beyond it (SMA-448, F3 L3).
+function clampGridDimension(value: string, max: number): number {
+  return Math.max(2, Math.min(max, Math.trunc(Number(value)) || 2));
 }
 
 // ── Small segmented control (tokens §10) ─────────────────────────────────────
@@ -192,6 +205,9 @@ function GardenConfigDialogInner({
   onConfirm,
   onCancel,
   onDeleteRequest,
+  maxCols = DEFAULT_MAX_GRID,
+  maxRows = DEFAULT_MAX_GRID,
+  limitNote = null,
 }: Omit<Props, 'open'>) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -361,10 +377,10 @@ function GardenConfigDialogInner({
               type="number"
               size="small"
               value={cols}
-              onChange={(e) => setCols(clampGridDimension(e.target.value))}
+              onChange={(e) => setCols(clampGridDimension(e.target.value, maxCols))}
               inputProps={{
                 min: 2,
-                max: 50,
+                max: maxCols,
                 step: 1,
                 'aria-label': t('planner.setup.columns'),
               }}
@@ -377,10 +393,10 @@ function GardenConfigDialogInner({
               type="number"
               size="small"
               value={rows}
-              onChange={(e) => setRows(clampGridDimension(e.target.value))}
+              onChange={(e) => setRows(clampGridDimension(e.target.value, maxRows))}
               inputProps={{
                 min: 2,
-                max: 50,
+                max: maxRows,
                 step: 1,
                 'aria-label': t('planner.setup.rows'),
               }}
@@ -401,6 +417,13 @@ function GardenConfigDialogInner({
         <Typography sx={{ fontSize: 12.5, color: tk.muted, mt: 1 }}>
           {t('planner.setup.dimensions')}: {realDimensions}
         </Typography>
+        {/* The formula's limit, said where the dimensions are typed (SMA-448,
+            F3 L3 — V3: the planner shows the limit, not only the stop). */}
+        {limitNote && (
+          <Typography data-config-limit sx={{ fontSize: 12.5, color: tk.muted, mt: 0.5 }}>
+            {limitNote}
+          </Typography>
+        )}
       </Box>
 
       {/* ORIENTATION — label + prompt + segmented + note in the LEFT column,

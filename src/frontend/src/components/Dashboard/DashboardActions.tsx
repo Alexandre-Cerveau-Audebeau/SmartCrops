@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import type { MouseEvent, Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -50,15 +50,17 @@ export interface DashboardActionsProps {
    */
   cards?: boolean;
   /**
-   * PROVISIONAL (SMA-448, lot F2, N3) — given, the chip is a BUTTON that
-   * opens the choice of formula: the three signs of § 4.1 (the ▾, the tinted
+   * SMA-448 — given, the chip is a BUTTON that opens the choice of formula
+   * (V3-04; contract v3 § 4.1): the three signs of § 4.1 (the ▾, the tinted
    * hover with its tooltip « Changer de formule », the focus ring), the
    * accessible name « Vue Novice — changer de formule », `aria-haspopup=
-   * "dialog"`. The page gives it at the Novice formula only, whose page has
-   * no other door to a formula; lot F3 makes the chip the door of every
-   * formula, to the choice screen of V3-01.
+   * "dialog"`. Lot F2 (N3) gave it at the Novice formula only, as a
+   * provisional exit; lot F3 (L6) makes the chip the door of every formula,
+   * to the choice screen of V3-01 — the page gives it always. Handed the
+   * click, so the page knows the chip as the control to give the focus back
+   * to (a clicked button is not focused in every browser).
    */
-  onChangeFormula?: () => void;
+  onChangeFormula?: (event: MouseEvent<HTMLElement>) => void;
   /** « Créer un jardin » — where the page puts the focus back when the chooser closed on a switch (N3). */
   createRef?: Ref<HTMLButtonElement>;
 }

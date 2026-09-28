@@ -165,6 +165,13 @@ export interface DashboardTokens {
    * créer au lot avec leurs valeurs de planche »: created here with them.
    */
   noviceBandBg: string;
+  /**
+   * The veil over the dashboard while the choice of formula is open on top of
+   * it (SMA-448, lot F3; V3-01 `--scrim`, contract v3 § 4.2: « à créer au lot »):
+   * `rgba(24,46,34,0.42)` by day, `rgba(3,10,20,0.58)` by night — the page
+   * behind is blurred 2.5 px and stays legible as a background, never erased.
+   */
+  scrim: string;
 }
 
 const LIGHT: DashboardTokens = {
@@ -208,6 +215,7 @@ const LIGHT: DashboardTokens = {
   stageFlower: '#E0A93B',
   stageHarvest: '#A0522D',
   noviceBandBg: '#FBFDFA',
+  scrim: 'rgba(24,46,34,0.42)',
 };
 
 const DARK: DashboardTokens = {
@@ -247,6 +255,7 @@ const DARK: DashboardTokens = {
   // visible on the dark card (`_spec.md` § 5).
   stageHarvest: '#C8744A',
   noviceBandBg: '#0F2038',
+  scrim: 'rgba(3,10,20,0.58)',
 };
 
 export function getDashboardTokens(mode: DashboardThemeMode): DashboardTokens {

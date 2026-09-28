@@ -308,6 +308,11 @@
     "loading": "Chargement des jardins...",
     "error": "Impossible de charger les jardins. Veuillez réessayer plus tard.",
     "mutationError": "Une erreur est survenue. Veuillez réessayer.",
+    "refusal": {
+      "limit_one": "Votre formule {{formula}} permet {{count}} jardin au plus, et vous en avez déjà {{current}}. Pour en créer un autre, passez à une formule plus grande.",
+      "limit_other": "Votre formule {{formula}} permet {{count}} jardins au plus, et vous en avez déjà {{current}}. Pour en créer un autre, passez à une formule plus grande.",
+      "viewFormulas": "Voir les formules"
+    },
     "seeMore": "Voir plus",
     "seeLess": "Voir moins",
     "planMyGarden": "Planifier mon jardin"
@@ -346,6 +351,148 @@
       "foot": {
         "text": "Besoin de plus ? La formule Jardinier ajoute un tableau de bord de widgets : le calendrier du mois, les conseils, les tâches et les compteurs.",
         "link": "Passer à la formule Jardinier →"
+      }
+    },
+    "choice": {
+      "title": "Choisissez votre formule",
+      "lead": "Trois façons de jardiner avec SmartCrops. Toutes sont gratuites pour le moment, et vous pourrez en changer à tout moment.",
+      "welcome": "Bienvenue. Avant d’ouvrir vos jardins, choisissez la formule qui vous ressemble. Vous pourrez en changer quand vous voudrez, dans les deux sens, sans rien perdre.",
+      "existing_one": "Vous avez {{count}} jardin. Votre formule actuelle est présélectionnée : gardez-la en un clic, ou choisissez-en une autre. Rien ne sera supprimé.",
+      "existing_other": "Vous avez {{count}} jardins. Votre formule actuelle est présélectionnée : gardez-la en un clic, ou choisissez-en une autre. Rien ne sera supprimé.",
+      "context_zero": "Vous êtes en {{formula}}. Changez de formule, ou fermez : rien ne bouge tant que vous n’avez pas choisi.",
+      "context_one": "Vous êtes en {{formula}} et vous avez {{count}} jardin. Changez de formule, ou fermez : rien ne bouge tant que vous n’avez pas choisi.",
+      "context_other": "Vous êtes en {{formula}} et vous avez {{count}} jardins. Changez de formule, ou fermez : rien ne bouge tant que vous n’avez pas choisi.",
+      "loading": "Chargement des formules…",
+      "loadError": "Impossible de charger les formules.",
+      "offers": "Les trois formules",
+      "tag": {
+        "current": "Votre formule",
+        "currentKept": "Votre formule — conservée",
+        "recommended": "Conseillé pour vous",
+        "recommendedWhy": "La plus simple qui contient vos jardins.",
+        "unavailable": "Indisponible"
+      },
+      "price": "0 €",
+      "priceFree": "— Gratuit",
+      "free": "Gratuit pour le moment.",
+      "preview": {
+        "novice": "Aperçu : une carte par jardin",
+        "gardener": "Aperçu : un tableau de bord de widgets",
+        "expert": "Aperçu : les chiffres clés sur toute la largeur, puis les widgets"
+      },
+      "limitGardens_one": "Jusqu’à {{count}} jardin",
+      "limitGardens_other": "Jusqu’à {{count}} jardins",
+      "limitGardensNone": "Jardins en nombre illimité",
+      "limitSize": "Jusqu’à {{width}} × {{height}} cases par jardin",
+      "contains": "Ce qu’elle contient :",
+      "plus": "Tout ce que {{formula}} offre, plus :",
+      "who": {
+        "novice": "Un balcon, une terrasse, un petit potager.",
+        "gardener": "Plusieurs jardins, un potager familial.",
+        "expert": "Beaucoup de jardins ou de grandes surfaces, jusqu’à plusieurs hectares."
+      },
+      "features": {
+        "novice": [
+          "Une page d’accueil simple : une carte par jardin, rien à régler",
+          "Le plan de chaque jardin, en aperçu",
+          "La météo du jour, sur chaque carte",
+          "La tâche du jour, sur chaque carte",
+          "Le nombre de plantes et la surface de chaque jardin"
+        ],
+        "gardener": [
+          "Un tableau de bord de widgets, que vous composez",
+          "Le calendrier du mois : semis, floraisons, récoltes",
+          "Les conseils d’exposition et d’arrosage",
+          "Les compteurs par variété",
+          "La liste de vos jardins, en tableau",
+          "Trois tailles de widget, à déplacer comme vous voulez"
+        ],
+        "expert": [
+          "Tous les widgets, statistiques comprises",
+          "Un bandeau de chiffres clés en tête de page, sur toute la largeur",
+          "Météo pour plusieurs jardins, dans plusieurs villes différentes en même temps"
+        ]
+      },
+      "whyGardens_one": "Vous avez {{count}} jardin — {{formula}} en permet {{limit}}.",
+      "whyGardens_other": "Vous avez {{count}} jardins — {{formula}} en permet {{limit}}.",
+      "whySize": "Un jardin de {{width}} × {{height}} cases — {{formula}} permet {{maxWidth}} × {{maxHeight}}.",
+      "whyKept": "Aucun jardin ne sera supprimé : cette formule est seulement trop petite pour les vôtres.",
+      "keptNote": "Vous gardez tout : rien ne sera supprimé. Cette formule ne permet plus d’ajouter ni d’agrandir au-delà de ses limites.",
+      "choose": "Choisir {{formula}}",
+      "keep": "Garder {{formula}}",
+      "compare": {
+        "title": "Comparer les formules",
+        "subtitle": "Tout ce qui change d’une formule à l’autre, ligne par ligne.",
+        "yes": "Oui",
+        "no": "Non",
+        "unlimited": "Sans limite",
+        "upTo_one": "Jusqu’à {{count}}",
+        "upTo_other": "Jusqu’à {{count}}",
+        "upToSize": "Jusqu’à {{width}} × {{height}} cases",
+        "rows": {
+          "gardens": "Nombre de jardins",
+          "size": "Taille des jardins",
+          "home": {
+            "label": "La page d’accueil",
+            "novice": "Une carte par jardin",
+            "gardener": "Un tableau de bord de widgets",
+            "expert": "Un tableau de bord de widgets"
+          },
+          "task": {
+            "label": "La tâche du jour",
+            "novice": "Sur chaque carte de jardin",
+            "gardener": "Dans le widget « À faire »",
+            "expert": "Dans le widget « À faire »"
+          },
+          "weather": {
+            "label": "La météo de chaque jardin",
+            "novice": "La météo du jour, sur chaque carte",
+            "gardener": "Le widget Météo, pour une ville",
+            "expert": "Le widget Météo, pour plusieurs villes en même temps"
+          },
+          "month": {
+            "label": "Le calendrier du mois",
+            "novice": "Non",
+            "gardener": "Oui",
+            "expert": "Oui"
+          },
+          "tips": {
+            "label": "Les conseils d’exposition et d’arrosage",
+            "novice": "Non",
+            "gardener": "Oui",
+            "expert": "Oui"
+          },
+          "counters": {
+            "label": "Les compteurs par variété",
+            "novice": "Non",
+            "gardener": "Oui",
+            "expert": "Oui"
+          },
+          "stats": {
+            "label": "Les statistiques",
+            "novice": "Non",
+            "gardener": "Non",
+            "expert": "Oui"
+          },
+          "keyfigures": {
+            "label": "Les chiffres clés, sur toute la largeur",
+            "novice": "Non",
+            "gardener": "Non",
+            "expert": "Oui"
+          },
+          "resize": {
+            "label": "Déplacer et agrandir ses widgets",
+            "novice": "Non — il n’y a rien à régler",
+            "gardener": "Oui — trois tailles",
+            "expert": "Oui — trois tailles"
+          },
+          "widgets": {
+            "label": "Ajouter ou retirer des widgets",
+            "novice": "Non",
+            "gardener": "Oui, parmi les siens",
+            "expert": "Oui, tous"
+          }
+        }
       }
     },
     "formulaChooser": {
@@ -901,6 +1048,9 @@
     "backToTop": "Revenir en haut",
     "comingSoon": "Bientôt disponible",
     "loading": "Chargement",
+    "sessionExpired": "Votre session a expiré. Reconnectez-vous pour continuer.",
+    "reconnect": "Se reconnecter",
+    "forbidden": "Votre compte n’est pas autorisé à faire cela.",
     "brandTitle": "SmartCrops — Votre jardin virtuel intelligent"
   },
   "auth": {
@@ -1182,6 +1332,11 @@
       "removeColLeft": "Retirer la colonne de gauche",
       "addColRight": "Ajouter une colonne à droite",
       "removeColRight": "Retirer la colonne de droite"
+    },
+    "limit": {
+      "formula": "Votre formule {{formula}} permet jusqu’à {{width}} × {{height}} cases par jardin.",
+      "kept": "Ce jardin fait {{width}} × {{height}} cases, au-delà des {{maxWidth}} × {{maxHeight}} de votre formule {{formula}} : vous pouvez le réduire, pas l’agrandir.",
+      "refused": "Votre formule {{formula}} permet jusqu’à {{maxWidth}} × {{maxHeight}} cases par jardin ; ce plan fait {{width}} × {{height}}. Réduisez-le, ou changez de formule depuis Mes Jardins."
     },
     "shapeEditMode": "Modifier la forme",
     "tabs": {

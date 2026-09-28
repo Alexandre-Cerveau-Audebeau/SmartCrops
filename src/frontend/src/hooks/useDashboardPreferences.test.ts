@@ -36,6 +36,7 @@ const preferences = (
     schemaVersion: 1,
     level,
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor(level),
     updatedAt: null,
     capabilities: capabilitiesFor(level),
@@ -60,6 +61,7 @@ function serveFormulas(formula: DashboardLevel, blocks: DashboardBlock[] | null)
     preferences({
       level: server.formula,
       isPreset: server.current === null,
+      formulaChosen: true,
       blocks: structuredClone(server.current ?? presetFor(server.formula)),
     })
   );
@@ -274,7 +276,7 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     });
 
     expect(result.current.saveState).not.toBe('error');
-    expect(result.current.refusal).toEqual({ formula: 'novice', reasons: [] });
+    expect(result.current.refusal).toEqual({ kind: 'failed', formula: 'novice', reasons: [] });
     expect(result.current.level).toBe('gardener');
     expect(result.current.blocks).toEqual(presetFor('gardener'));
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
@@ -874,6 +876,7 @@ describe('useDashboardPreferences — the three ends of a switch that does not g
     expect(result.current.saveState).not.toBe('error');
     expect(result.current.saveState).toBe('saved');
     expect(result.current.refusal).toEqual({
+      kind: 'refused',
       formula: 'novice',
       reasons: [
         { kind: 'gardens', have: 5, limit: 3 },
@@ -919,8 +922,51 @@ describe('useDashboardPreferences — the three ends of a switch that does not g
       await result.current.setLevel('novice');
     });
 
-    expect(result.current.refusal).toEqual({ formula: 'novice', reasons: [{ kind: 'gardens', have: 4, limit: 3 }] });
+    expect(result.current.refusal).toEqual({ kind: 'refused', formula: 'novice', reasons: [{ kind: 'gardens', have: 4, limit: 3 }] });
     expect(result.current.saveState).toBe('idle');
+  });
+
+  // SMA-448, lot F3, step L4 (R3-E1) — a refusal and a failure, each its
+  // own outcome: `refused` for a formula the server refused with its
+  // reasons, `failed` for everything else, whose refusal names the failure
+  // — a session that expired, a right the account lacks, a plain failure —
+  // so the page says the right thing and offers the right action.
+  it.each([
+    ['a 401', new HttpStatusError('Request failed (401)', 401), 'unauthorized'],
+    ['a 403 the server did not explain', new HttpStatusError('Request failed (403)', 403), 'forbidden'],
+    ['a 500', new HttpStatusError('Request failed (500)', 500), 'failed'],
+    ['no server at all', new TypeError('Failed to fetch'), 'failed'],
+  ])('%s ends the switch as `failed`, naming the failure — the formula and the layout as they were, nothing unsaved (R3-E1)', async (_what, error, kind) => {
+    serveFormulas('gardener', presetFor('gardener'));
+    vi.mocked(changeFormula).mockRejectedValue(error);
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.setLevel('novice');
+    });
+
+    expect(outcome).toBe('failed');
+    expect(result.current.refusal).toEqual({ kind, formula: 'novice', reasons: [] });
+    expect(result.current.saveState).not.toBe('error');
+    expect(result.current.level).toBe('gardener');
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
+  });
+
+  it('a 409 `formula.tooSmall` ends the switch as `refused`, with its reasons (R3-E1)', async () => {
+    serveFormulas('gardener', presetFor('gardener'));
+    vi.mocked(changeFormula).mockRejectedValue(tooSmall('novice', [{ kind: 'gardens', have: 5, limit: 3 }]));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.setLevel('novice');
+    });
+
+    expect(outcome).toBe('refused');
+    expect(result.current.refusal).toEqual({ kind: 'refused', formula: 'novice', reasons: [{ kind: 'gardens', have: 5, limit: 3 }] });
   });
 
   it('the next choice clears the refusal, and so does dismissing it', async () => {

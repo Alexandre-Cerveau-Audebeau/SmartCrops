@@ -132,6 +132,7 @@ beforeEach(() => {
     level: 'expert',
     capabilities: capabilitiesFor('expert'),
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor('expert'),
     updatedAt: null,
   });
@@ -245,6 +246,7 @@ describe('the Counters widget options (artboard A8)', () => {
       level: 'expert',
       capabilities: capabilitiesFor('expert'),
       isPreset: false,
+      formulaChosen: true,
       blocks,
       updatedAt: null,
     });
@@ -281,6 +283,7 @@ describe('the Counters widget options (artboard A8)', () => {
         level: 'expert',
         capabilities: capabilitiesFor('expert'),
         isPreset: false,
+        formulaChosen: true,
         blocks,
         updatedAt: null,
       });

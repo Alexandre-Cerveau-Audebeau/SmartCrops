@@ -43,6 +43,7 @@ import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPa
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
 import NoviceGardens from '../components/Dashboard/NoviceGardens';
+import ReconnectButton from '../components/ReconnectButton';
 import { cardBearsWeather, noviceCardsOf } from '../components/Dashboard/noviceCards';
 import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
 import { hasActionBar, isCardsPage, sizesFor } from '../constants/dashboardCapabilities';
@@ -52,9 +53,12 @@ import { useDashboardWeather } from '../hooks/useDashboardWeather';
 import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
 import { createGarden } from '../services/gardenApi';
+import { problemOf, requestFailureKind, type RequestFailureKind } from '../services/requestFailure';
+import { isWholeNumber } from '../services/wireChecks';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
 import { formatCount, formatSurface } from '../utils/formatNumber';
 import {
+  isDashboardLevel,
   nextDashboardSize,
   type DashboardBlock,
   type DashboardBlockKey,
@@ -66,10 +70,36 @@ import type { GardenView } from '../utils/gardenStats';
 
 /**
  * Router state the planner posts when it navigates here after deleting the
- * garden (SMA-18 lot 1). Consumed once at mount, then erased with a replace so
- * a refresh never replays the toast.
+ * garden (SMA-18 lot 1) — and, since SMA-448 lot F3 (L4), when its « Voir les
+ * formules » leads here with the choice of formula to open. Consumed once at
+ * mount, then erased with a replace so a refresh never replays it.
  */
-type GardensNavState = { toast?: 'gardenDeleted' } | null;
+type GardensNavState = { toast?: 'gardenDeleted'; formulas?: boolean } | null;
+
+/**
+ * SMA-448, lot F3, step L4 (R3-E1) — why a creation did not go through:
+ * the formula's garden limit, with its numbers (403 `formula.gardenLimit`);
+ * or a failure named for what it is — the session expired, a right the
+ * account lacks, a failure a retry may cure.
+ */
+type CreateFailure =
+  | { kind: 'limit'; formula: DashboardLevel; limit: number; current: number }
+  | { kind: RequestFailureKind };
+
+/** The creation's refusal, read from the problem the server served — or the failure's kind. */
+function createFailureOf(error: unknown): CreateFailure {
+  const problem = problemOf(error);
+  if (
+    problem?.code === 'formula.gardenLimit' &&
+    typeof problem.formula === 'string' &&
+    isDashboardLevel(problem.formula) &&
+    isWholeNumber(problem.limit) &&
+    isWholeNumber(problem.current)
+  ) {
+    return { kind: 'limit', formula: problem.formula, limit: problem.limit, current: problem.current };
+  }
+  return { kind: requestFailureKind(error) };
+}
 
 /**
  * SMA-336 PR 1/5 - the gardens dashboard: eight widgets on a resizable,
@@ -107,6 +137,7 @@ export default function GardensDashboard() {
     level,
     blocks,
     capabilities,
+    formulaChosen,
     loading,
     loadError,
     saveState,
@@ -267,6 +298,12 @@ export default function GardensDashboard() {
   // widgets. The cards are derived ONCE, through `displayWeather` (A-4), for
   // the view that draws them and for the warning that follows them (V1).
   const cardsPage = capabilities !== null && isCardsPage(capabilities);
+  // SMA-448, lot F3 (N18, Alexandre 26/09) — the choice of formula is
+  // MANDATORY the first time: an account that never chose (FormulaChosenAt
+  // null) sees the screen with the page, without a way out, until it
+  // chooses — « Garder » included, which stamps the choice. Read with the
+  // layout; once chosen, never again.
+  const mandatoryChoice = capabilities !== null && formulaChosen === false;
   const noviceCards = cardsPage
     ? noviceCardsOf(gardens, dashboardData.varieties, gardenViews, displayWeather, weatherStatus)
     : [];
@@ -327,46 +364,54 @@ export default function GardensDashboard() {
   // page's chip and foot link open, until lot F3 builds the choice screen
   // behind the chip (`FormulaChooserDialog`). Its opener is remembered like
   // the panel's, for the focus when it closes.
-  const [chooserOpen, setChooserOpen] = useState(false);
+  // Open at mount when the planner's « Voir les formules » led here (L4):
+  // its refusal of a plan's size names the formula as the way out.
+  const [chooserOpen, setChooserOpen] = useState(
+    () => (location.state as GardensNavState)?.formulas === true
+  );
   const chooserOpener = useRef<Element | null>(null);
-  const openChooser = () => {
-    chooserOpener.current = document.activeElement;
+  /**
+   * Opens the choice; `opener` is where the focus returns to when it closes
+   * — the control that opened it, handed by its own click (a clicked button
+   * is not focused in every browser, so the active element would not do).
+   */
+  const openChooser = (opener: Element | null) => {
+    chooserOpener.current = opener;
     setChooserOpen(true);
   };
 
   useEffect(() => {
-    if (panelOpen || chooserOpen) return;
-    const opener = panelOpener.current;
-    panelOpener.current = null;
-    refocus(opener);
-    // R2-E1 — the panel closed on the load error of a switch whose layout
-    // could not be read back (S6). « Réessayer » exists only while the layout
-    // is unavailable, and at a closing of the panel that is this one case.
-    // The button the panel was opened from is disabled then, so the browser
-    // cannot give it the focus back — and in the browsers that do not focus
-    // a button on click, nothing ever held it: either way the focus would
-    // fall to the body. It goes to the one action the page offers.
-    retryRef.current?.focus();
-    // N3 — the chooser closed on a switch that LANDED: the page is a grid
-    // now, and the chip it was opened from opens nothing there (until lot
-    // F3), so the dialog's own restoring of the focus finds nothing to give
-    // it back to. It goes to « Créer un jardin », which every formula's
-    // header has — never to the body. Closed on the Novice page itself (a
-    // refusal, « Fermer »), the dialog gives the chip back by itself.
+    if (chooserOpen) return;
+    if (!panelOpen) {
+      const opener = panelOpener.current;
+      panelOpener.current = null;
+      refocus(opener);
+      // R2-E1 — the panel closed on the load error of a switch whose layout
+      // could not be read back (S6). « Réessayer » exists only while the
+      // layout is unavailable, and at a closing of the panel that is this one
+      // case. The button the panel was opened from is disabled then, so the
+      // browser cannot give it the focus back — and in the browsers that do
+      // not focus a button on click, nothing ever held it: either way the
+      // focus would fall to the body. It goes to the one action the page
+      // offers.
+      retryRef.current?.focus();
+    }
+    // SMA-448, lot F3 (L6) — the chip is the door at EVERY formula, so the
+    // element the choice was opened from is still there after a switch (the
+    // same node, the header re-rendered in place), and the focus returns to
+    // it (contract v3 § 4.1: « à la fermeture, le focus lui revient »). So
+    // is the Customize panel's link (PR #297, fix round 1, A1): the panel
+    // stays open under the screen, and the focus comes back to the link
+    // while the panel is still there. Gone with the dialog it stood in —
+    // « Voir les formules » of the creation's refusal, whose opener is
+    // « Créer un jardin » —, or unreachable, it goes to « Créer un jardin »,
+    // which every formula's header has — never to the body.
     const from = chooserOpener.current;
     chooserOpener.current = null;
-    if (from && !cardsPage && !retryRef.current) createRef.current?.focus();
-  }, [panelOpen, chooserOpen, cardsPage, refocus]);
-
-  // SMA-448, PR #293, fix round 2 (R2-E1) — the choice of a formula, and what
-  // the page does when the switch ends on no layout: the panel is closed
-  // HERE, in the handler that sees it, never from an effect. A switch whose
-  // layout could not be read back (S6) leaves the page on its load error;
-  // hidden by its condition alone, the panel would have named the default
-  // level over it, and come back by itself once « Réessayer » had succeeded.
-  const chooseLevel = async (level: DashboardLevel) => {
-    if ((await setLevel(level)) === 'unread') setPanelOpen(false);
-  };
+    if (!from || retryRef.current) return;
+    if (from instanceof HTMLElement && from !== document.body && document.contains(from)) from.focus();
+    else createRef.current?.focus();
+  }, [panelOpen, chooserOpen, refocus]);
 
   // N3 — the same switch from the chooser: closed in the handler on a switch
   // that landed (the page is the new formula's) and on one whose layout could
@@ -374,18 +419,45 @@ export default function GardensDashboard() {
   // which it says, and on a layout that could not be written, which the
   // header's indicator says.
   const closeChooser = () => {
+    if (mandatoryChoice) return;
     setChooserOpen(false);
     dismissRefusal();
   };
+
+  // After the mandatory screen closes on the first choice, the focus goes to
+  // « Créer un jardin » — every formula's header has it — rather than to the
+  // body: the screen had no opener to give it back to. A ref and a focus,
+  // no state written in an effect.
+  const mandatoryShownRef = useRef(false);
+  useEffect(() => {
+    if (mandatoryChoice) {
+      mandatoryShownRef.current = true;
+      return;
+    }
+    if (!mandatoryShownRef.current) return;
+    mandatoryShownRef.current = false;
+    createRef.current?.focus();
+  }, [mandatoryChoice]);
+  // SMA-448, PR #297, fix round 1 (A1) — the ONE place where the formula
+  // changes: every other control — the chip, the Novice page's foot link,
+  // « Voir les formules » of a refusal, the Customize panel's link — opens
+  // this screen and switches nothing itself.
   const chooseFormula = async (level: DashboardLevel) => {
     const outcome = await setLevel(level);
     if (outcome === 'switched' || outcome === 'unread') setChooserOpen(false);
+    // PR #293, fix round 2 (R2-E1) — a switch whose layout could not be read
+    // back (S6) leaves the page on its load error: the panel the screen may
+    // have been opened from is closed HERE, in the handler that sees it,
+    // never from an effect. Hidden by its condition alone, it would have
+    // named the default level over the error, and come back by itself once
+    // « Réessayer » had succeeded.
+    if (outcome === 'unread') setPanelOpen(false);
   };
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newGardenName, setNewGardenName] = useState('');
   const [newGardenDescription, setNewGardenDescription] = useState('');
-  const [createError, setCreateError] = useState(false);
+  const [createError, setCreateError] = useState<CreateFailure | null>(null);
   const [isMutating, setIsMutating] = useState(false);
 
   const navState = location.state as GardensNavState;
@@ -402,7 +474,7 @@ export default function GardensDashboard() {
   );
 
   useEffect(() => {
-    if (navState?.toast) {
+    if (navState?.toast || navState?.formulas) {
       // Replace ONLY the state: the entry keeps its search and hash (a future
       // filter / sort / deep link must survive arriving from the planner).
       navigate(
@@ -424,19 +496,28 @@ export default function GardensDashboard() {
   const closeCreateDialog = () => {
     if (isMutating) return;
     setCreateDialogOpen(false);
-    setCreateError(false);
+    setCreateError(null);
     setNewGardenName('');
     setNewGardenDescription('');
+  };
+
+  // L4 — the door the refusal opens: the creation's dialog closes, the choice
+  // of formula opens, and the focus will come back to « Créer un jardin »,
+  // which every formula's header has — the button pressed is gone with the
+  // dialog.
+  const seeFormulasFromCreate = () => {
+    closeCreateDialog();
+    openChooser(createRef.current);
   };
 
   const handleCreate = async () => {
     if (isMutating) return;
     setIsMutating(true);
-    setCreateError(false);
+    setCreateError(null);
     try {
       await createGarden(newGardenName, newGardenDescription || undefined);
       setCreateDialogOpen(false);
-      setCreateError(false);
+      setCreateError(null);
       setNewGardenName('');
       setNewGardenDescription('');
       refetch();
@@ -448,10 +529,29 @@ export default function GardensDashboard() {
       // STORED PLACE, so an aggregate kept over a failed re-read names nothing
       // the server has dropped — and the figure surfaces read `loadError` first.
       refetchWeather();
-    } catch {
-      setCreateError(true);
+    } catch (error) {
+      // R3-E1 (L4): the refusal with its numbers, or the failure named.
+      setCreateError(createFailureOf(error));
     } finally {
       setIsMutating(false);
+    }
+  };
+
+  /** What the creation's dialog says of a creation that did not go through. */
+  const createErrorText = (failure: CreateFailure): string => {
+    switch (failure.kind) {
+      case 'limit':
+        return t('gardens.refusal.limit', {
+          formula: t(`dashboard.levels.${failure.formula}.name`),
+          count: failure.limit,
+          current: failure.current,
+        });
+      case 'unauthorized':
+        return t('common.sessionExpired');
+      case 'forbidden':
+        return t('common.forbidden');
+      case 'failed':
+        return t('gardens.mutationError');
     }
   };
 
@@ -928,9 +1028,9 @@ export default function GardensDashboard() {
           repeatHidden={actionBar.shown}
           pageActionsRef={actionBar.repeatedRef}
           cards={cardsPage}
-          // PROVISIONAL (N3): the chip opens the choice at the Novice formula
-          // only — the grid formulas keep the panel's choice until lot F3.
-          onChangeFormula={cardsPage ? openChooser : undefined}
+          // SMA-448, lot F3 (L6) — the chip is a button at every formula
+          // (V3-04; contract v3 § 4.1): the door to the choice screen.
+          onChangeFormula={(event) => openChooser(event.currentTarget)}
           createRef={createRef}
         />
       </Box>
@@ -999,7 +1099,7 @@ export default function GardensDashboard() {
           onLocate={openLocate}
           onChanged={refetch}
           onDeleted={handleDeleted}
-          onChangeFormula={openChooser}
+          onChangeFormula={(event) => openChooser(event.currentTarget)}
         />
       )}
 
@@ -1046,17 +1146,19 @@ export default function GardensDashboard() {
       )}
 
       {/* Hidden the instant the formula it would name is unknown (SMA-448, PR
-          #293, fix round 1, S6), and CLOSED by `chooseLevel` when a switch
+          #293, fix round 1, S6), and CLOSED by `chooseFormula` when a switch
           ends that way (fix round 2, R2-E1): the condition alone hid it while
           `panelOpen` stayed true, so it came back by itself once the retry
           had succeeded. Not on the cards page at all (lot F2): the Novice has
           no « Personnaliser » — no button, no panel. */}
-      {/* PROVISIONAL (SMA-448, lot F2, N3) — the Novice page's choice of
-          formula; lot F3 puts the choice screen of V3-01 here. Hidden the
-          instant the formula it would name is unknown, like the panel. */}
+      {/* SMA-448, lot F3 (L5) — the choice screen of V3-01, on the wiring of
+          lot F2's provisional chooser (N3): opened from the chip or the
+          foot's link, or MANDATORY when the account never chose (N18).
+          Hidden the instant the formula it would name is unknown, like the
+          panel. */}
       <FormulaChooserDialog
-        open={chooserOpen && capabilities !== null}
-        level={level}
+        open={(chooserOpen || mandatoryChoice) && capabilities !== null}
+        mandatory={mandatoryChoice}
         switching={switching}
         refusal={refusal}
         onClose={closeChooser}
@@ -1070,15 +1172,11 @@ export default function GardensDashboard() {
           capabilities={capabilities}
           blocks={blocks}
           switching={switching}
-          refusal={refusal}
           preview={galleryPreview}
-          // Closing the place where the refusal was said clears it (A1): the
-          // panel reopens on the choice, not on the last refusal.
-          onClose={() => {
-            setPanelOpen(false);
-            dismissRefusal();
-          }}
-          onLevelChange={chooseLevel}
+          onClose={() => setPanelOpen(false)}
+          // SMA-448, PR #297, fix round 1 (A1) — the panel chooses no formula
+          // any more: its link opens the choice screen, like the chip.
+          onChangeFormula={(event) => openChooser(event.currentTarget)}
           onReset={resetToLevel}
           onShow={(key) =>
             patchBlock(key, (block) => ({ ...block, hidden: false }))
@@ -1094,12 +1192,24 @@ export default function GardensDashboard() {
       >
         <DialogTitle>{t('gardens.createDialogTitle')}</DialogTitle>
         <DialogContent>
+          {/* A creation that did not go through (R3-E1, L4): the formula's
+              refusal with its numbers and its door to the choice of formula;
+              a session that expired and the way to sign in again; a right
+              the account lacks; a failure and its retry — the « Créer »
+              button, still there. */}
           {createError && (
-            <Typography color="error" sx={{ mb: 1 }}>
-              {t('gardens.mutationError')}
-            </Typography>
+            <Box data-create-refusal sx={{ mb: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
+              <Typography color="error">{createErrorText(createError)}</Typography>
+              {createError.kind === 'limit' && (
+                <Button variant="outlined" size="small" onClick={seeFormulasFromCreate} sx={{ textTransform: 'none' }}>
+                  {t('gardens.refusal.viewFormulas')}
+                </Button>
+              )}
+              {createError.kind === 'unauthorized' && <ReconnectButton />}
+            </Box>
           )}
           <TextField
+            data-create-name
             label={t('gardens.gardenName')}
             fullWidth
             required
@@ -1139,6 +1249,7 @@ export default function GardensDashboard() {
             {t('gardens.cancel')}
           </Button>
           <Button
+            data-create-submit
             variant="contained"
             disabled={isMutating || !newGardenName.trim()}
             aria-busy={isMutating}

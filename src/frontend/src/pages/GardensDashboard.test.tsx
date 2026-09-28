@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
-import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
+import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
 import {
   dashboardFixture as dashboardWith,
   gardenFixture,
@@ -57,6 +57,8 @@ vi.mock('../services/weatherApi', () => ({
 
 vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
 
+vi.mock('../services/formulasApi', () => ({ fetchFormulas: vi.fn() }));
+
 import GardensDashboard from './GardensDashboard';
 import {
   changeFormula,
@@ -67,6 +69,7 @@ import {
 import { fetchDashboardWeather } from '../services/weatherApi';
 import { HttpStatusError } from '../services/httpStatusError';
 import { fetchProfile } from '../services/profileApi';
+import { fetchFormulas } from '../services/formulasApi';
 
 /**
  * SMA-336 PR 2/5 — the page reads the transport aggregate now, so the fixture
@@ -95,6 +98,7 @@ function servePreferences(level: DashboardLevel, blocks?: DashboardBlock[]) {
     level,
     capabilities: capabilitiesFor(level),
     isPreset: blocks === undefined,
+    formulaChosen: true,
     blocks: blocks ?? presetFor(level),
     updatedAt: null,
   });
@@ -157,6 +161,8 @@ beforeEach(() => {
     hasPassword: true,
   });
   servePreferences('gardener');
+  // The catalogue the choice screen reads when a door opens it (SMA-448, PR #297, A1).
+  vi.mocked(fetchFormulas).mockResolvedValue(catalogFor('gardener', { gardenCount: 1 }));
 });
 
 afterEach(() => {
@@ -488,6 +494,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor('gardener'),
       updatedAt: null,
     });
@@ -503,6 +510,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
         level: 'gardener',
         capabilities: capabilitiesFor('gardener'),
         isPreset: true,
+        formulaChosen: true,
         blocks: presetFor('gardener'),
         updatedAt: null,
       });
@@ -971,38 +979,49 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     return await screen.findByRole('heading', { name: 'Customize' });
   };
 
-  it('offers the three levels with their taglines', async () => {
+  // SMA-448, PR #297, fix round 1 (A1) — Alexandre, 27/09: « Pourquoi on peut
+  // quand même switch de formule depuis le menu Personnaliser ? Il faut
+  // centraliser cette fonctionnalité. » The panel used to offer the three
+  // levels as radios with their taglines, and choosing one switched the
+  // account's formula on the server (lot F1, S5). The choice screen is the one
+  // place that switches now: the panel NAMES the formula and opens the screen.
+  it('names the formula the page is on, with its tagline, and offers « Change formula » — no level to choose here (A1)', async () => {
     await openPanel();
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
 
-    expect(screen.getByRole('radio', { name: /Novice/ })).toBeInTheDocument();
-    expect(screen.getByText('the essentials, nothing more')).toBeInTheDocument();
-    expect(screen.getByText('weather, tasks and counts')).toBeInTheDocument();
-    // Round 1 (E13): the three taglines share one casing convention.
-    expect(screen.getByText('everything, in large')).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Gardener/ })).toBeChecked();
+    expect(within(panel).getByText('Gardener')).toBeInTheDocument();
+    expect(within(panel).getByText('weather, tasks and counts')).toBeInTheDocument();
+    expect(within(panel).queryAllByRole('radio')).toEqual([]);
+    expect(within(panel).queryByText('the essentials, nothing more')).toBeNull();
+    expect(within(panel).queryByText('everything, in large')).toBeNull();
+    expect(within(panel).getByRole('button', { name: 'Change formula' })).toHaveAttribute('aria-haspopup', 'dialog');
   });
 
-  it('names the drawer and the level group for assistive technology', async () => {
+  it('names the drawer for assistive technology', async () => {
     // Round 1 (E5): the heading was a plain Typography with nothing tying it
-    // to either the dialog or the RadioGroup, so both were announced unnamed.
+    // to the dialog, so it was announced unnamed. The level group it also
+    // named is gone (A1): there is no group to name.
     await openPanel();
 
     expect(screen.getByRole('dialog', { name: 'Customize' })).toBeInTheDocument();
-    expect(screen.getByRole('radiogroup', { name: 'Level' })).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
   });
 
   // SMA-448, lot F1, S5 — this test used to pin « choosing a level applies its
   // preset and persists it »: the page wrote the Expert preset over the layout
-  // it left (V4, fact F1 of the contract). Choosing a level now switches the
-  // account's formula on the server, and the page draws what the server then
+  // it left (V4, fact F1 of the contract). Since lot F1 the choice switches the
+  // account's formula on the server, and since PR #297 (A1) it is made on the
+  // choice screen the panel's link opens; the page draws what the server then
   // holds — here the Expert preset, for a formula never visited.
-  it('choosing a level switches the formula on the server, then draws the layout the server holds', async () => {
+  it('« Change formula » opens the choice screen; choosing Expert there switches the formula on the server, then the page draws the layout the server holds', async () => {
     vi.mocked(changeFormula).mockResolvedValue(undefined);
     await openPanel();
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Customize' })).getByRole('button', { name: 'Change formula' }));
+    const choice = await screen.findByRole('dialog', { name: 'Choose your formula' });
     // What the server holds once the account is Expert.
     servePreferences('expert');
 
-    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+    fireEvent.click(await within(choice).findByRole('button', { name: 'Choose Expert' }));
 
     // The Expert preset: the Key figures band, then the eight (PR B, B1).
     await waitFor(() => expect(renderedKeys()).toHaveLength(9));
@@ -1088,14 +1107,31 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(screen.queryByRole('button', { name: 'Add Statistics' })).toBeNull();
   });
 
-  // SMA-448, lot F1, S5 — V4 on the page: choosing a formula in the panel
-  // switches it on the server, which keeps every formula's layout; the page
-  // never writes the chosen formula's preset over what the user arranged.
-  it('choosing another formula in the panel switches it on the server — it never writes its preset', async () => {
-    vi.mocked(changeFormula).mockResolvedValue(undefined);
+  // SMA-448, PR #297, fix round 1 (A1) — the panel chooses no formula any
+  // more: its « Change formula » opens the choice screen, where the choice is
+  // made. What lot F1 and PR #293 pinned on the panel's radios — the switch
+  // on the server, the panel inert while it flies, the panel closed when the
+  // layout cannot be read back, the refusal said where the user acted —
+  // holds through the screen the link opens.
+  const openChoiceFromPanel = async () => {
     await openPanel();
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Customize' })).getByRole('button', { name: 'Change formula' }));
+    return await screen.findByRole('dialog', { name: 'Choose your formula' });
+  };
+  const chooseOnScreen = async (choice: HTMLElement, name: string) =>
+    fireEvent.click(await within(choice).findByRole('button', { name }));
+  /** The panel while the screen stands over it: MUI hides a modal's siblings from assistive technology. */
+  const panelUnderTheScreen = () => screen.getByRole('dialog', { name: 'Customize', hidden: true });
 
-    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+  // SMA-448, lot F1, S5 — V4 on the page: choosing a formula — on the screen
+  // the panel's link opens — switches it on the server, which keeps every
+  // formula's layout; the page never writes the chosen formula's preset over
+  // what the user arranged.
+  it('choosing another formula from the panel — on the choice screen — switches it on the server; the page never writes its preset', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
+    const choice = await openChoiceFromPanel();
+
+    await chooseOnScreen(choice, 'Choose Expert');
 
     await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
     await new Promise((resolve) => setTimeout(resolve, 800));
@@ -1105,10 +1141,10 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
   });
 
   // SMA-448, PR #293, fix round 1 — S5: while a switch is on the wire the
-  // panel takes no gesture, so none can be made and then lost — its levels,
-  // its reset and its « + » are disabled until the page stands at the new
-  // formula.
-  it('while a switch is in flight the panel takes no gesture: its levels, its reset and its « + » are disabled until the new formula stands', async () => {
+  // panel takes no gesture, so none can be made and then lost — its link to
+  // the choice, its reset and its « + » are disabled until the page stands at
+  // the new formula; the screen's own buttons with them.
+  it('while a switch is in flight the panel takes no gesture: its link, its reset and its « + » are disabled until the new formula stands', async () => {
     let release!: () => void;
     vi.mocked(changeFormula).mockImplementation(
       () =>
@@ -1116,38 +1152,42 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
           release = resolve;
         })
     );
-    await openPanel();
+    const choice = await openChoiceFromPanel();
 
-    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+    await chooseOnScreen(choice, 'Choose Expert');
     await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
 
-    for (const name of [/Novice/, /Gardener/, /Expert/]) {
-      expect(screen.getByRole('radio', { name })).toBeDisabled();
-    }
-    expect(screen.getByRole('button', { name: 'Reset to the Gardener level' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Add Harvest' })).toBeDisabled();
+    expect(within(choice).getByRole('button', { name: 'Keep Gardener' })).toBeDisabled();
+    expect(within(choice).getByRole('button', { name: 'Choose Novice' })).toBeDisabled();
+    const panel = panelUnderTheScreen();
+    expect(within(panel).getByRole('button', { name: 'Change formula', hidden: true })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Reset to the Gardener level', hidden: true })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Add Harvest', hidden: true })).toBeDisabled();
 
     servePreferences('expert');
     release();
-    await waitFor(() => expect(screen.getByRole('radio', { name: /Expert/ })).toBeChecked());
-    expect(screen.getByRole('radio', { name: /Novice/ })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Reset to the Expert level' })).toBeEnabled();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull());
+    const panelAfter = screen.getByRole('dialog', { name: 'Customize' });
+    expect(within(panelAfter).getByText('Expert')).toBeInTheDocument();
+    expect(within(panelAfter).getByRole('button', { name: 'Change formula' })).toBeEnabled();
+    expect(within(panelAfter).getByRole('button', { name: 'Reset to the Expert level' })).toBeEnabled();
   });
 
   // SMA-448, PR #293, fix round 1 — S6: the switch lands but its layout
   // cannot be read back. The page used to keep the formula left on screen,
-  // under its name, the panel still open on it; it now shows its load error
-  // and its retry — the panel closed, no « Changes not saved » for a layout
-  // that was saved — and the retry brings the new formula.
-  it('a switch whose layout cannot be read back closes the panel on the load error and its retry, which brings the new formula', async () => {
+  // under its name, the panel still open on it; it shows its load error and
+  // its retry — the panel and the screen closed, no « Changes not saved » for
+  // a layout that was saved — and the retry brings the new formula.
+  it('a switch whose layout cannot be read back closes the panel and the screen on the load error and its retry, which brings the new formula', async () => {
     vi.mocked(changeFormula).mockResolvedValue(undefined);
-    await openPanel();
+    const choice = await openChoiceFromPanel();
     vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
 
-    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+    await chooseOnScreen(choice, 'Choose Expert');
 
     expect(await screen.findByText('Couldn’t load your dashboard.')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull());
     expect(renderedKeys()).toEqual([]);
     expect(screen.queryByText('Changes not saved')).toBeNull();
 
@@ -1160,9 +1200,10 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
 
   // SMA-448, PR #293, fix round 2 — A1 (Alexandre's visual finding, 26/09):
   // a formula the server refused showed « Changes not saved » in the header —
-  // false, nothing was unsaved — and nothing else. The panel now says the
-  // refusal and each reason the server served, where the user just acted;
-  // the indicator says nothing false; the formula and the layout stay.
+  // false, nothing was unsaved — and nothing else. The refusal and each
+  // reason the server served are said where the user just acted — on the
+  // choice screen, since PR #297 (A1) —; the indicator says nothing false;
+  // the formula and the layout stay.
   const refuseNovice = () =>
     vi.mocked(changeFormula).mockRejectedValue(
       new HttpStatusError('Request failed (409)', 409, {
@@ -1176,35 +1217,40 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
       })
     );
 
-  it('a formula the server refuses is said in the panel, with each reason served — never « Changes not saved » — and the formula stays', async () => {
+  it('a formula the server refuses is said on the choice screen the panel opened, with each reason served — never « Changes not saved » — and the formula stays', async () => {
     refuseNovice();
-    await openPanel();
-    const panel = screen.getByRole('dialog', { name: 'Customize' });
+    const choice = await openChoiceFromPanel();
 
-    fireEvent.click(screen.getByRole('radio', { name: /Novice/ }));
+    await chooseOnScreen(choice, 'Choose Novice');
 
-    const said = await within(panel).findByText(
+    const said = await within(choice).findByText(
       'Can’t switch to Novice: 5 gardens for 3 at most and a garden of 30 × 30 cells for 20 × 20 at most'
     );
     expect(said).toHaveAttribute('role', 'status');
     expect(said).toHaveAttribute('aria-live', 'polite');
     expect(screen.queryByText('Changes not saved')).toBeNull();
     expect(screen.queryByText('Couldn’t load your dashboard.')).toBeNull();
-    expect(screen.getByRole('radio', { name: /Gardener/ })).toBeChecked();
-    expect(screen.getByRole('radio', { name: /Novice/ })).toBeEnabled();
+    expect(within(choice).getByRole('button', { name: 'Keep Gardener' })).toBeInTheDocument();
+    expect(within(choice).getByRole('button', { name: 'Choose Novice' })).toBeEnabled();
+    expect(within(panelUnderTheScreen()).getByText('Gardener')).toBeInTheDocument();
     expect(renderedKeys()).toHaveLength(6);
   });
 
-  it('the panel’s refusal region is born empty and stays mounted, so what it then says is announced', async () => {
+  it('the panel has no live region of its own any more; the screen’s is born empty and stays mounted, so what it then says is announced', async () => {
     await openPanel();
     const panel = screen.getByRole('dialog', { name: 'Customize' });
+    expect(within(panel).queryByRole('status')).toBeNull();
 
-    const region = within(panel).getByRole('status');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Change formula' }));
+    const choice = await screen.findByRole('dialog', { name: 'Choose your formula' });
+
+    const region = choice.querySelector('[data-formula-chooser-refusal]')!;
+    expect(region).toHaveAttribute('role', 'status');
     expect(region).toHaveTextContent('');
     expect(region).not.toHaveAttribute('aria-live', 'assertive');
   });
 
-  it('dit le refus en français, avec chaque raison servie', async () => {
+  it('dit le refus en français, avec chaque raison servie — sur l’écran de choix', async () => {
     localStorage.setItem('smartcrops-language', 'fr');
     refuseNovice();
     renderPage();
@@ -1212,11 +1258,13 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     await waitFor(() => expect(customize).toBeEnabled());
     fireEvent.click(customize);
     const panel = await screen.findByRole('dialog', { name: 'Personnaliser' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Changer de formule' }));
+    const choice = await screen.findByRole('dialog', { name: 'Choisissez votre formule' });
 
-    fireEvent.click(screen.getByRole('radio', { name: /Novice/ }));
+    await chooseOnScreen(choice, 'Choisir Novice');
 
     expect(
-      await within(panel).findByText(
+      await within(choice).findByText(
         'Impossible de passer en Novice : 5 jardins pour 3 au plus et un jardin de 30 × 30 cases pour 20 × 20 au plus'
       )
     ).toBeInTheDocument();
@@ -1227,19 +1275,22 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
   // of S6): the panel was hidden by its condition while `panelOpen` stayed
   // true, so it came back by itself once « Try again » had succeeded, and its
   // closing never ran the effect that gives the focus back. The handler that
-  // sees the failure now closes the panel; the focus goes to « Try again »,
-  // the one action the page offers while its layout is unavailable.
+  // sees the failure closes the panel (and the screen, since PR #297 — A1);
+  // the focus goes to « Try again », the one action the page offers while its
+  // layout is unavailable.
   it('after a switch whose layout cannot be read back, the focus goes to « Try again », and the panel does not come back by itself once the retry succeeds', async () => {
     vi.mocked(changeFormula).mockResolvedValue(undefined);
-    await openPanel();
+    const choice = await openChoiceFromPanel();
     vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
 
-    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+    await chooseOnScreen(choice, 'Choose Expert');
 
-    // The error first, then the drawer gone: while it closes, the page behind
-    // it is still hidden from the accessibility tree, and its buttons with it.
+    // The error first, then the drawer and the screen gone: while they close,
+    // the page behind them is still hidden from the accessibility tree, and
+    // its buttons with it.
     expect(await screen.findByText('Couldn’t load your dashboard.')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull());
     const retry = screen.getByRole('button', { name: 'Try again' });
     await waitFor(() => expect(document.activeElement).toBe(retry));
 

@@ -114,6 +114,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'expert',
       capabilities: capabilitiesFor('expert'),
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor('expert'),
       updatedAt: '2026-09-09T10:00:00Z',
     });
@@ -126,12 +127,38 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     expect(preferences.blocks).toEqual(presetFor('expert'));
   });
 
+  // SMA-448, lot F3 — whether the account has ever chosen its formula: read
+  // as served; a body that does not say asks nothing of the user.
+  it('reads `formulaChosen` as served — false stays false —, and a body that does not say it reads as chosen', async () => {
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
+      isPreset: true,
+      formulaChosen: false,
+      blocks: presetFor('gardener'),
+      updatedAt: null,
+    });
+    expect((await fetchDashboardPreferences()).formulaChosen).toBe(false);
+
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
+      isPreset: true,
+      blocks: presetFor('gardener'),
+      updatedAt: null,
+    });
+    expect((await fetchDashboardPreferences()).formulaChosen).toBe(true);
+  });
+
   it('drops blocks whose key this build does not know', async () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'weather', size: 'medium', hidden: false },
         { key: 'moon-phase', size: 'large', hidden: false },
@@ -159,6 +186,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'weather', size: 'enormous', hidden: false },
         { key: 'gardens', size: 'large', hidden: false },
@@ -180,6 +208,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'gardens', size: 'huge', hidden: false },
         { key: 'weather', size: 'small', hidden: false },
@@ -206,6 +235,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'keyfigures', size: 'wide', hidden: false },
         { key: 'weather', size: 'medium', hidden: false },
@@ -228,6 +258,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'expert',
       capabilities: capabilitiesFor('expert'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'keyfigures', size: 'large', hidden: false },
         { key: 'weather', size: 'large', hidden: false },
@@ -249,6 +280,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'expert',
       capabilities: capabilitiesFor('expert'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'weather', size: 'wide', hidden: false },
         { key: 'gardens', size: 'medium', hidden: false },
@@ -272,6 +304,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'archdruid',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [{ key: 'gardens', size: 'large', hidden: false }],
       updatedAt: null,
     });
@@ -289,6 +322,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'expert',
       capabilities: capabilitiesFor('expert'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [{ key: 'moon-phase', size: 'huge', hidden: false }, null, 7],
       updatedAt: null,
     });
@@ -316,6 +350,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'gardens', size: 'large', hidden: false, options: { pinned: true } },
       ],
@@ -336,6 +371,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [{ key: 'gardens', size: 'large', hidden: false, options: null }],
       updatedAt: null,
     });
@@ -353,6 +389,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'gardens', size: 'large', hidden: false, options: ['a', 'b'] },
       ],
@@ -373,6 +410,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'gardens', size: 'large', hidden: false },
         { key: 'weather', size: 'medium', hidden: false },
@@ -396,6 +434,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: [{ key: 'gardens', size: 'large', hidden: 'yes' }],
       updatedAt: null,
     });
@@ -425,6 +464,7 @@ describe('fetchDashboardPreferences — the served capabilities decide (SMA-448)
       schemaVersion: 1,
       level: 'gardener',
       isPreset: false,
+      formulaChosen: true,
       blocks: [
         { key: 'weather', size: 'wide', hidden: false },
         { key: 'counters', size: 'medium', hidden: false },
@@ -449,6 +489,7 @@ describe('fetchDashboardPreferences — the served capabilities decide (SMA-448)
       schemaVersion: 1,
       level: 'gardener',
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor('gardener'),
       updatedAt: null,
     });
@@ -464,6 +505,7 @@ describe('fetchDashboardPreferences — the served capabilities decide (SMA-448)
       schemaVersion: 1,
       level: 'gardener',
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor('gardener'),
       updatedAt: null,
       capabilities: { ...served, sizes },

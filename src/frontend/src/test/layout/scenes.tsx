@@ -15,9 +15,11 @@ import { gardenViewOf, type GardenView } from '../../utils/gardenStats';
 import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOptions';
 import { cardBearsWeather, noviceCardsOf, type NoviceCard } from '../../components/Dashboard/noviceCards';
 import { LAYOUT_NOW_MS } from './clock';
-import { presetFor } from '../fixtures/formulas';
+import { catalogFor, presetFor } from '../fixtures/formulas';
+import type { GardenLayoutData } from '../../services/gardenLayoutApi';
+import type { Garden } from '../../types/Garden';
 import type { SaveState } from '../../hooks/useDashboardPreferences';
-import type { DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
+import type { DashboardBlockKey, DashboardLevel, DashboardSize, FormulaRefusalReason, FormulasCatalog } from '../../types/Dashboard';
 import type { DashboardData, DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
 import type { DashboardWeatherData } from '../../types/DashboardWeather';
 
@@ -689,3 +691,81 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
       throw new Error(`No scene for the widget ${scene.key}`);
   }
 }
+
+/**
+ * SMA-448, lot F3, step L7 (V5: every new form of the v3 enters the harness
+ * as a scene) — THE CHOICE SCREEN's situations (V3-01, and the one it left
+ * undrawn): a first visit; a change from the chip over the dashboard; an
+ * account with five gardens, Novice unavailable; twelve gardens, Novice and
+ * Gardener unavailable, Expert current; twelve gardens still on Gardener,
+ * kept beyond its own limit. What `/api/formulas` serves the real page, and
+ * whether the account chose (the layout's read) — the screen then opens by
+ * itself, or from the chip.
+ */
+export interface ChoiceScene {
+  name: 'choice-first' | 'choice-change' | 'choice-five' | 'choice-twelve' | 'choice-kept';
+  level: DashboardLevel;
+  chosen: boolean;
+  gardenCount: number;
+  unavailable: Partial<Record<DashboardLevel, FormulaRefusalReason[]>>;
+  /** Mandatory at load (the account never chose), or opened from the chip, the dashboard veiled behind. */
+  opened: 'mandatory' | 'chip';
+}
+
+const gardensOver = (have: number, limit: number): FormulaRefusalReason[] => [{ kind: 'gardens', have, limit }];
+
+export const CHOICE_SCENES: ChoiceScene[] = [
+  { name: 'choice-first', level: 'gardener', chosen: false, gardenCount: 0, unavailable: {}, opened: 'mandatory' },
+  { name: 'choice-change', level: 'gardener', chosen: true, gardenCount: 2, unavailable: {}, opened: 'chip' },
+  { name: 'choice-five', level: 'gardener', chosen: false, gardenCount: 5, unavailable: { novice: gardensOver(5, 3) }, opened: 'mandatory' },
+  {
+    name: 'choice-twelve',
+    level: 'expert',
+    chosen: false,
+    gardenCount: 12,
+    unavailable: { novice: gardensOver(12, 3), gardener: gardensOver(12, 10) },
+    opened: 'mandatory',
+  },
+  {
+    name: 'choice-kept',
+    level: 'gardener',
+    chosen: false,
+    gardenCount: 12,
+    unavailable: { novice: gardensOver(12, 3), gardener: gardensOver(12, 10) },
+    opened: 'mandatory',
+  },
+];
+
+/** What `/api/formulas` serves the page for a choice scene. */
+export const choiceSceneCatalog = (scene: ChoiceScene): FormulasCatalog =>
+  catalogFor(scene.level, { chosen: scene.chosen, gardenCount: scene.gardenCount, unavailable: scene.unavailable });
+
+/**
+ * SMA-448, lot F3, step L7 — the planner's garden for the refusal scenes: a
+ * 20 x 20 plan, the Novice's largest, so the add buttons stop at the bound
+ * and the server's refusal of a 21st row can be drawn.
+ */
+export const PLANNER_GARDEN = {
+  id: 'g1',
+  name: 'Terrasse',
+  description: null,
+  layoutWidth: 20,
+  layoutHeight: 20,
+  cellSize: '50cm',
+  orientation: 'S',
+  gardenType: 'terrace',
+  lightSchedule: null,
+  hemisphere: 'N',
+  latitudeBand: 'mid',
+  location: null,
+  locationSource: null,
+} as unknown as Garden;
+
+export const PLANNER_LAYOUT: GardenLayoutData = {
+  width: 20,
+  height: 20,
+  cellSize: '50cm',
+  cellsJson: null,
+  config: { orientation: 'S', gardenType: 'terrace', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+  placements: [],
+};
