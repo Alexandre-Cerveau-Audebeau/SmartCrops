@@ -269,7 +269,10 @@ const CHOICE_VIEWS: ChoiceView[] = [
 ];
 /** The windows of A2: where the buttons are measured against the fold. */
 const FOLD_RUNS = ['fr@1280x720', 'fr@1440x900'];
-const CHOICE_RUNS: Array<ChoiceRun & { vw: number }> = CHOICE_VIEWS.flatMap((view) => view.runs.map((run) => ({ ...run, vw: view.width })));
+/** Every run with its viewport's width and its view's id — the key a failed view is recorded under (S4). */
+const CHOICE_RUNS: Array<ChoiceRun & { vw: number; viewId: string }> = CHOICE_VIEWS.flatMap((view) =>
+  view.runs.map((run) => ({ ...run, vw: view.width, viewId: view.id }))
+);
 /** The choice screen, by run then by scene name. */
 const choiceCases = new Map<string, Map<string, ChoiceMeasure>>();
 /** The creation's refusals at the five widths. */
@@ -282,7 +285,7 @@ const PLANNER_VIEWS: PageView[] = [
 ];
 const plannerCases = new Map<string, { limit: PlannerLimitMeasure; refused: DialogMeasure; unauthorized: DialogMeasure }>();
 
-const choiceRunOf = (id: string): ChoiceRun & { vw: number } => {
+const choiceRunOf = (id: string): ChoiceRun & { vw: number; viewId: string } => {
   const run = CHOICE_RUNS.find((candidate) => candidate.id === id);
   if (!run) throw new Error(`No choice run ${id}`);
   return run;
@@ -1110,7 +1113,8 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
   describe('the choice screen, as the app opens it (SMA-448, lot F3, L7 — V3-01)', () => {
     const choiceOf = (runId: string, name: string): ChoiceMeasure => {
       const measure = choiceCases.get(runId)?.get(name);
-      if (!measure) throw new Error(`No measurement for the choice scene ${name} in ${runId}: ${String(failures.get(`choice-${choiceRunOf(runId).vw}`) ?? [...failures.keys()].join(', '))}`);
+      // The failure of a view is recorded under `choice-${view.id}` (SMA-448, PR #297, fix round 1, S4 — Extension E3): looked up by that id, so the message says the real cause, not the list of keys.
+      if (!measure) throw new Error(`No measurement for the choice scene ${name} in ${runId}: ${String(failures.get(`choice-${choiceRunOf(runId).viewId}`) ?? [...failures.keys()].join(', '))}`);
       return measure;
     };
     const SCENE_NAMES = CHOICE_SCENES.map((scene) => scene.name);
