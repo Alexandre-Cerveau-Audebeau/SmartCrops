@@ -115,11 +115,18 @@ public class GardenLayoutValidationOrderTests : IntegrationTestBase
 
         var holder = await HoldTheAccountsLockAsync(userId);
         var request = Client.PutAsJsonAsync($"/api/gardens/{gardenId}/layout", new SaveLayoutRequestDto(12, 12, "50cm", null, null, []));
-        var settled = await Task.WhenAny(request, Task.Delay(Patience));
+        try
+        {
+            var settled = await Task.WhenAny(request, Task.Delay(Patience));
 
-        Assert.False(ReferenceEquals(settled, request), "A valid request answered without waiting for the account's lock.");
-
-        await holder.DisposeAsync();
+            Assert.False(ReferenceEquals(settled, request), "A valid request answered without waiting for the account's lock.");
+        }
+        finally
+        {
+            // Released whatever the assertion says (SMA-448, PR #297, fix round 2, T1 — GitHub G4, Extension):
+            // a failed assertion would otherwise leave the row locked, and the next test's reset would wait on it.
+            await holder.DisposeAsync();
+        }
         var response = await request;
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.Equal(12, await StoredWidthAsync(gardenId));
@@ -127,16 +134,26 @@ public class GardenLayoutValidationOrderTests : IntegrationTestBase
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    /// <summary>Another transaction holding the account's row — what a switch of formula or another save holds (<see cref="AccountFormulaLock"/>); released on dispose.</summary>
+    /// <summary>Another transaction holding the account's row — what a switch of formula or another save holds (<see cref="AccountFormulaLock"/>); released on dispose — and released at once when the lock cannot be taken (SMA-448, PR #297, fix round 2, T1).</summary>
     private async Task<LockHolder> HoldTheAccountsLockAsync(string userId)
     {
         var connection = new NpgsqlConnection(Fixture.ConnectionString);
-        await connection.OpenAsync();
-        var transaction = await connection.BeginTransactionAsync();
-        await using var command = new NpgsqlCommand("SELECT \"Formula\" FROM \"AspNetUsers\" WHERE \"Id\" = @id FOR UPDATE", connection, transaction);
-        command.Parameters.AddWithValue("id", userId);
-        await command.ExecuteScalarAsync();
-        return new LockHolder(connection, transaction);
+        NpgsqlTransaction? transaction = null;
+        try
+        {
+            await connection.OpenAsync();
+            transaction = await connection.BeginTransactionAsync();
+            await using var command = new NpgsqlCommand("SELECT \"Formula\" FROM \"AspNetUsers\" WHERE \"Id\" = @id FOR UPDATE", connection, transaction);
+            command.Parameters.AddWithValue("id", userId);
+            await command.ExecuteScalarAsync();
+            return new LockHolder(connection, transaction);
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.DisposeAsync();
+            await connection.DisposeAsync();
+            throw;
+        }
     }
 
     private sealed class LockHolder(NpgsqlConnection connection, NpgsqlTransaction transaction) : IAsyncDisposable
