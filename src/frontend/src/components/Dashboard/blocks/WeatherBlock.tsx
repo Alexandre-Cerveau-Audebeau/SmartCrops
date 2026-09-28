@@ -297,6 +297,14 @@ export default function WeatherBlock({
    * Large card the line ends with « Voir toutes vos villes », a link the page
    * answers by opening the formula choice screen. Nothing on Small: the card
    * has no room for a sentence, and its one place reads as one place.
+   *
+   * The Medium card is PINNED at 273 px (A-N10) and its head needs 136: the
+   * line has ONE line there, measured — with four long names the sentence
+   * wrapped and the hero's « 29° / 16° » ran 7 px over the band (the page
+   * harness, W5). So the Medium form leads with what matters and names the
+   * cities after: « Non affichés ici : Annecy, Grenoble et Valence », on one
+   * line, ellipsized at its tail — the names, never the statement — with the
+   * whole sentence as its title. Every name stays in the text.
    */
   const honestLine = (withLink: boolean) => {
     if (otherCities.length === 0) return null;
@@ -305,16 +313,32 @@ export default function WeatherBlock({
         frenchElides(name) ? 'dashboard.blocks.weather.cityOfVowel' : 'dashboard.blocks.weather.cityOf',
         { place: name }
       );
+    const sentence = t('dashboard.blocks.weather.otherCities', {
+      places: cityList(otherCities, i18n.language, ofCity),
+    });
+    const oneLine = !withLink;
     return (
-      <Box data-weather-honest sx={{ display: 'flex', alignItems: 'flex-start', gap: '6px', flexShrink: 0 }}>
+      <Box
+        data-weather-honest
+        title={oneLine ? sentence : undefined}
+        sx={{ display: 'flex', alignItems: 'flex-start', gap: '6px', flexShrink: 0, minWidth: 0 }}
+      >
         <InfoOutlinedIcon aria-hidden sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0, mt: '2px' }} />
         <Typography
           component="span"
-          sx={{ fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.4, color: 'text.secondary', minWidth: 0 }}
+          sx={{
+            fontSize: DASHBOARD_TYPE.secondary,
+            lineHeight: 1.4,
+            color: 'text.secondary',
+            minWidth: 0,
+            ...(oneLine ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } : {}),
+          }}
         >
-          {t('dashboard.blocks.weather.otherCities', {
-            places: cityList(otherCities, i18n.language, ofCity),
-          })}
+          {oneLine
+            ? t('dashboard.blocks.weather.otherCitiesShort', {
+                places: cityList(otherCities, i18n.language, (name) => name),
+              })
+            : sentence}
           {withLink && onSeeAllCities && (
             <>
               {' '}
@@ -914,8 +938,16 @@ export default function WeatherBlock({
             {cityHeader(location)}
             {location.current ? (
               <>
+                {/* The head every card draws — the hero beside the six slots
+                    from 600 px, stacked on a phone — and the five days: on a
+                    420 px column beside the head from 900 px, under it on the
+                    full width below. The head is its OWN box, as on the
+                    Medium card: the hero and the slots take `height: 100%`
+                    of it, and in one box with the days — a column at 600 px,
+                    or a wrapped row — that percentage read the whole box, and
+                    the slots and the days ran out of the card (W5's measure
+                    at 600 px). */}
                 <Box
-                  data-weather-head
                   sx={{
                     display: 'flex',
                     flexDirection: { xs: 'column', md: 'row' },
@@ -924,8 +956,19 @@ export default function WeatherBlock({
                     minWidth: 0,
                   }}
                 >
-                  <WeatherHero location={location} current={location.current} size="large" system={system} place={null} />
-                  <WeatherHours hours={upcomingHours(location)} system={system} />
+                  <Box
+                    data-weather-head
+                    sx={{
+                      display: 'flex',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      gap: { xs: `${DASHBOARD_WEATHER.stackGap}px`, sm: '24px' },
+                      flex: { xs: '0 0 auto', md: 1 },
+                      minWidth: 0,
+                    }}
+                  >
+                    <WeatherHero location={location} current={location.current} size="large" system={system} place={null} />
+                    <WeatherHours hours={upcomingHours(location)} system={system} />
+                  </Box>
                   <Box sx={{ width: { xs: '100%', md: 420 }, flexShrink: 0, minWidth: 0, display: 'flex' }}>
                     <WeatherDays days={location.days} today={today} system={system} />
                   </Box>

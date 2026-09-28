@@ -185,7 +185,8 @@ describe('the Gardener: one fixed city (SMA-448, lot F4, W2 — V3-02 variant B)
 
     expect(within(mediumCard).queryByRole('tablist')).toBeNull();
     expect(mediumCard).toHaveAttribute('aria-label', 'Lyon');
-    expect(mediumCard.querySelector('[data-weather-honest]')).toHaveTextContent('Your gardens in Annecy are not shown here.');
+    expect(mediumCard.querySelector('[data-weather-honest]')).toHaveTextContent('Not shown here: Annecy');
+    expect(mediumCard.querySelector('[data-weather-honest]')).toHaveAttribute('title', 'Your gardens in Annecy are not shown here.');
     expect(mediumCard.querySelector('[data-weather-honest-link]')).toBeNull();
     medium.unmount();
 

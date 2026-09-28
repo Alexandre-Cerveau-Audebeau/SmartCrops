@@ -684,7 +684,10 @@ describe('GardensDashboard — the weather warning follows the weather by formul
 
     const note = await screen.findByRole('note');
     expect(disclaimers()).toHaveLength(1);
-    expect(weatherCard().querySelector('[data-weather-honest]')).toHaveTextContent('Vos jardins d’Annecy ne sont pas affichés ici.');
+    // The Large card writes the sentence; the Medium card its one-line form (W5's measure).
+    expect(weatherCard().querySelector('[data-weather-honest]')).toHaveTextContent(
+      size === 'large' ? 'Vos jardins d’Annecy ne sont pas affichés ici.' : 'Non affichés ici : Annecy'
+    );
     expect(weatherCard().querySelector('[data-weather-nav]')).toBeNull();
     expect(note.closest('[data-widget]')).toBeNull();
     expect(weatherFigures().length).toBeGreaterThan(0);

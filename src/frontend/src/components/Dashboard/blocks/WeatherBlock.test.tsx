@@ -917,7 +917,12 @@ describe('WeatherBlock — one fixed city for a single-city formula (SMA-448, lo
     expect(medium.widget.queryByRole('tablist')).toBeNull();
     expect(medium.card).toHaveAttribute('aria-label', 'Lyon');
     const honest = medium.card.querySelector('[data-weather-honest]') as HTMLElement;
-    expect(honest).toHaveTextContent('Your gardens in Annecy are not shown here.');
+    // The Medium form: the statement first, the names after, on ONE line
+    // (the card is pinned at 273 px — W5's measure); the whole sentence as
+    // its title.
+    expect(honest).toHaveTextContent('Not shown here: Annecy');
+    expect(honest).toHaveAttribute('title', 'Your gardens in Annecy are not shown here.');
+    expect(rulesFor(honest.querySelector('span')!).replace(/\s+/g, '')).toContain('text-overflow:ellipsis');
     expect(honest.querySelector('[data-weather-honest-link]')).toBeNull();
     expect(medium.widget.queryByRole('button', { name: 'See all your cities' })).toBeNull();
     cleanup();

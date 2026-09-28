@@ -600,6 +600,7 @@
         "minMax": "{{max}} / {{min}}",
         "places": "Places",
         "otherCities": "Your gardens in {{places}} are not shown here.",
+        "otherCitiesShort": "Not shown here: {{places}}",
         "cityOf": "{{place}}",
         "cityOfVowel": "{{place}}",
         "seeAllCities": "See all your cities",
