@@ -707,6 +707,39 @@
             "updated": "Triés par dernière modification",
             "custom": "Dans votre ordre"
           }
+        },
+        "options": {
+          "countSection": "Jardins affichés",
+          "countGroup": "Nombre de jardins affichés",
+          "countAll": "Tous",
+          "countHelp": "Par défaut\u00a0: 8 sur ordinateur, 5 sur téléphone. Dès que vous choisissez, votre choix vaut sur tous vos écrans.",
+          "countChosen": "Votre choix — il vaut sur tous vos écrans.",
+          "countReset": "Revenir au réglage par défaut",
+          "sortSection": "Trier par",
+          "sortGroup": "Tri des jardins",
+          "sorts": {
+            "lastOpened": { "label": "Derniers ouverts", "sense": "le plus récent d’abord — un jardin jamais ouvert se range par sa dernière modification" },
+            "name": { "label": "Ordre alphabétique", "sense": "de A à Z" },
+            "created": { "label": "Date de création", "sense": "le plus récent d’abord" },
+            "updated": { "label": "Dernière modification", "sense": "le plus récent d’abord" },
+            "custom": { "label": "Ordre personnalisé", "sense": "l’ordre que vous choisissez" }
+          },
+          "orderSection_one": "Votre ordre — {{count, number}} jardin",
+          "orderSection_other": "Votre ordre — {{count, number}} jardins",
+          "orderHelp": "Glissez ⠿, ou utilisez ▲ ▼. Les {{count, number}} premiers sont affichés dans le widget.",
+          "orderHelpAll": "Glissez ⠿, ou utilisez ▲ ▼. Tous sont affichés dans le widget.",
+          "orderBeyond": "Au-delà des {{count, number}} affichés dans le widget",
+          "orderList": "Vos jardins, dans votre ordre",
+          "orderKept": "Votre ordre est gardé\u00a0: passer à un autre tri puis revenir ici le retrouve intact.",
+          "orderNew": "Un jardin créé entre en tête de votre ordre.",
+          "newChip": "Nouveau",
+          "orderSaved": "Ordre enregistré.",
+          "orderError": "Ordre non enregistré — la prochaine modification réessaie.",
+          "notReady": "Vos jardins se chargent…",
+          "place_ordinal_one": "{{count}}ʳᵉ position",
+          "place_ordinal_two": "{{count}}ᵉ position",
+          "place_ordinal_few": "{{count}}ᵉ position",
+          "place_ordinal_other": "{{count}}ᵉ position"
         }
       },
       "tips": {
