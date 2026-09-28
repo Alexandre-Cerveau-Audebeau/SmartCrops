@@ -186,6 +186,12 @@ public class DashboardController(
                 g.Hemisphere,
                 g.LatitudeBand,
                 g.UpdatedAt,
+                // SMA-448, lot F5-a — the three data the Gardens widget sorts
+                // by (A-N3, A-N5, A-N6); the client sorts, the server keeps
+                // serving newest first (the Novice page reads that order).
+                g.CreatedAt,
+                g.LastOpenedAt,
+                g.SortOrder,
                 // STABLE order, and the reason matters: SaveLayout deletes every
                 // placement and re-inserts it (GardensController.SaveLayout), so
                 // BOTH `Id` and `PlacedAt` are new after each save. Ordering on
@@ -243,6 +249,9 @@ public class DashboardController(
                     g.Hemisphere,
                     g.LatitudeBand),
                 g.UpdatedAt,
+                g.CreatedAt,
+                g.LastOpenedAt,
+                g.SortOrder,
                 [.. g.Placements.Select(p => new PlacementResponse(
                     p.Id,
                     p.PlantId,

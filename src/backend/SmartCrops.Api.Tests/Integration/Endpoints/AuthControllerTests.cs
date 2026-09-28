@@ -1210,6 +1210,44 @@ public class AuthControllerTests : IntegrationTestBase
         }
     }
 
+    /// <summary>
+    /// SMA-448, lot F5-a (A-N6, decided by Alexandre on 28/09 — question 3): the
+    /// planner's last opening of each garden is the user's data (art. 20), and
+    /// so is the place they gave it in their order — both travel in the file,
+    /// each where it is stored, null until the first opening or ranking.
+    /// Additive: the export's schema version stays at 1, as it did for the
+    /// formula and the locations.
+    /// </summary>
+    [Fact]
+    public async Task ExportAccount_CarriesEachGardensLastOpeningAndPlace_NullUntilTheFirst()
+    {
+        var (_, userId) = await RegisterUserAsync();
+        var opened = await SeedGardenWithPlacementAsync(userId, "Ouvert");
+        var never = await SeedGardenWithPlacementAsync(userId, "Jamais");
+        var lastOpenedAt = new DateTime(2026, 9, 20, 18, 45, 0, DateTimeKind.Utc);
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            await db.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""Gardens"" SET ""LastOpenedAt"" = {1}, ""SortOrder"" = {2} WHERE ""Id"" = {0};",
+                opened, lastOpenedAt, 3);
+        }
+        AuthAs(userId);
+
+        var response = await Client.GetAsync("/api/auth/account/export");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(AccountExportResponse.CurrentSchemaVersion, doc.RootElement.GetProperty("schemaVersion").GetInt32());
+        var gardens = doc.RootElement.GetProperty("gardens").EnumerateArray()
+            .ToDictionary(garden => garden.GetProperty("id").GetGuid(), garden => garden);
+
+        Assert.Equal(lastOpenedAt, gardens[opened].GetProperty("lastOpenedAt").GetDateTime().ToUniversalTime());
+        Assert.Equal(3, gardens[opened].GetProperty("sortOrder").GetInt32());
+        Assert.Equal(JsonValueKind.Null, gardens[never].GetProperty("lastOpenedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, gardens[never].GetProperty("sortOrder").ValueKind);
+    }
+
     [Fact]
     public async Task ExportAccount_CarriesProfileDefaultAndGardenOverrideLocations()
     {

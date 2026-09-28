@@ -86,6 +86,14 @@ public record SavePlacementRequest(
     [Range(1, 20)] int SpanCols,
     [MaxLength(500)] string? Notes);
 
+/// <summary>
+/// SMA-448, lot F5-a — <c>PUT /api/gardens/order</c>: the account's gardens in
+/// the order the user set, first to last. Distinct, and every one the
+/// caller's; a list may name SOME of the gardens (the others keep their place)
+/// and has no ceiling — the Expert's gardens are unlimited (A-N5).
+/// </summary>
+public record SaveGardenOrderRequest([Required] List<Guid> Ids);
+
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -347,6 +355,94 @@ public class GardensController(
         GeoLocation.Clear(garden);
         garden.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
+
+    // ── The Gardens widget's settings (SMA-448, lot F5-a) ──────────────────
+    // Two writes on the garden's row, and NEITHER through a tracked entity:
+    // UpdateTimestampInterceptor stamps UpdatedAt on every Modified garden,
+    // and « dernière modification » — a sort of the widget — must stay true
+    // when a garden is merely opened or moved in the user's order. Both are
+    // set-based SQL, the way the formula is written (FormulasController).
+
+    /// <summary>
+    /// POST /api/gardens/{id}/open — the planner was opened on this garden:
+    /// ONE stamp, <c>LastOpenedAt</c>, no history (A-N6, decided by Alexandre
+    /// on 28/09). An explicit action, never a side effect of a GET: the
+    /// planner's two reads stay reads. 204; 404 for a garden the caller does
+    /// not own (ownership answers 404 on these routes, never 403). Called by
+    /// the planner once per garden opened, without waiting and without a word
+    /// on failure — a server before this lot answers 404 during the promotion
+    /// window, and a network that drops must show nothing on the plan.
+    /// </summary>
+    [HttpPost("{id:guid}/open")]
+    public async Task<IActionResult> OpenGarden(Guid id, CancellationToken ct = default)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        // Set-based, with no tracked entity (the proof of pre-flight § D, 1:
+        // written through a tracked entity, this made UpdateTimestampInterceptor
+        // advance UpdatedAt to the instant of the opening — a garden merely
+        // opened read as « modifié à l'instant »). Ownership is in the WHERE:
+        // zero rows is « not the caller's garden », 404.
+        var openedAt = DateTime.UtcNow;
+        var stamped = await context.Gardens
+            .Where(g => g.Id == id && g.UserId == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(g => g.LastOpenedAt, openedAt), ct);
+
+        return stamped == 0 ? NotFound() : NoContent();
+    }
+
+    /// <summary>
+    /// PUT /api/gardens/order — the account's custom order of its gardens
+    /// (A-N5, decided by Alexandre on 28/09): each garden named takes its
+    /// index as <c>SortOrder</c>, in ONE set-based UPDATE over the list, under
+    /// the account's formula lock — a switch of formula and an order write
+    /// apply one after the other. <b>Without a ceiling</b>: the list travels
+    /// as one array parameter, not one parameter per garden. Strict on write:
+    /// 400 for an empty list or a duplicated id, decided on the request alone
+    /// before the lock (S1); 403 <c>formula.gardenOrder</c> for a formula
+    /// without the custom order (<see cref="FormulaRefusals.GardenOrder"/>,
+    /// R8); 400 — on the list, never a 404 naming a garden — for an id that
+    /// is not one of the caller's gardens, and nothing is written then. A
+    /// list may name some of the gardens: the others keep their place, and an
+    /// unranked garden (null) is read at the head by the client.
+    /// </summary>
+    [HttpPut("order")]
+    public async Task<IActionResult> PutOrder([FromBody] SaveGardenOrderRequest request, CancellationToken ct = default)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        // What depends on the request alone is decided here, before the
+        // transaction and the lock (S1).
+        if (request.Ids.Count == 0) return BadRequest("ids must not be empty.");
+        if (request.Ids.Distinct().Count() != request.Ids.Count) return BadRequest("ids must be distinct.");
+
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
+        var formula = await AccountFormulaLock.LockAsync(context, userId, ct);
+        if (formula is null) return Unauthorized();
+
+        var definition = FormulaCatalog.For(formula);
+        if (!definition.HasCustomGardenOrder) return FormulaRefusals.GardenOrder(definition);
+
+        var ids = request.Ids.ToArray();
+        var owned = await context.Gardens.CountAsync(g => g.UserId == userId && ids.Contains(g.Id), ct);
+        if (owned != ids.Length) return BadRequest("ids must all be gardens of the caller.");
+
+        // One statement for the whole list: the ids as ONE uuid[] parameter,
+        // unnested with their ordinality — the place is the index in the list.
+        // No tracked entity, so UpdatedAt does not move.
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE ""Gardens"" AS g
+               SET ""SortOrder"" = v.ordinality - 1
+               FROM unnest({ids}) WITH ORDINALITY AS v(id, ordinality)
+               WHERE g.""Id"" = v.id AND g.""UserId"" = {userId}",
+            ct);
+        await transaction.CommitAsync(ct);
 
         return NoContent();
     }
