@@ -2,6 +2,7 @@ import {
   isDashboardBlockKey,
   isDashboardLevel,
   isDashboardSize,
+  isWeatherMode,
   type DashboardBlock,
   type DashboardBlockKey,
   type DashboardLevel,
@@ -91,7 +92,10 @@ export function normalizeCapabilities(raw: unknown): FormulaCapabilities {
   }
   const gardenLimit = source.gardenLimit;
   if (gardenLimit !== null && !isWholeNumber(gardenLimit)) fail('a garden limit');
-  if (!isString(source.weather)) fail('no weather mode');
+  // SMA-448, lot F4 — the weather mode is a capability the page DRAWS by
+  // (one city or every city): a mode this build does not know is refused
+  // whole, like an unknown widget, never guessed at.
+  if (!isString(source.weather) || !isWeatherMode(source.weather)) fail('unknown weather mode');
   if (!isBoolean(source.compactBar)) fail('no compact bar');
 
   return {
@@ -104,7 +108,7 @@ export function normalizeCapabilities(raw: unknown): FormulaCapabilities {
     widgets,
     sizes,
     preset,
-    weather: source.weather as string,
+    weather: source.weather,
     compactBar: source.compactBar as boolean,
   };
 }

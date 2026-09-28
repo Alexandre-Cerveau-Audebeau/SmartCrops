@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { ChoiceMeasure, DialogMeasure, NoviceMeasure, PageMeasure, PlannerLimitMeasure, PlantingMeasure } from './pageHarness';
-import { CHOICE_SCENES, NOVICE_LONG_NAMES, NOVICE_SCENES } from './scenes';
+import type { ChoiceMeasure, DialogMeasure, NoviceMeasure, PageMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
+import { CHOICE_SCENES, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, weatherCitySceneData, type WeatherCityScene } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
+import { capabilitiesFor } from '../fixtures/formulas';
+import { sizesFor } from '../../constants/dashboardCapabilities';
+import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 
 /**
  * SMA-437, lot V39, PR B, step B9 — the compact action bar ON THE WHOLE PAGE,
@@ -1367,5 +1370,256 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
     it('a toggle unmounted at the key: reported — the focus falls to the body', () => {
       expect(focusFaults(probe('unmount-toggle'), 'bar-toggle')).toEqual(['the focus fell to the body']);
     });
+  });
+});
+
+// ── The Weather widget by formula, on the real page (SMA-448, lot F4, W5) ──
+
+/** The five widths of the brief — 360, 390, 600, 1 024, 1 280 — for the Weather widget by formula. */
+const WEATHER_VIEWS: PageView[] = [
+  { id: '360x780', width: 360, height: 780, mobile: true },
+  { id: '390x844', width: 390, height: 844, mobile: true },
+  { id: '600x1024', width: 600, height: 1024, mobile: true },
+  { id: '1024x768', width: 1024, height: 768, mobile: true },
+  { id: '1280x800', width: 1280, height: 800, mobile: false },
+];
+
+interface WeatherCase {
+  id: string;
+  level: DashboardLevel;
+  size: DashboardSize;
+  kind: WeatherCityScene;
+}
+
+/** Each formula that has the widget, at each size its served capabilities permit, with each set of cities. */
+const WEATHER_CASES: WeatherCase[] = (['gardener', 'expert'] as const).flatMap((level) =>
+  (sizesFor('weather', capabilitiesFor(level)) ?? []).flatMap((size) =>
+    WEATHER_CITY_SCENES.map((kind) => ({ id: `${level}/${size}/${kind}`, level, size, kind }))
+  )
+);
+
+/** The Weather widget, by viewport then by case. */
+const weatherCases = new Map<string, Map<string, WeatherMeasure>>();
+const weatherFailures = new Map<string, unknown>();
+let weatherOutDir = '';
+
+/** Every case of one viewport, in one Chrome. */
+async function runWeatherView(view: PageView): Promise<Map<string, WeatherMeasure>> {
+  const session = await openPage(CHROME!, weatherOutDir, { label: `weather-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
+  try {
+    const byCase = new Map<string, WeatherMeasure>();
+    for (const weatherCase of WEATHER_CASES) {
+      await session.navigate(`level=${weatherCase.level}&theme=light&lang=fr&weather=${weatherCase.kind}&wsize=${weatherCase.size}`);
+      byCase.set(weatherCase.id, await session.evaluate<WeatherMeasure>('window.__page.measureWeather()'));
+    }
+    return byCase;
+  } finally {
+    await session.close();
+  }
+}
+
+const weatherOf = (viewId: string, caseId: string): WeatherMeasure => {
+  const measured = weatherCases.get(viewId)?.get(caseId);
+  if (!measured) throw new Error(`No measurement for the Weather case ${caseId} at ${viewId}`);
+  return measured;
+};
+
+/** The grid's width at a viewport: the page's 1 200 px cap less its 24 px sides, or the viewport less its 16 px sides on a phone. */
+const weatherGridWidth = (vw: number) => (vw < 600 ? vw - 32 : Math.min(vw, 1200) - 48);
+
+/** The width a size takes at a viewport: a phone's one column; two columns from 600, four from 1 200 (a Small takes one, the others all). */
+const widthOfSize = (vw: number, size: DashboardSize) => {
+  const grid = weatherGridWidth(vw);
+  if (vw < 600) return grid;
+  const columns = vw >= 1200 ? 4 : 2;
+  const column = (grid - 20 * (columns - 1)) / columns;
+  if (size === 'small') return column;
+  if (size === 'wide') return grid;
+  return columns === 4 ? column * 2 + 20 : grid;
+};
+
+/** The pinned height of a size from 600 px up (A-N10): 273 px a row, 566 on two; none for the Full width. */
+const WEATHER_PINNED: Partial<Record<DashboardSize, number>> = { small: 273, medium: 273, large: 566 };
+
+describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (SMA-448, lot F4, W5 — V3-02)', () => {
+  beforeAll(async () => {
+    weatherOutDir = makeOutDir();
+    try {
+      await buildPageHarness(weatherOutDir);
+      writePageHarness(weatherOutDir);
+      // One Chrome per viewport, five at once.
+      const settled = await Promise.allSettled(WEATHER_VIEWS.map((view) => runWeatherView(view)));
+      settled.forEach((outcome, index) => {
+        if (outcome.status === 'fulfilled') weatherCases.set(WEATHER_VIEWS[index]!.id, outcome.value);
+        else weatherFailures.set(`weather-${WEATHER_VIEWS[index]!.id}`, outcome.reason);
+      });
+    } finally {
+      await terminateChildren();
+    }
+  }, 240_000);
+
+  afterAll(async () => {
+    try {
+      await terminateChildren();
+    } finally {
+      if (weatherOutDir) removeOutDir(weatherOutDir);
+    }
+  });
+
+  const clean = { overlaps: [], clipped: [], spills: [], beyondCard: 0 };
+  const CASE_IDS = WEATHER_CASES.map((weatherCase) => weatherCase.id);
+  const caseOf = (id: string) => WEATHER_CASES.find((candidate) => candidate.id === id)!;
+
+  it('ran every viewport to its end: twenty-eight cases each — the Gardener at three sizes, the Expert at four, with one, two, five and long-named cities — in Inter, at the viewport it claims', () => {
+    expect([...weatherFailures.entries()].map(([id, reason]) => `${id}: ${String(reason)}`)).toEqual([]);
+    expect(WEATHER_CASES).toHaveLength(28);
+    for (const view of WEATHER_VIEWS) {
+      expect(weatherCases.get(view.id)?.size, view.id).toBe(WEATHER_CASES.length);
+      for (const id of CASE_IDS) {
+        const measured = weatherOf(view.id, id);
+        expect(measured.viewport, `${view.id} ${id}`).toBe(view.width);
+        expect(measured.fontLoaded, `${view.id} ${id}: Inter not loaded`).toBe(true);
+      }
+    }
+  });
+
+  it.each(WEATHER_VIEWS.map((view) => view.id))('%s: every case is clean — no overlap, nothing clipped, nothing spilled, nothing beyond the card, no scrolling zone', (viewId) => {
+    for (const id of CASE_IDS) {
+      const measured = weatherOf(viewId, id);
+      expect(defects(measured), `${viewId} ${id}`).toEqual(clean);
+      expect(measured.scrollers, `${viewId} ${id}`).toEqual([]);
+    }
+  });
+
+  it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the card takes its size’s width, its pinned height from 600 px — and the Full width the height of its content', (viewId) => {
+    const view = WEATHER_VIEWS.find((candidate) => candidate.id === viewId)!;
+    for (const id of CASE_IDS) {
+      const { size } = caseOf(id);
+      const measured = weatherOf(viewId, id);
+      expect(measured.card.w, `${viewId} ${id}`).toBeCloseTo(widthOfSize(view.width, size), 0);
+      const pinned = WEATHER_PINNED[size];
+      if (view.width >= 600 && pinned) expect(measured.card.h, `${viewId} ${id}`).toBe(pinned);
+      if (size === 'wide') {
+        expect(
+          measured.body.scrollH,
+          `${viewId} ${id}: card ${measured.card.h} px, parts ${JSON.stringify(measured.parts)}`
+        ).toBeLessThanOrEqual(measured.body.h + 1);
+      }
+    }
+  });
+
+  it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the Gardener shows ONE city at every size — no navigator, no tab, no column — with its honest line on Medium and Large when a city is left out, its link on Large alone', (viewId) => {
+    for (const weatherCase of WEATHER_CASES.filter((candidate) => candidate.level === 'gardener')) {
+      const measured = weatherOf(viewId, weatherCase.id);
+      const label = `${viewId} ${weatherCase.id}`;
+      expect(measured.nav, label).toBe(false);
+      expect(measured.tabs, label).toEqual([]);
+      expect(measured.summary, label).toBeNull();
+      expect(measured.columns, label).toBe(0);
+      expect(measured.placeLines, label).toBe(1);
+      expect(measured.region, label).toBe(WEATHER_CITY_NAMES[weatherCase.kind][0]);
+      const leftOut = weatherCase.kind !== 'one' && weatherCase.size !== 'small';
+      expect(measured.honest !== null, label).toBe(leftOut);
+      expect(measured.honestLink, label).toBe(leftOut && weatherCase.size === 'large');
+      if (leftOut) {
+        for (const name of WEATHER_CITY_NAMES[weatherCase.kind].slice(1)) expect(measured.honest, label).toContain(name);
+      }
+    }
+  });
+
+  it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the Expert with several cities — the navigator on Small and Medium (the dots on Medium alone), the tabs on Large, the columns in the Full width; one city — the place line, or the full reading', (viewId) => {
+    const view = WEATHER_VIEWS.find((candidate) => candidate.id === viewId)!;
+    for (const weatherCase of WEATHER_CASES.filter((candidate) => candidate.level === 'expert')) {
+      const measured = weatherOf(viewId, weatherCase.id);
+      const label = `${viewId} ${weatherCase.id}`;
+      const names = WEATHER_CITY_NAMES[weatherCase.kind];
+      const several = names.length > 1;
+      expect(measured.honest, label).toBeNull();
+      if (weatherCase.size === 'small' || weatherCase.size === 'medium') {
+        expect(measured.nav, label).toBe(several);
+        expect(measured.tabs, label).toEqual([]);
+        expect(measured.placeLines, label).toBe(1);
+        expect(measured.rank, label).toBe(several ? `1 / ${names.length}` : null);
+        expect(measured.dots, label).toBe(several && weatherCase.size === 'medium' ? names.length : 0);
+        expect(measured.region, label).toBe(names[0]);
+      } else if (weatherCase.size === 'large') {
+        expect(measured.nav, label).toBe(false);
+        expect(measured.tabs.length, label).toBe(several ? names.length : 0);
+        expect(measured.placeLines, label).toBe(several ? 0 : 1);
+        expect(measured.region, label).toBe(names[0]);
+      } else {
+        expect(measured.nav, label).toBe(false);
+        expect(measured.tabs, label).toEqual([]);
+        expect(measured.placeLines, label).toBe(0);
+        expect(measured.summary, label).not.toBeNull();
+        expect(measured.columns, label).toBe(several ? names.length : 0);
+        if (several) {
+          const perRow = view.width >= 900 ? 4 : view.width >= 600 ? 2 : 1;
+          expect(measured.columnsPerRow, label).toBe(Math.min(perRow, names.length));
+          expect(measured.columnRows, label).toBe(Math.ceil(names.length / perRow));
+          expect(measured.region, label).toBe('Météo');
+        } else {
+          expect(measured.region, label).toBe(names[0]);
+        }
+      }
+    }
+  });
+
+  it('writes the summary of the Full width as the aggregate counts: « 5 villes · 5 jardins », « 2 villes · 3 jardins », « 1 ville · 3 jardins » — the garden names in full in every column, never an ellipsis', () => {
+    for (const view of WEATHER_VIEWS) {
+      for (const kind of WEATHER_CITY_SCENES) {
+        const served = weatherCitySceneData(kind);
+        const measured = weatherOf(view.id, `expert/wide/${kind}`);
+        const label = `${view.id} ${kind}`;
+        expect(measured.summary, label).toBe(`${served.cities} ville${served.cities > 1 ? 's' : ''} · ${served.gardens} jardins`);
+        if (served.cities > 1) {
+          expect(measured.columnGardens.filter((names) => names.length > 0), label).toHaveLength(served.cities);
+          const gardenNames = served.data.gardens.map((garden) => garden.name);
+          for (const cut of measured.ellipsized) {
+            expect(gardenNames.includes(cut.text.replace(/^"|"$/g, '')), `${label}: garden name ellipsized — ${cut.text}`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('ellipsizes nothing but a city’s name — in a navigator, a tab, a column head — and only where the name is long or the tabs many; the honest line and the garden lists wrap instead', () => {
+    for (const view of WEATHER_VIEWS) {
+      for (const weatherCase of WEATHER_CASES) {
+        const measured = weatherOf(view.id, weatherCase.id);
+        const names = WEATHER_CITY_NAMES[weatherCase.kind];
+        // The Medium honest line ellipsizes its TAIL — the names, after the statement — wherever the names outrun the card.
+        const isHonestTail = (text: string) => weatherCase.size === 'medium' && text.startsWith('Non affichés ici :');
+        const cityNameCuts: string[] = [];
+        for (const cut of measured.ellipsized) {
+          const text = cut.text.replace(/^"|"$/g, '');
+          const isCityName = names.some((name) => text.startsWith(name.slice(0, 8)));
+          expect(isCityName || isHonestTail(text), `${view.id} ${weatherCase.id}: ellipsized — ${cut.text} at ${cut.where}`).toBe(true);
+          if (isCityName) cityNameCuts.push(cut.text);
+        }
+        // A short city name is cut nowhere — but in the five tabs of a phone's Large card.
+        if (weatherCase.kind !== 'long' && (weatherCase.size !== 'large' || weatherCase.kind !== 'five' || view.width >= 600)) {
+          expect(cityNameCuts, `${view.id} ${weatherCase.id}`).toEqual([]);
+        }
+      }
+    }
+  });
+
+  it('draws the weather warning under every case — the widget shows a figure in each', () => {
+    for (const view of WEATHER_VIEWS) {
+      for (const id of CASE_IDS) expect(weatherOf(view.id, id).warning, `${view.id} ${id}`).toBe(true);
+    }
+  });
+
+  /** The six hour labels of the head — « 14 h », « 2 PM » — are 13 px by the frozen artboard (SMA-336, `DASHBOARD_WEATHER.hourLabel`): before lot F4, and not its to change. */
+  const isHourLabel = (label: string) => /^"\d{1,2} (h|AM|PM)"$/.test(label);
+
+  it('keeps every text at 14 px or more — the chips and the pills alone at 13 (V11), and the head’s six hour labels, 13 px since SMA-336', () => {
+    for (const view of WEATHER_VIEWS) {
+      for (const id of CASE_IDS) {
+        const under = weatherOf(view.id, id).smallFonts.filter((font) => font.px < (font.chip || isHourLabel(font.label) ? 13 : 14));
+        expect(under, `${view.id} ${id}`).toEqual([]);
+      }
+    }
   });
 });

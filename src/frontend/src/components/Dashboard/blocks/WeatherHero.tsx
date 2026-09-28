@@ -23,6 +23,14 @@ interface Props {
   /** Makes the place name a button that opens the location dialog (V21 b) — see `WeatherPlace`. */
   onEditPlace?: () => void;
   editPlaceLabel?: string;
+  /**
+   * SMA-448, lot F4 — what stands at the head of the column instead of the
+   * place line: the Expert's compact city navigator on the Small card, or
+   * `null` when the selector above the head already names the city (the
+   * Medium navigator, the Large tabs, the Full width's city header — V3-02:
+   * the name is written once). Left out, the place line is drawn as ever.
+   */
+  place?: ReactNode;
 }
 
 /**
@@ -48,12 +56,19 @@ export default function WeatherHero({
   footer,
   onEditPlace,
   editPlaceLabel,
+  place,
 }: Props) {
   const { t } = useTranslation();
   const small = size === 'small';
   const today = location.days[0];
   const degrees = (celsius: number) =>
     t('dashboard.blocks.weather.degrees', { value: displayTemperature(celsius, system) });
+  const placeLine =
+    place === undefined ? (
+      <WeatherPlace name={location.name} trailing={trailing} onEdit={onEditPlace} editLabel={editPlaceLabel} />
+    ) : (
+      place
+    );
 
   return (
     <Box
@@ -71,7 +86,10 @@ export default function WeatherHero({
               // between them (mobile lot, step 3: the head is stacked there).
               width: {
                 xs: '100%',
-                sm: trailing ? DASHBOARD_WEATHER.heroColumnWithChip : DASHBOARD_WEATHER.heroColumn,
+                sm:
+                  trailing && place === undefined
+                    ? DASHBOARD_WEATHER.heroColumnWithChip
+                    : DASHBOARD_WEATHER.heroColumn,
               },
               flexShrink: 0,
               height: { xs: 'auto', sm: '100%' },
@@ -79,12 +97,7 @@ export default function WeatherHero({
             }),
       }}
     >
-      <WeatherPlace
-        name={location.name}
-        trailing={trailing}
-        onEdit={onEditPlace}
-        editLabel={editPlaceLabel}
-      />
+      {placeLine}
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: small ? '8px' : '12px' }}>
         {/* The glyph is decorative: the condition text beside it names the

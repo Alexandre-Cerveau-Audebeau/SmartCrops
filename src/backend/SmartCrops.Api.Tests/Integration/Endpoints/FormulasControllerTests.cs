@@ -149,6 +149,28 @@ public class FormulasControllerTests : IntegrationTestBase
         Assert.False(novice.GetProperty("compactBar").GetBoolean());
     }
 
+    /// <summary>
+    /// SMA-448, lot F4 — how each formula shows the weather (V3-02, Alexandre
+    /// 22/09 18:52 and its complement): the Novice on its cards, the Gardener
+    /// one city, fixed, the Expert every city. Literals on purpose: the client
+    /// draws the Weather widget by these three words, and the reference file
+    /// is checked against them on both sides.
+    /// </summary>
+    [Fact]
+    public async Task GetFormulas_ServesTheWeatherModes_TheCardsOneCityEveryCity()
+    {
+        var userId = await SeedUserAsync();
+        AuthAs(userId);
+
+        using var body = await GetJsonAsync();
+        var byKey = body.RootElement.GetProperty("formulas").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("key").GetString()!, f => f.GetProperty("weather").GetString());
+
+        Assert.Equal("gardenCards", byKey["novice"]);
+        Assert.Equal("singleCity", byKey["gardener"]);
+        Assert.Equal("allCities", byKey["expert"]);
+    }
+
     [Fact]
     public async Task GetFormulas_ANewAccount_HasChosenNothing_AndEveryFormulaFits()
     {

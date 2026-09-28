@@ -10,7 +10,7 @@ import TodoBlock from '../../components/Dashboard/blocks/TodoBlock';
 import WeatherBlock from '../../components/Dashboard/blocks/WeatherBlock';
 import { dashboardFixture, gardenFixture, varietyFixture } from '../fixtures/dashboard';
 import { placement } from '../fixtures/placements';
-import { linkFixture, locationFixture, weatherFixture, weekFixture } from '../fixtures/weather';
+import { currentFixture, linkFixture, locationFixture, weatherFixture, weekFixture } from '../fixtures/weather';
 import { gardenViewOf, type GardenView } from '../../utils/gardenStats';
 import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOptions';
 import { cardBearsWeather, noviceCardsOf, type NoviceCard } from '../../components/Dashboard/noviceCards';
@@ -21,7 +21,7 @@ import type { Garden } from '../../types/Garden';
 import type { SaveState } from '../../hooks/useDashboardPreferences';
 import type { DashboardBlockKey, DashboardLevel, DashboardSize, FormulaRefusalReason, FormulasCatalog } from '../../types/Dashboard';
 import type { DashboardData, DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
-import type { DashboardWeatherData } from '../../types/DashboardWeather';
+import type { DashboardWeatherData, WeatherLocation } from '../../types/DashboardWeather';
 
 /**
  * SMA-336 mobile lot, step 7 (pre-flight D7) — the SCENE the layout harness
@@ -644,7 +644,7 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
   const common = { size: scene.size, editing: scene.editing, loading: false, loadError: false, onRetry: noop };
   switch (scene.key) {
     case 'weather':
-      return <WeatherBlock {...common} weather={weather} gardens={gs} onLocate={noop} onLocated={noop} />;
+      return <WeatherBlock {...common} weather={weather} cities="all" gardens={gs} onLocate={noop} onLocated={noop} />;
     case 'gardens':
       return (
         <GardensBlock
@@ -769,3 +769,72 @@ export const PLANNER_LAYOUT: GardenLayoutData = {
   config: { orientation: 'S', gardenType: 'terrace', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
   placements: [],
 };
+
+// ── The Weather widget by formula, on the real page (SMA-448, lot F4, W5) ──
+
+/**
+ * SMA-448, lot F4, step W5 (V5: « toute forme nouvelle devient une scène »)
+ * — the cities the page launcher serves the Weather widget: ONE (Écully, the
+ * scene's), TWO (Écully for Terrasse and Balcon sud, Annecy for Potager du
+ * fond), FIVE (a garden each — the two Novice gardens join the three), and
+ * five with LONG names — what a navigator, a row of tabs and a column head
+ * must ellipsize, and what a Gardener's honest line must name.
+ */
+export const WEATHER_CITY_SCENES = ['one', 'two', 'five', 'long'] as const;
+export type WeatherCityScene = (typeof WEATHER_CITY_SCENES)[number];
+
+/** The city names of each scene, in the order the aggregate serves them. */
+export const WEATHER_CITY_NAMES: Record<WeatherCityScene, readonly string[]> = {
+  one: ['Écully'],
+  two: ['Écully', 'Annecy'],
+  five: ['Écully', 'Annecy', 'Grenoble', 'Valence', 'Chambéry'],
+  long: [
+    'Saint-Rémy-en-Bouzemont-Saint-Genest-et-Isson',
+    'Villefranche-sur-Saône',
+    'Bourg-Saint-Maurice',
+    'Châteauneuf-du-Rhône',
+    'Saint-Étienne-de-Saint-Geoirs',
+  ],
+};
+
+export interface WeatherCitySceneData {
+  /** The gardens' aggregate `/api/dashboard` serves: three gardens, or five. */
+  data: DashboardData;
+  /** The weather aggregate: one place per city, each garden reading one. */
+  weather: DashboardWeatherData;
+  cities: number;
+  gardens: number;
+}
+
+/**
+ * The aggregate of a scene: Écully first — the same place every other scene
+ * reads —, then one place per further city on the shared five-day week, a
+ * current temperature of its own; the first two gardens on the first city
+ * under `two`, one garden per city under `five` and `long`.
+ */
+export function weatherCitySceneData(kind: WeatherCityScene): WeatherCitySceneData {
+  const names = WEATHER_CITY_NAMES[kind];
+  const list = names.length > 3 ? [...gardens, serre, carre] : gardens;
+  const places: WeatherLocation[] = names.map((name, index) =>
+    index === 0 && kind !== 'long'
+      ? ecully
+      : locationFixture({
+          key: `45.${index + 1}0,5.${index + 1}0`,
+          name,
+          region: 'Auvergne-Rhône-Alpes',
+          days: weekFixture(),
+          current: currentFixture({ tempC: 18 + index }),
+        })
+  );
+  const links = list.map((garden, index) => {
+    // `two`: the third garden alone on the second city; otherwise one per city.
+    const place = places[kind === 'two' ? (index === 2 ? 1 : 0) : Math.min(index, places.length - 1)]!;
+    return linkFixture({ gardenId: garden.id, locationKey: place.key, source: index === 0 ? 'profile' : 'garden' });
+  });
+  return {
+    data: dashboardFixture(list, { varieties }),
+    weather: weatherFixture(places, links),
+    cities: places.length,
+    gardens: list.length,
+  };
+}

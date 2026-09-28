@@ -503,16 +503,19 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     // ── Sizes per formula (SMA-437 lot 1, PR A, step A5 — pre-flight D4) ─────
 
     /// <summary>
-    /// <c>wide</c> is a size this server knows (the fourth, V8), and no block
-    /// may take it yet at any formula: a crafted PUT must not be able to show a
-    /// widget's Large stretched over the page's width. Strict on write. At the
-    /// two formulas that have widgets — the Novice has none since SMA-448,
-    /// lot F2, and refuses every document for that reason.
+    /// <c>wide</c> is a size this server knows (the fourth, V8), and a block
+    /// may take it only where its Full-width version is drawn: a crafted PUT
+    /// must not be able to show a widget's Large stretched over the page's
+    /// width. Strict on write. Tips has no Full width at any formula; the
+    /// Weather has one at the Expert's alone (SMA-448, lot F4), never at the
+    /// Gardener's. At the two formulas that have widgets — the Novice has
+    /// none since SMA-448, lot F2, and refuses every document for that reason.
     /// </summary>
     [Theory]
-    [InlineData(DashboardLayout.Levels.Expert)]
-    [InlineData(DashboardLayout.Levels.Gardener)]
-    public async Task PutPreferences_SizeTheFormulaDoesNotPermit_Returns400(string level)
+    [InlineData(DashboardLayout.Levels.Expert, DashboardLayout.Blocks.Tips)]
+    [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Tips)]
+    [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Weather)]
+    public async Task PutPreferences_SizeTheFormulaDoesNotPermit_Returns400(string level, string block)
     {
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId, level);
@@ -522,7 +525,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
             level,
             [.. DashboardPresets.For(level).Select(b => new SaveDashboardBlockRequest(
                 b.Key,
-                b.Key == DashboardLayout.Blocks.Weather ? DashboardLayout.Sizes.Wide : b.Size,
+                b.Key == block ? DashboardLayout.Sizes.Wide : b.Size,
                 b.Hidden,
                 null))]);
 
@@ -530,6 +533,36 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         await AssertNothingStoredAsync(userId);
+    }
+
+    /// <summary>
+    /// SMA-448, lot F4 (V3-02): the Expert's Weather in Full width — every
+    /// city at once — is a size the server permits, stores and reads back as
+    /// written. The one widget beside the Key figures band with a Full width.
+    /// </summary>
+    [Fact]
+    public async Task PutThenGetPreferences_WeatherInTheFullWidth_AtTheExpert_IsStoredAsWritten()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. DashboardPresets.For(DashboardLayout.Levels.Expert).Select(b => new SaveDashboardBlockRequest(
+                b.Key,
+                b.Key == DashboardLayout.Blocks.Weather ? DashboardLayout.Sizes.Wide : b.Size,
+                b.Hidden,
+                null))]);
+
+        var put = await Client.PutAsJsonAsync(Url, request);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.False(body.IsPreset);
+        Assert.Equal(DashboardLayout.Sizes.Wide, Block(body, DashboardLayout.Blocks.Weather).Size);
     }
 
     /// <summary>

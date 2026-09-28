@@ -13,18 +13,21 @@ import { ColorModeProvider } from '../../contexts/ColorModeContext';
 import { LanguageProvider } from '../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
-import type { DashboardLevel } from '../../types/Dashboard';
+import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 import {
   CHOICE_SCENES,
   NOVICE_SCENES,
   PLANNER_GARDEN,
   PLANNER_LAYOUT,
   SCENE_DATA,
+  WEATHER_CITY_SCENES,
   choiceSceneCatalog,
   noviceSceneData,
   weatherAll,
+  weatherCitySceneData,
   type ChoiceScene,
   type NoviceScene,
+  type WeatherCityScene,
 } from './scenes';
 import { measureCard, wrappedTexts, type CardMeasure } from './measure';
 
@@ -90,6 +93,20 @@ const plannerPage = params.get('page') === 'planner';
 const saveOutcome = params.get('save');
 /** The formula the page stands at: the choice scene's, or the query's. */
 const pageLevel: DashboardLevel = choiceScene ? choiceScene.level : level;
+
+// SMA-448, lot F4, step W5 — the Weather widget by formula: the cities the
+// aggregate serves (`weather=one|two|five|long`) and the size the stored
+// layout gives the widget (`wsize=small|medium|large|wide`). The size goes
+// through the page's own read of the layout: one the formula does not permit
+// comes back to the preset's, as on the real page.
+const weatherKindName = params.get('weather');
+const weatherKind: WeatherCityScene | null = weatherKindName
+  ? ((WEATHER_CITY_SCENES as readonly string[]).includes(weatherKindName) ? (weatherKindName as WeatherCityScene) : null)
+  : null;
+if (weatherKindName && !weatherKind) throw new Error(`No weather scene ${weatherKindName}`);
+const weatherSize = params.get('wsize') as DashboardSize | null;
+/** What `fetch` serves the page for the weather scene: its gardens and its aggregate — one place per city. */
+const weatherServed = weatherKind ? weatherCitySceneData(weatherKind) : null;
 
 /** A JSON answer. */
 const json = (body: unknown) =>
@@ -163,15 +180,20 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       isPreset: true,
       // The choice screen opens by itself on an account that never chose (N18).
       formulaChosen: choiceScene ? choiceScene.chosen : true,
-      blocks: presetFor(pageLevel),
+      // A stored layout with the Weather widget at the asked size (lot F4, W5).
+      blocks: presetFor(pageLevel).map((block) =>
+        weatherSize && block.key === 'weather' ? { ...block, size: weatherSize, hidden: false } : block
+      ),
       updatedAt: null,
       capabilities: capabilitiesFor(pageLevel),
     });
   }
-  if (url.startsWith('/api/dashboard/weather')) return json(served ? served.weather : weatherAll());
+  if (url.startsWith('/api/dashboard/weather')) {
+    return json(served ? served.weather : weatherServed ? weatherServed.weather : weatherAll());
+  }
   if (url.startsWith('/api/dashboard')) {
     if (failGardens) return new Response(null, { status: 500 });
-    return json(served ? served.data : SCENE_DATA);
+    return json(served ? served.data : weatherServed ? weatherServed.data : SCENE_DATA);
   }
   // A visitor: the navbar of someone not signed in, as the pre-flight measured it.
   if (url.startsWith('/api/auth/')) return new Response(null, { status: 401 });
@@ -267,6 +289,41 @@ export interface PlantingMeasure {
   area: Rect;
   /** The box it draws. */
   drawn: Rect;
+}
+
+/**
+ * SMA-448, lot F4, step W5 — THE WEATHER WIDGET BY FORMULA as the app mounts
+ * it: the card measured as the scenes' harness measures one, and the form it
+ * took — the place line, the Gardener's honest line, the Expert's compact
+ * navigator, its named tabs, its Full width in columns — with what each form
+ * draws, so the suite can say the right form stands at the right size.
+ */
+export interface WeatherMeasure extends CardMeasure {
+  viewport: number;
+  /** The widget's accessible name: its city, or « Météo » in the Full width of several cities. */
+  region: string | null;
+  /** How many place lines the card writes — one, or none under the tabs and in the Full width. */
+  placeLines: number;
+  /** The Gardener's honest line, and its link. */
+  honest: string | null;
+  honestLink: boolean;
+  /** The Expert's compact navigator: present, its rank « 1 / 6 », its dots. */
+  nav: boolean;
+  rank: string | null;
+  dots: number;
+  /** The Expert's named tabs, their labels. */
+  tabs: string[];
+  /** The Full width: its summary pill, its columns (none for one city, read in full), and the rows they take. */
+  summary: string | null;
+  columns: number;
+  columnRows: number;
+  columnsPerRow: number;
+  /** The garden names of the columns, and whether one of them is ellipsized — none may be. */
+  columnGardens: string[];
+  /** The weather warning under the grid, drawn or not (V1). */
+  warning: boolean;
+  /** The height and the content height of the card's parts, by their data tag — what a card that hides its own content says. */
+  parts: Record<string, { h: number; scrollH: number }>;
 }
 
 /**
@@ -653,6 +710,44 @@ const page = {
       warning: document.querySelector('[data-weather-disclaimer]') !== null,
       chipButton: document.querySelector('[data-level-chip]')?.getAttribute('role') === 'button',
       columns: new Set(cards.map((card) => card.box.x)).size,
+    };
+  },
+
+  /**
+   * SMA-448, lot F4, step W5 — the Weather widget as the app mounts it, at
+   * the size and with the cities the query asked (`wsize`, `weather`): the
+   * card as the scenes' harness measures one, and the form it took.
+   */
+  measureWeather(): WeatherMeasure {
+    const card = document.querySelector<HTMLElement>('[data-widget="weather"]');
+    if (!card) throw new Error('The page drew no Weather widget to measure.');
+    const text = (selector: string) => card.querySelector(selector)?.textContent ?? null;
+    const columns = [...card.querySelectorAll<HTMLElement>('[data-weather-cities] > [data-weather-city]')];
+    const tops = new Set(columns.map((column) => round(column.getBoundingClientRect().top)));
+    const lefts = new Set(columns.map((column) => round(column.getBoundingClientRect().left)));
+    return {
+      ...measureCard(card),
+      viewport: innerWidth,
+      region: card.getAttribute('aria-label'),
+      placeLines: card.querySelectorAll('[data-weather-place]').length,
+      honest: text('[data-weather-honest]'),
+      honestLink: card.querySelector('[data-weather-honest-link]') !== null,
+      nav: card.querySelector('[data-weather-nav]') !== null,
+      rank: card.querySelector('[data-weather-rank] [aria-hidden]')?.textContent ?? null,
+      dots: card.querySelectorAll('[data-weather-dot]').length,
+      tabs: [...card.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent ?? ''),
+      summary: text('[data-weather-summary]'),
+      columns: columns.length,
+      columnRows: tops.size,
+      columnsPerRow: lefts.size,
+      columnGardens: columns.map((column) => column.querySelector('[data-weather-city-gardens]')?.textContent ?? ''),
+      warning: document.querySelector('[data-weather-disclaimer]') !== null,
+      parts: Object.fromEntries(
+        ['data-weather-city', 'data-weather-head', 'data-weather-hero', 'data-weather-hours', 'data-weather-days', 'data-weather-band', 'data-weather-alerts']
+          .map((tag) => [tag, card.querySelector<HTMLElement>(`[${tag}]`)])
+          .filter((entry): entry is [string, HTMLElement] => entry[1] !== null)
+          .map(([tag, element]) => [tag, { h: round(element.getBoundingClientRect().height), scrollH: element.scrollHeight }])
+      ),
     };
   },
 

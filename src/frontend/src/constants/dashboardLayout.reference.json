@@ -39,7 +39,7 @@
       "keyfigures": ["small", "medium", "large"]
     },
     "expert": {
-      "weather": ["small", "medium", "large"],
+      "weather": ["small", "medium", "large", "wide"],
       "gardens": ["small", "medium", "large"],
       "tips": ["small", "medium", "large"],
       "month": ["small", "medium", "large"],

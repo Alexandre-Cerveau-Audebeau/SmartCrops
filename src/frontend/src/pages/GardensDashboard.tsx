@@ -46,7 +46,7 @@ import NoviceGardens from '../components/Dashboard/NoviceGardens';
 import ReconnectButton from '../components/ReconnectButton';
 import { cardBearsWeather, noviceCardsOf } from '../components/Dashboard/noviceCards';
 import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
-import { hasActionBar, isCardsPage, sizesFor } from '../constants/dashboardCapabilities';
+import { hasActionBar, isCardsPage, showsEveryCity, sizesFor } from '../constants/dashboardCapabilities';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
@@ -298,6 +298,11 @@ export default function GardensDashboard() {
   // widgets. The cards are derived ONCE, through `displayWeather` (A-4), for
   // the view that draws them and for the warning that follows them (V1).
   const cardsPage = capabilities !== null && isCardsPage(capabilities);
+  // SMA-448, lot F4 (V3-02) — the Weather widget shows every city to the
+  // formula whose capabilities say so (the Expert) and ONE fixed city to the
+  // other (the Gardener) — one city until the capabilities are read: the
+  // fewer cities, never a tab that a re-read takes away.
+  const weatherCities = capabilities !== null && showsEveryCity(capabilities) ? 'all' : 'single';
   // SMA-448, lot F3 (N18, Alexandre 26/09) — the choice of formula is
   // MANDATORY the first time: an account that never chose (FormulaChosenAt
   // null) sees the screen with the page, without a way out, until it
@@ -618,6 +623,10 @@ export default function GardensDashboard() {
             size={block.size}
             editing={editing}
             weather={weatherData}
+            cities={weatherCities}
+            // « Voir toutes vos villes » opens the formula choice screen, where
+            // every city is the Expert's (lot F4); the focus comes back to the link.
+            onSeeAllCities={openChooser}
             gardens={gardens}
             loading={weatherLoading}
             refreshing={weatherRefreshing}

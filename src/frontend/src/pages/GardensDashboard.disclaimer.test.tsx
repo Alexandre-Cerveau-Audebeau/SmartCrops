@@ -197,6 +197,17 @@ const WEATHER_FIGURE_SELECTORS = [
   '[data-novice-task="water"]',
   '[data-novice-task="cold"]',
   '[data-novice-task="frost"]',
+  // SMA-448, lot F4 — the Weather widget's new forms: the Expert's compact
+  // navigator and Full-width summary, its columns (one per city, each with
+  // its now and its four next days), and the Gardener's honest line, which
+  // names the cities the widget does not show.
+  '[data-weather-nav]',
+  '[data-weather-summary]',
+  '[data-weather-cities]',
+  '[data-weather-city]',
+  '[data-weather-city-now]',
+  '[data-weather-city-days]',
+  '[data-weather-honest]',
 ] as const;
 
 /** Every rendered node of `WEATHER_FIGURE_SELECTORS` — empty when the page draws no weather. */
@@ -637,6 +648,129 @@ describe('GardensDashboard — the Novice page bears the warning by what its car
     await waitFor(() => expect(document.querySelectorAll('[data-novice-weather-unavailable]')).toHaveLength(3));
     expect(temperatures()).toHaveLength(0);
     expect(forecastTasks()).toEqual([]);
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(disclaimers()).toHaveLength(0);
+  });
+});
+
+// SMA-448, lot F4, step W4 — the warning follows the Weather widget's NEW
+// FORMS as it follows its old ones (V1: never absent while a weather figure
+// is on the page): the Gardener's one fixed city with its honest line, the
+// Expert's compact navigator and named tabs, the Expert's Full width — every
+// city in columns — and stays absent when every city is unavailable or the
+// aggregate could not be read, where the columns show no figure either.
+describe('GardensDashboard — the weather warning follows the weather by formula (SMA-448, lot F4)', () => {
+  /** A stored layout: the Weather widget alone among the bearing widgets, at `size`, the Gardens table beside it. */
+  function serveWeatherAt(level: DashboardLevel, size: 'small' | 'medium' | 'large' | 'wide') {
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level,
+      capabilities: capabilitiesFor(level),
+      isPreset: false,
+      formulaChosen: true,
+      blocks: presetFor(level).map((block) =>
+        block.key === 'weather' ? { ...block, size, hidden: false } : { ...block, hidden: block.key !== 'gardens' }
+      ),
+      updatedAt: null,
+    });
+  }
+  const weatherCard = () => document.querySelector('[data-widget="weather"]') as HTMLElement;
+
+  it.each(['medium', 'large'] as const)('the Gardener, two cities, Weather %s: one city, its honest line — and the warning', async (size) => {
+    serveWeatherAt('gardener', size);
+    serve(aggregateWith('fresh', 'fresh'));
+
+    await renderPage('fr');
+
+    const note = await screen.findByRole('note');
+    expect(disclaimers()).toHaveLength(1);
+    // The Large card writes the sentence; the Medium card its one-line form (W5's measure).
+    expect(weatherCard().querySelector('[data-weather-honest]')).toHaveTextContent(
+      size === 'large' ? 'Vos jardins d’Annecy ne sont pas affichés ici.' : 'Non affichés ici : Annecy'
+    );
+    expect(weatherCard().querySelector('[data-weather-nav]')).toBeNull();
+    expect(note.closest('[data-widget]')).toBeNull();
+    expect(weatherFigures().length).toBeGreaterThan(0);
+  });
+
+  it('the Expert, two cities, Weather Medium: the compact navigator — and the warning', async () => {
+    serveWeatherAt('expert', 'medium');
+    serve(aggregateWith('fresh', 'fresh'));
+
+    await renderPage('fr');
+
+    await screen.findByRole('note');
+    expect(disclaimers()).toHaveLength(1);
+    expect(weatherCard().querySelector('[data-weather-nav]')).not.toBeNull();
+    expect(weatherCard().querySelector('[data-weather-rank]')).toHaveTextContent('1 / 2');
+  });
+
+  it('the Expert, two cities, Weather Large: the named tabs — and the warning', async () => {
+    serveWeatherAt('expert', 'large');
+    serve(aggregateWith('fresh', 'fresh'));
+
+    await renderPage('fr');
+
+    await screen.findByRole('note');
+    expect(disclaimers()).toHaveLength(1);
+    expect(screen.getByRole('tablist', { name: 'Lieux' })).toBeInTheDocument();
+  });
+
+  it('the Expert, two cities, Weather in the Full width: every city in columns — and the warning, under the grid', async () => {
+    serveWeatherAt('expert', 'wide');
+    serve(aggregateWith('fresh', 'stale'));
+
+    await renderPage('fr');
+
+    const note = await screen.findByRole('note');
+    expect(disclaimers()).toHaveLength(1);
+    const columns = weatherCard().querySelectorAll('[data-weather-cities] > [data-weather-city]');
+    expect(columns).toHaveLength(2);
+    expect(weatherCard().querySelector('[data-weather-summary]')).toHaveTextContent('2 villes · 2 jardins');
+    // Under the grid, outside every widget — the Full width included.
+    expect(weatherCard().compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(note.closest('[data-widget]')).toBeNull();
+    expect(note.textContent).toBe(fr.dashboard.weatherDisclaimer);
+  });
+
+  it('the Expert, Full width, one city of two unavailable: the other’s figures are on the page — the warning stays', async () => {
+    serveWeatherAt('expert', 'wide');
+    serve(aggregateWith('fresh', 'unavailable'));
+
+    await renderPage('fr');
+
+    await screen.findByRole('note');
+    expect(disclaimers()).toHaveLength(1);
+    const columns = [...weatherCard().querySelectorAll('[data-weather-cities] > [data-weather-city]')];
+    expect(columns[0]!.querySelector('[data-weather-temperature]')).toHaveTextContent('24°');
+    expect(columns[1]!.querySelector('[data-weather-city-unavailable]')).toHaveTextContent('Météo momentanément indisponible.');
+    expect(weatherCard().querySelectorAll('[data-weather-retry]')).toHaveLength(1);
+  });
+
+  it('the Expert, Full width, every city unavailable: no figure in any column — no warning, one « Réessayer »', async () => {
+    serveWeatherAt('expert', 'wide');
+    serve(aggregateWith('unavailable', 'unavailable'));
+
+    await renderPage('fr');
+
+    await weatherLanded();
+    expect(weatherCard().querySelectorAll('[data-weather-city-unavailable]')).toHaveLength(2);
+    expect(weatherCard().querySelector('[data-weather-temperature]')).toBeNull();
+    expect(weatherCard().querySelectorAll('[data-weather-retry]')).toHaveLength(1);
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(disclaimers()).toHaveLength(0);
+    expect(document.body.textContent).not.toMatch(/\d\s?°/);
+  });
+
+  it('the Expert, Full width, behind a load error: the error and its Retry, no column — no warning', async () => {
+    serveWeatherAt('expert', 'wide');
+    vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('synthetic'));
+
+    await renderPage('fr');
+
+    expect(await screen.findByText('Impossible de charger la météo.')).toBeInTheDocument();
+    expect(weatherCard().querySelector('[data-weather-cities]')).toBeNull();
+    expect(weatherCard().querySelector('[data-weather-summary]')).toBeNull();
     expect(screen.queryByRole('note')).toBeNull();
     expect(disclaimers()).toHaveLength(0);
   });

@@ -90,6 +90,20 @@ export interface GalleryPreview {
 }
 
 /**
+ * SMA-448, lot F4 — how a formula shows the weather, as `FormulaCatalog.
+ * WeatherModes` serves it (V3-02, decided by Alexandre on 22/09 18:52 and its
+ * complement): `gardenCards` — no widget, the weather of each garden's own
+ * city on its card (the Novice page, lot F2); `singleCity` — the Weather
+ * widget for ONE city, fixed, never a tab nor a navigator (the Gardener);
+ * `allCities` — every city, one at a time up to Large, all together in the
+ * Full width (the Expert). The vocabulary the wire is parsed with; the
+ * reference file (`dashboardLayout.reference.json`) is checked against it.
+ */
+export const WEATHER_MODES = ['gardenCards', 'singleCity', 'allCities'] as const;
+
+export type WeatherMode = (typeof WEATHER_MODES)[number];
+
+/**
  * SMA-448, lot F1 — what a formula permits, as the API SERVES it (pre-flight
  * § C.2 a, decided by Alexandre on 26/09): the client draws from this rather
  * than from a copy of its own. The server builds it from the tables it refuses
@@ -108,8 +122,8 @@ export interface FormulaCapabilities {
   sizes: Partial<Record<DashboardBlockKey, DashboardSizeList>>;
   /** Its default layout — what « Réinitialiser » returns to, and « · ajustée » compares against. */
   preset: DashboardBlock[];
-  /** How it shows the weather — `gardenCards`, `singleCity`, `allCities`; read from lot F4. */
-  weather: string;
+  /** How it shows the weather (lot F4): the cards page, one fixed city, or every city — see {@link WEATHER_MODES}. */
+  weather: WeatherMode;
   /** Whether the page draws the compact action bar (A-9). */
   compactBar: boolean;
 }
@@ -226,6 +240,10 @@ export function isDashboardLevel(value: string): value is DashboardLevel {
 
 export function isDashboardSize(value: string): value is DashboardSize {
   return (DASHBOARD_SIZES as readonly string[]).includes(value);
+}
+
+export function isWeatherMode(value: string): value is WeatherMode {
+  return (WEATHER_MODES as readonly string[]).includes(value);
 }
 
 /**

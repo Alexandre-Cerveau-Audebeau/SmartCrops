@@ -7,7 +7,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../types/DashboardWeather';
 import { gardens as sceneGardens, varieties as sceneVarieties, weatherAll } from '../test/layout/scenes';
-import { linkFixture, locationFixture, weatherFixture, weekFixture } from '../test/fixtures/weather';
+import { dayFixture, hoursOf, linkFixture, locationFixture, weatherFixture, weekFixture } from '../test/fixtures/weather';
 import { gardenAdvice } from '../components/Dashboard/blocks/gardenAdvice';
 import { monthCalendar } from '../components/Dashboard/blocks/plantCalendar';
 import { todoTasks } from '../components/Dashboard/blocks/todoTasks';
@@ -84,13 +84,13 @@ const nowhere = (): DashboardWeatherData =>
  * This month in Small (its three counts), Weather and Gardens in Large (the
  * MÉTÉO column).
  */
-function serve(figures: KeyFigure[], size: 'medium' | 'large' = 'medium') {
+function serve(figures: KeyFigure[], size: 'medium' | 'large' = 'medium', weatherSize: 'large' | 'wide' = 'large') {
   const blocks: DashboardBlock[] = [
     { key: 'keyfigures', size: 'wide', hidden: false, options: { figures } },
     { key: 'todo', size, hidden: false },
     { key: 'tips', size, hidden: false },
     { key: 'month', size: 'small', hidden: false },
-    { key: 'weather', size: 'large', hidden: false },
+    { key: 'weather', size: weatherSize, hidden: false },
     { key: 'gardens', size: 'large', hidden: false },
     { key: 'counters', size: 'large', hidden: true },
     { key: 'stats', size: 'large', hidden: true },
@@ -574,5 +574,61 @@ describe('the Novice page reads the weather the page reads — a card that says 
     expect(count('[data-novice-weather]')).toBe(0);
     expect(count('[data-novice-weather-unavailable]')).toBe(3);
     expect(document.querySelector('[data-weather-disclaimer]')).toBeNull();
+  });
+});
+
+// SMA-448, lot F4, step W4 — A PAGE NEVER CONTRADICTS ITSELF (A-4) on the
+// Expert's Full width: the band's « Villes » and « Jardins localisés » are the
+// Weather widget's summary and its columns, the MÉTÉO column agrees, and the
+// To-do widget's frost task for a garden reads the same forecast the garden's
+// own column shows in its band — one source, `displayWeather`.
+describe('the band, the Full-width Weather widget and the To-do widget agree (SMA-448, lot F4, W4)', () => {
+  /** Écully for Terrasse and Balcon sud; Annecy — frost tonight, −1° — for Potager du fond. */
+  const twoCities = (): DashboardWeatherData => {
+    const base = weatherAll();
+    const annecy = locationFixture({
+      key: '45.90,6.13',
+      name: 'Annecy',
+      days: [
+        dayFixture({ date: '2026-09-12', minTempC: -1, maxTempC: 8, hours: hoursOf('2026-09-12', -1, 8) }),
+        ...weekFixture().slice(1),
+      ],
+    });
+    return weatherFixture(
+      [...base.locations, annecy],
+      base.gardens.map((link) => (link.gardenId === 'g3' ? linkFixture({ gardenId: 'g3', locationKey: annecy.key, source: 'garden' }) : link))
+    );
+  };
+
+  it('« Villes » is the number of columns and « Jardins localisés » the summary’s count; the frost of Annecy is in its column’s band and in the To-do list, for the same garden', async () => {
+    serve(['todo', 'tips', 'located', 'cities'], 'large', 'wide');
+    vi.mocked(fetchDashboardWeather).mockResolvedValue(twoCities());
+    localStorage.setItem('smartcrops-language', 'fr');
+    renderPage();
+    await waitFor(() => expect(document.querySelector('[data-key-figure="cities"]')).not.toBeNull());
+    await waitFor(() => expect(weatherColumn().located).toBe(3));
+
+    const columns = [...widget('weather').querySelectorAll('[data-weather-cities] > [data-weather-city]')];
+    expect(columns).toHaveLength(2);
+    expect(widget('weather').querySelector('[data-weather-summary]')).toHaveTextContent('2 villes · 3 jardins');
+    expect(numberIn(tile('cities').value)).toBe(columns.length);
+    expect(tile('cities').sub).toBe('Écully, Annecy');
+    expect(numberIn(tile('located').value)).toBe(3);
+    expect(weatherColumn()).toEqual({ located: 3, cities: 2 });
+
+    // The same forecast, drawn twice and never in disagreement: Annecy's
+    // column says frost tonight, and the To-do lists the frost task of the
+    // garden in Annecy — Potager du fond — with the same minimum.
+    expect(columns[1]!.querySelector('[data-weather-city-name]')).toHaveTextContent('Annecy');
+    expect(columns[1]!.querySelector('[data-weather-band]')).toHaveTextContent('Gel possible cette nuit');
+    expect(columns[0]!.querySelector('[data-weather-band]')).not.toHaveTextContent('Gel possible cette nuit');
+    const frost = [...widget('todo').querySelectorAll('[data-todo-task="frost"]')];
+    expect(frost).toHaveLength(1);
+    // The one frost task of the scene is Potager du fond's — its placements, its city's minimum.
+    const expected = todoTasks(sceneGardens, sceneVarieties, twoCities()).find((task) => task.kind === 'frost')!;
+    expect(expected.gardenId).toBe('g3');
+    expect(frost[0]).toHaveTextContent(`${expected.count} plantes`);
+    expect(frost[0]).toHaveTextContent('-1°');
+    expect(numberIn(tile('todo').value)).toBe(todoWidget().count);
   });
 });

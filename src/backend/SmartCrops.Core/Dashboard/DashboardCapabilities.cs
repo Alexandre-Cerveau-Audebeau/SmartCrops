@@ -12,11 +12,12 @@ namespace SmartCrops.Core.Dashboard;
 /// and a block gets it only once its Full-width version is DRAWN — until then
 /// a crafted request could show its Large stretched over the page's width. So
 /// the table follows what is drawn, not only what is permitted: Jardins,
-/// Météo, Statistiques, Compteurs and Ce mois-ci will each add
+/// Statistiques, Compteurs and Ce mois-ci will each add
 /// <see cref="DashboardLayout.Sizes.Wide"/> to their Expert row in their own
 /// lot, on both sides. The Key figures band arrived with it as its one size
 /// (PR B, step B1 — pre-flight D3: « keyfigures@Expert = [wide] ; tout le reste
-/// = [P, M, G] »).</para>
+/// = [P, M, G] »); Météo followed with SMA-448, lot F4 (V3-02: every city at
+/// once), as its fourth size.</para>
 ///
 /// <para>Which level HAS a block is not this table's to say but its preset's
 /// (<see cref="DashboardPresets.Permits"/>, D4): the band's rows at the Novice
@@ -40,6 +41,13 @@ public static class DashboardCapabilities
     private static readonly IReadOnlyList<string> WideOnly = [DashboardLayout.Sizes.Wide];
 
     /// <summary>
+    /// The three sizes, then the Full width — the Expert's cycle P → M → G →
+    /// PL → P (A-N11) for a block whose Full-width version is drawn.
+    /// </summary>
+    private static readonly IReadOnlyList<string> ThreeSizesAndWide =
+        [DashboardLayout.Sizes.Small, DashboardLayout.Sizes.Medium, DashboardLayout.Sizes.Large, DashboardLayout.Sizes.Wide];
+
+    /// <summary>
     /// The Expert's row, block by block: the one level the Full width is ever
     /// offered to. A row here, not a rule, so the day a block is drawn in Full
     /// width is a one-line change that a review sees.
@@ -47,7 +55,9 @@ public static class DashboardCapabilities
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> ExpertSizes =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
-            [DashboardLayout.Blocks.Weather] = ThreeSizes,
+            // SMA-448, lot F4 (V3-02): the Expert's Weather is drawn in Full
+            // width — every city at once, one column per city.
+            [DashboardLayout.Blocks.Weather] = ThreeSizesAndWide,
             [DashboardLayout.Blocks.Gardens] = ThreeSizes,
             [DashboardLayout.Blocks.Tips] = ThreeSizes,
             [DashboardLayout.Blocks.Month] = ThreeSizes,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displaySpeed, displayTemperature, truncate } from './weatherFormat';
+import { cityList, displaySpeed, displayTemperature, frenchElides, truncate } from './weatherFormat';
 
 describe('displayTemperature — whole degrees in the chosen system', () => {
   it('metric keeps the Celsius value, rounded', () => {
@@ -22,6 +22,32 @@ describe('displaySpeed — whole km/h or mph', () => {
     expect(displaySpeed(55, 'imperial')).toBe(34);
     expect(displaySpeed(12.4, 'metric')).toBe(12);
     expect(displaySpeed(0, 'imperial')).toBe(0);
+  });
+});
+
+// SMA-448, lot F4 — the cities the Gardener's honest line names.
+describe('cityList — every city left out, joined as the language joins a list', () => {
+  const french = (name: string) => (frenchElides(name) ? `d’${name}` : `de ${name}`);
+
+  it('joins one, two and three cities the French way, with the preposition each name takes — never « N autres »', () => {
+    expect(cityList(['Annecy'], 'fr', french)).toBe('d’Annecy');
+    expect(cityList(['Annecy', 'Grenoble'], 'fr', french)).toBe('d’Annecy et de Grenoble');
+    expect(cityList(['Annecy', 'Grenoble', 'Valence'], 'fr', french)).toBe('d’Annecy, de Grenoble et de Valence');
+    expect(cityList(['Annecy', 'Grenoble', 'Valence', 'Chambéry'], 'fr', french)).toBe('d’Annecy, de Grenoble, de Valence et de Chambéry');
+  });
+
+  it('joins them the English way, names alone', () => {
+    expect(cityList(['Annecy', 'Grenoble'], 'en', (name) => name)).toBe('Annecy and Grenoble');
+    expect(cityList(['Annecy', 'Grenoble', 'Valence'], 'en', (name) => name)).toBe('Annecy, Grenoble, and Valence');
+  });
+});
+
+describe('frenchElides — « d’ » before a vowel or an h, « de » otherwise', () => {
+  it('elides before a vowel, an accented vowel and an h; not before a consonant', () => {
+    expect(['Annecy', 'Évry', 'Honfleur', 'Orléans', 'Issoire', 'Uzès', 'Yvetot', 'Écully'].map(frenchElides)).toEqual([
+      true, true, true, true, true, true, true, true,
+    ]);
+    expect(['Lyon', 'Grenoble', 'Valence', 'Chambéry', 'Saint-Étienne'].map(frenchElides)).toEqual([false, false, false, false, false]);
   });
 });
 
