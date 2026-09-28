@@ -9,6 +9,11 @@ import type { DashboardLevel } from '../types/Dashboard';
 import type { Garden } from '../types/Garden';
 
 vi.mock('../services/plantApi', () => ({ fetchPlants: vi.fn() }));
+vi.mock('../services/gardenSettingsApi', () => ({
+  openGarden: vi.fn(() => Promise.resolve()),
+  saveGardenOrder: vi.fn(),
+}));
+
 vi.mock('../services/gardenApi', () => ({
   fetchGarden: vi.fn(),
   updateGarden: vi.fn(),

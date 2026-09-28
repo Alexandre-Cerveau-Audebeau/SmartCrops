@@ -568,6 +568,15 @@ export default function GardensDashboard() {
     }
   };
 
+  // SMA-448, lot F5-a — the widget's door to the creation dialog ENDS the
+  // Edit mode first, as the header's does (A-7 amended 25/09; the constat C1
+  // of PR #291, versed to this lot): the page behind the dialog is back at
+  // rest, and the pending save of the layout runs on under it.
+  const createFromWidget = () => {
+    if (editing) changeEditing(false);
+    setCreateDialogOpen(true);
+  };
+
   const handleDeleted = () => {
     setToastSeq((sequence) => sequence + 1);
     setToastOpen(true);
@@ -659,7 +668,7 @@ export default function GardensDashboard() {
             showHarvestColumn={isBlockVisible('harvest')}
             weather={gardensWeather}
             onLocate={openLocate}
-            onCreateClick={() => setCreateDialogOpen(true)}
+            onCreateClick={createFromWidget}
             onChanged={refetch}
             onDeleted={handleDeleted}
             onExpand={() =>

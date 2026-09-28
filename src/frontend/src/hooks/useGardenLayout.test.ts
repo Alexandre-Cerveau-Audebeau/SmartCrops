@@ -8,6 +8,9 @@ import type { Garden } from '../types/Garden';
 
 vi.mock('../services/gardenApi', () => ({ fetchGarden: vi.fn() }));
 vi.mock('../services/gardenLayoutApi', () => ({ fetchLayout: vi.fn() }));
+vi.mock('../services/gardenSettingsApi', () => ({ openGarden: vi.fn() }));
+
+import { openGarden } from '../services/gardenSettingsApi';
 
 // Fully-typed contract fixture (SMA-285 R2): `satisfies Garden` makes any
 // future API-contract drift fail compilation — no `as` casts hiding missing
@@ -47,6 +50,8 @@ const layoutOf = (id: string): GardenLayoutData => ({
 beforeEach(() => {
   vi.mocked(fetchGarden).mockReset();
   vi.mocked(fetchLayout).mockReset();
+  vi.mocked(openGarden).mockReset();
+  vi.mocked(openGarden).mockResolvedValue(undefined);
 });
 
 describe('useGardenLayout (SMA-213)', () => {
@@ -179,5 +184,53 @@ describe('useGardenLayout (SMA-213)', () => {
       'a',
       expect.any(AbortSignal)
     );
+  });
+});
+
+// SMA-448, lot F5-a (A-N6) — the planner's opening: one explicit call per
+// garden opened, never a GET that writes, never on a refetch, and its
+// failure never a word on the plan.
+describe('useGardenLayout — the opening of a garden (SMA-448, lot F5-a)', () => {
+  it('stamps the opening ONCE per garden opened, after the reads are launched, and not again on a refetch', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(gardenOf('a'));
+    vi.mocked(fetchLayout).mockResolvedValue(layoutOf('a'));
+
+    const { result } = renderHook(() => useGardenLayout('a'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(openGarden).toHaveBeenCalledTimes(1);
+    expect(openGarden).toHaveBeenCalledWith('a');
+
+    act(() => result.current.refetch());
+    await waitFor(() => expect(vi.mocked(fetchLayout)).toHaveBeenCalledTimes(2));
+    expect(openGarden).toHaveBeenCalledTimes(1);
+  });
+
+  it('stamps the new garden when the planner switches to it', async () => {
+    vi.mocked(fetchGarden).mockImplementation((id: string) => Promise.resolve(gardenOf(id)));
+    vi.mocked(fetchLayout).mockImplementation((id: string) => Promise.resolve(layoutOf(id)));
+
+    const { rerender } = renderHook(({ id }: { id: string }) => useGardenLayout(id), { initialProps: { id: 'a' } });
+    rerender({ id: 'b' });
+
+    await waitFor(() => expect(openGarden).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(openGarden).mock.calls.map((call) => call[0])).toEqual(['a', 'b']);
+  });
+
+  it('stays SILENT when the opening fails — a 404 from a server before this lot, a network that dropped: the plan loads, no error', async () => {
+    vi.mocked(openGarden).mockRejectedValue(new Error('404'));
+    vi.mocked(fetchGarden).mockResolvedValue(gardenOf('a'));
+    vi.mocked(fetchLayout).mockResolvedValue(layoutOf('a'));
+
+    const { result } = renderHook(() => useGardenLayout('a'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBeNull();
+    expect(result.current.data?.garden.id).toBe('a');
+  });
+
+  it('never stamps without a garden id', () => {
+    renderHook(() => useGardenLayout(undefined));
+
+    expect(openGarden).not.toHaveBeenCalled();
   });
 });

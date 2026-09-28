@@ -329,3 +329,25 @@ describe('the Medium list is unchanged (A-N4)', () => {
     await waitFor(() => expect(widget().querySelector('table')).not.toBeNull());
   });
 });
+
+// SMA-448, lot F5-a — the widget's door to the creation dialog ends the Edit
+// mode first, as the header's does (A-7 amended 25/09, decided by Alexandre;
+// the constat C1 of PR #291 versed to this lot).
+describe('the widget’s « Créer un jardin » door', () => {
+  it('in Edit mode, ends the mode FIRST, then opens the dialog — like the header’s', async () => {
+    await renderWith('gardener', null, 'medium');
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    fireEvent.click(edit);
+    await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+
+    fireEvent.click(within(widget()).getByRole('button', { name: 'Create Garden' }));
+
+    await screen.findByRole('dialog', { name: 'Create a new garden' }, RENDER_TIMEOUT);
+    // The mode is over: « Edit » is back in the header, « Done » gone — read
+    // through the dialog's veil (MUI hides the page from assistive technology
+    // while a modal is open), hence `hidden: true`.
+    expect(screen.queryByRole('button', { name: 'Done', hidden: true })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit', hidden: true })).toBeInTheDocument();
+  });
+});
