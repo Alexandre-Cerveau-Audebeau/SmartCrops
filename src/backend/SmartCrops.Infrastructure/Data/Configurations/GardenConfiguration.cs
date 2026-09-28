@@ -45,6 +45,12 @@ public class GardenConfiguration : IEntityTypeConfiguration<Garden>
             t.HasCheckConstraint(
                 "CK_Gardens_Location_Name",
                 "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND \"LocationName\" !~ '^[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$')");
+            // SMA-448, lot F5-a (A-N5): a place in the custom order is never
+            // negative — the one invariant the column has; NULL-tolerant, so
+            // every existing row is « not yet ranked ».
+            t.HasCheckConstraint(
+                "CK_Gardens_SortOrder_NonNegative",
+                "\"SortOrder\" IS NULL OR \"SortOrder\" >= 0");
         });
 
         builder.Property(g => g.CreatedAt)

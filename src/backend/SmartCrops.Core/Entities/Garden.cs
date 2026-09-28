@@ -81,5 +81,36 @@ public class Garden : IHasUpdatedAt
     /// </summary>
     public DateTime? LocationResolvedAt { get; set; }
 
+    // ── The Gardens widget's settings (SMA-448, lot F5-a) ───────────────────
+    // Two nullable columns with NO database defaults, the doctrine of the two
+    // blocks above: NULL IS the « never » state. Neither is ever written by a
+    // tracked entity — <c>UpdateTimestampInterceptor</c> stamps <see cref="UpdatedAt"/>
+    // on every Modified <see cref="IHasUpdatedAt"/>, and « dernière
+    // modification » must stay true — so both are written by set-based SQL
+    // (<c>ExecuteUpdateAsync</c>, a raw UPDATE), the way the formula is
+    // (<c>FormulasController</c>). Decided by Alexandre on 28/09 (SMA-448,
+    // pre-flight F5 § C.1, § C.2, § C.5; contract v3 A-N5, A-N6).
+
+    /// <summary>
+    /// UTC instant the planner was last opened on this garden — ONE stamp, no
+    /// history (A-N6). Null: never opened since the column exists; the
+    /// « Derniers ouverts » sort then falls back on <see cref="UpdatedAt"/>.
+    /// Written by <c>POST /api/gardens/{id}/open</c> alone, never by a GET.
+    /// Exported with the account's data (art. 20) and deleted with it.
+    /// </summary>
+    public DateTime? LastOpenedAt { get; set; }
+
+    /// <summary>
+    /// The garden's place in the account's CUSTOM order (A-N5), 0-based,
+    /// non-negative (<c>CK_Gardens_SortOrder_NonNegative</c>). Null: not yet
+    /// ranked — a garden created after the order was set, which the client
+    /// puts at the HEAD without any write. Relative, not dense: gaps do not
+    /// matter, and a deleted garden leaves with its row. Written by
+    /// <c>PUT /api/gardens/order</c> alone, under the account's formula lock.
+    /// A property of the garden, not of a formula's layout: it survives a
+    /// switch of formula and « Réinitialiser » alike.
+    /// </summary>
+    public int? SortOrder { get; set; }
+
     public ICollection<GardenPlacement> Placements { get; set; } = [];
 }
