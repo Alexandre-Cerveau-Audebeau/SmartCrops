@@ -42,6 +42,32 @@ export function nameList(
   return new Intl.ListFormat(language, { type: 'conjunction' }).format(items);
 }
 
+/**
+ * SMA-448, lot F4 — « d’Annecy et de Grenoble » / « Annecy and Grenoble »: the
+ * cities the Gardener's honest line names, EVERY one of them (a city left
+ * out of the widget is a city the line exists to name — never « N autres »),
+ * each through `ofCity` (the language's preposition, if it has one), joined
+ * as the language joins a list.
+ */
+export function cityList(
+  names: readonly string[],
+  language: string,
+  ofCity: (name: string) => string
+): string {
+  return new Intl.ListFormat(language, { type: 'conjunction' }).format(names.map(ofCity));
+}
+
+/**
+ * Whether the French preposition elides before a city name — « d’Annecy »,
+ * « d’Évry », « d’Honfleur » (the h of a French place name is mute), but
+ * « de Lyon ». A vowel or an h at the first letter, accents included; a
+ * name that starts with an article (« Le Havre ») keeps « de », the one case
+ * this rule does not know (« de Le Havre » for « du Havre »).
+ */
+export function frenchElides(name: string): boolean {
+  return /^[aeiouyhàâäæéèêëîïôöœùûüÿ]/i.test(name.trim());
+}
+
 /** « Vent violent en Auvergne-Rhône-Alpes… » cut to `max` characters with an ellipsis. */
 export function truncate(text: string, max: number): string {
   const chars = [...text.trim()];

@@ -84,11 +84,14 @@ const unlocated = (): DashboardWeatherData =>
 
 type Props = React.ComponentProps<typeof WeatherBlock>;
 
-function renderBlock(over: Partial<Props> = {}) {
-  localStorage.setItem('smartcrops-language', 'en');
+function renderBlock(over: Partial<Props> = {}, language: 'en' | 'fr' = 'en') {
+  localStorage.setItem('smartcrops-language', language);
   const props: Props = {
     size: 'large' as DashboardSize,
     weather: allLyon(),
+    // Every city, the Expert's — the widget these artboards drew (lot F4
+    // added the Gardener's single city; its own describe below).
+    cities: 'all',
     gardens,
     loading: false,
     loadError: false,
@@ -97,17 +100,20 @@ function renderBlock(over: Partial<Props> = {}) {
     onLocated: vi.fn(),
     ...over,
   };
-  render(
+  const tree = (current: Props) => (
     <ThemeProvider theme={createTheme()}>
       <LanguageProvider>
         <UnitSystemProvider>
-          <WeatherBlock {...props} />
+          <WeatherBlock {...current} />
         </UnitSystemProvider>
       </LanguageProvider>
     </ThemeProvider>
   );
+  const view = render(tree(props));
   const card = document.querySelector('[data-widget="weather"]') as HTMLElement;
-  return { card, widget: within(card), props };
+  /** The same widget with some props changed — a formula switch under a mounted card. */
+  const rerender = (next: Partial<Props>) => view.rerender(tree({ ...props, ...next }));
+  return { card, widget: within(card), props, rerender };
 }
 
 beforeEach(() => {
@@ -497,6 +503,26 @@ describe('WeatherBlock — the mandatory states', () => {
     expect(card.querySelector('[data-weather-temperature]')).toBeNull();
   });
 
+  it('unavailable: « Try again » re-reads the aggregate, and disables itself while a re-read is out (SMA-448 lot F4, Alexandre 22/09)', () => {
+    const unavailableLyon = () =>
+      weatherFixture(
+        [locationFixture({ status: 'unavailable', current: null, days: [], localTime: null })],
+        [linkFixture()]
+      );
+    const onRetry = vi.fn();
+    const { card } = renderBlock({ size: 'medium', weather: unavailableLyon(), onRetry });
+
+    const panel = card.querySelector('[data-invite-panel]') as HTMLElement;
+    const retry = within(panel).getByRole('button', { name: 'Try again' });
+    expect(retry).toBe(card.querySelector('[data-weather-retry]'));
+    fireEvent.click(retry);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    cleanup();
+
+    const refreshing = renderBlock({ size: 'medium', weather: unavailableLyon(), onRetry, refreshing: true });
+    expect(refreshing.widget.getByRole('button', { name: 'Try again' })).toBeDisabled();
+  });
+
   it('stale: the last known weather is shown with its age', () => {
     const { widget } = renderBlock({
       size: 'medium',
@@ -839,5 +865,130 @@ describe('WeatherBlock — the days yield whole rows to the partial invitation, 
     const { card } = renderBlock({ size: 'large', weather: partial() });
     expect(hiddenDays(card)).toHaveLength(0);
     expect(card.querySelectorAll('[data-weather-day]')).toHaveLength(5);
+  });
+});
+
+// SMA-448, lot F4, step W2 — THE GARDENER'S ONE CITY (V3-02, variant B;
+// contract v3 § 4.6, A-N1): a single-city formula shows the FIRST place at
+// every size, fixed, no tabs, and says on its Medium and Large cards which
+// cities it leaves out — every one of them, named, in the language's own
+// list — with, on the Large card, the link that opens the formula choice
+// screen. The Expert (`cities: 'all'`) keeps the tabs of F.3 above and never
+// reads the line. Never a refusal of the server (R8's written exception):
+// the aggregate is the same for both.
+describe('WeatherBlock — one fixed city for a single-city formula (SMA-448, lot F4, W2)', () => {
+  /** Lyon, Annecy and Grenoble, one garden each. */
+  const threePlaces = (): DashboardWeatherData =>
+    weatherFixture(
+      [
+        locationFixture(),
+        locationFixture({ key: '45.90,6.13', name: 'Annecy' }),
+        locationFixture({ key: '45.19,5.72', name: 'Grenoble' }),
+      ],
+      [
+        linkFixture({ gardenId: 'g1' }),
+        linkFixture({ gardenId: 'g2', locationKey: '45.90,6.13', source: 'garden' }),
+        linkFixture({ gardenId: 'g3', locationKey: '45.19,5.72', source: 'garden' }),
+      ]
+    );
+
+  it('Large, two places: no tabs, the first place alone, and the honest line with its link', () => {
+    const onSeeAllCities = vi.fn();
+    const { widget, card } = renderBlock({ size: 'large', cities: 'single', weather: twoPlaces(), onSeeAllCities });
+
+    expect(widget.queryByRole('tablist')).toBeNull();
+    expect(widget.queryByRole('tab')).toBeNull();
+    expect(card).toHaveAttribute('aria-label', 'Lyon');
+    expect(card.querySelector('[data-weather-temperature]')).toHaveTextContent('24°');
+    expect(widget.queryByText('21°')).toBeNull();
+
+    const honest = card.querySelector('[data-weather-honest]') as HTMLElement;
+    expect(honest).toHaveTextContent('Your gardens in Annecy are not shown here. See all your cities');
+    const link = within(honest).getByRole('button', { name: 'See all your cities' });
+    expect(link).toBe(honest.querySelector('[data-weather-honest-link]'));
+    fireEvent.click(link);
+    expect(onSeeAllCities).toHaveBeenCalledTimes(1);
+    expect(onSeeAllCities).toHaveBeenCalledWith(link);
+  });
+
+  it('Medium: the line without its link; Small: no line — the card has no room for a sentence', () => {
+    const onSeeAllCities = vi.fn();
+    const medium = renderBlock({ size: 'medium', cities: 'single', weather: twoPlaces(), onSeeAllCities });
+    expect(medium.widget.queryByRole('tablist')).toBeNull();
+    expect(medium.card).toHaveAttribute('aria-label', 'Lyon');
+    const honest = medium.card.querySelector('[data-weather-honest]') as HTMLElement;
+    expect(honest).toHaveTextContent('Your gardens in Annecy are not shown here.');
+    expect(honest.querySelector('[data-weather-honest-link]')).toBeNull();
+    expect(medium.widget.queryByRole('button', { name: 'See all your cities' })).toBeNull();
+    cleanup();
+
+    const small = renderBlock({ size: 'small', cities: 'single', weather: twoPlaces(), onSeeAllCities });
+    expect(small.widget.queryByRole('tablist')).toBeNull();
+    expect(small.card).toHaveAttribute('aria-label', 'Lyon');
+    expect(small.widget.queryByText('Annecy')).toBeNull();
+    expect(small.card.querySelector('[data-weather-honest]')).toBeNull();
+  });
+
+  it('one place: nothing left out, no line — an account of one city reads as before', () => {
+    const { card, widget } = renderBlock({ size: 'large', cities: 'single', weather: allLyon(), onSeeAllCities: vi.fn() });
+
+    expect(card).toHaveAttribute('aria-label', 'Lyon');
+    expect(card.querySelector('[data-weather-honest]')).toBeNull();
+    expect(widget.queryByRole('tablist')).toBeNull();
+  });
+
+  it('names EVERY city left out — three places: « Annecy and Grenoble », and no link without a page to open the choice on', () => {
+    const { card } = renderBlock({ size: 'large', cities: 'single', weather: threePlaces() });
+
+    expect(card.querySelector('[data-weather-honest]')).toHaveTextContent(
+      'Your gardens in Annecy and Grenoble are not shown here.'
+    );
+    expect(card.querySelector('[data-weather-honest-link]')).toBeNull();
+  });
+
+  it('in French, with the preposition each name takes: « Vos jardins d’Annecy et de Grenoble ne sont pas affichés ici. »', () => {
+    const { card } = renderBlock({ size: 'large', cities: 'single', weather: threePlaces(), onSeeAllCities: vi.fn() }, 'fr');
+
+    expect(card.querySelector('[data-weather-honest]')).toHaveTextContent(
+      'Vos jardins d’Annecy et de Grenoble ne sont pas affichés ici. Voir toutes vos villes'
+    );
+  });
+
+  it('the place the server could not describe, Large: the line still says which cities are not here', () => {
+    const { card, widget } = renderBlock({
+      size: 'large',
+      cities: 'single',
+      weather: weatherFixture(
+        [
+          locationFixture({ status: 'unavailable', current: null, days: [], localTime: null }),
+          locationFixture({ key: '45.90,6.13', name: 'Annecy' }),
+        ],
+        [linkFixture({ gardenId: 'g1' }), linkFixture({ gardenId: 'g2', locationKey: '45.90,6.13', source: 'garden' })]
+      ),
+      onSeeAllCities: vi.fn(),
+    });
+
+    expect(widget.getByText('Weather temporarily unavailable.')).toBeInTheDocument();
+    expect(widget.queryByRole('tablist')).toBeNull();
+    expect(card.querySelector('[data-weather-honest]')).toHaveTextContent('Your gardens in Annecy are not shown here.');
+  });
+
+  it('every city (the Expert), Large: the tabs, and never the line', () => {
+    const { widget, card } = renderBlock({ size: 'large', cities: 'all', weather: twoPlaces(), onSeeAllCities: vi.fn() });
+
+    expect(widget.getByRole('tablist', { name: 'Places' })).toBeInTheDocument();
+    expect(card.querySelector('[data-weather-honest]')).toBeNull();
+  });
+
+  it('the city is FIXED: a tab chosen under « every city » does not survive the switch to one city', () => {
+    const { widget, card, rerender } = renderBlock({ size: 'large', cities: 'all', weather: twoPlaces() });
+    fireEvent.click(within(widget.getByRole('tablist')).getAllByRole('tab')[1]!);
+    expect(card).toHaveAttribute('aria-label', 'Annecy');
+
+    rerender({ cities: 'single' });
+
+    expect(card).toHaveAttribute('aria-label', 'Lyon');
+    expect(widget.queryByRole('tablist')).toBeNull();
+    expect(card.querySelector('[data-weather-honest]')).toHaveTextContent('Your gardens in Annecy are not shown here.');
   });
 });

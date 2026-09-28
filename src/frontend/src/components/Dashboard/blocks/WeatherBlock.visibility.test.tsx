@@ -55,6 +55,7 @@ function renderLarge(mode: 'light' | 'dark') {
   const props: Props = {
     size: 'large',
     weather: weatherRealFixture(),
+    cities: 'all',
     gardens,
     loading: false,
     loadError: false,

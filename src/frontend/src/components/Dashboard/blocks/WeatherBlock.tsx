@@ -1,10 +1,11 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import AcUnitOutlinedIcon from '@mui/icons-material/AcUnitOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import WaterDropOutlinedIcon from '@mui/icons-material/WaterDropOutlined';
 import DashboardBlock from '../DashboardBlock';
@@ -18,7 +19,7 @@ import WeatherHero from './WeatherHero';
 import WeatherHours from './WeatherHours';
 import WeatherInvite from './WeatherInvite';
 import WeatherPlace from './WeatherPlace';
-import { displayTemperature } from './weatherFormat';
+import { cityList, displayTemperature, frenchElides } from './weatherFormat';
 import { gardenerSentence, weatherChips } from './weatherRules';
 import { localDateOf, upcomingHours, weekScale } from './weatherTime';
 import { useUnitSystem } from '../../../hooks/useUnitSystem';
@@ -33,10 +34,28 @@ import type { DashboardGardenData } from '../../../types/DashboardData';
 import type { DashboardWeatherData, WeatherLocation } from '../../../types/DashboardWeather';
 import { formatRelativeDate } from '../../../utils/formatRelativeDate';
 
+/**
+ * SMA-448, lot F4 — how many of the account's cities the widget shows, the
+ * formula's say (`FormulaCapabilities.weather`, V3-02): the Gardener ONE
+ * fixed city, the Expert every one. A difference of interface, never a
+ * refusal of the server (contract v3, R8's written exception): the aggregate
+ * serves every city to both, and the Gardener's widget names the ones it
+ * leaves out.
+ */
+export type WeatherCities = 'single' | 'all';
+
 interface Props {
   size: DashboardSize;
   editing?: boolean;
   weather: DashboardWeatherData;
+  /** One fixed city (the Gardener) or every city (the Expert) — see {@link WeatherCities}. */
+  cities: WeatherCities;
+  /**
+   * « Voir toutes vos villes » — the honest line's link, on the Large card of
+   * a single-city formula: the page opens the formula choice screen on it,
+   * where every city is the Expert's. Without it the line has no link.
+   */
+  onSeeAllCities?: (opener: HTMLElement) => void;
   /** The aggregate's gardens — for the names the invitation lists. */
   gardens: DashboardGardenData[];
   loading: boolean;
@@ -68,15 +87,23 @@ interface Props {
  * invitation REPLACES the band, the alerts and the units, `_spec.md` § 10.25).
  *
  * Small and Medium show the FIRST place of `locations[]` (arbitrage Q8 — the
- * « jardin suivi » option is deferred); Large shows a tab per place. « Now »
- * is the place's `localTime`; °F and mph follow `useUnitSystem`; the stale note
- * is the one line of the card that reads the browser clock, to say how old the
- * last known weather is.
+ * « jardin suivi » option is deferred); Large shows a tab per place — to a
+ * formula that shows EVERY city (`cities: 'all'`, the Expert). A single-city
+ * formula (the Gardener, SMA-448 lot F4, V3-02 variant B) shows the first
+ * place at every size, fixed, and says on its Medium and Large cards which
+ * cities it leaves out — the honest line, « Vos jardins d’Annecy et de
+ * Grenoble ne sont pas affichés ici. » — so a reader of three cities never
+ * takes one city's rain for the weather of all. « Now » is the place's
+ * `localTime`; °F and mph follow `useUnitSystem`; the stale note is the one
+ * line of the card that reads the browser clock, to say how old the last
+ * known weather is.
  */
 export default function WeatherBlock({
   size,
   editing,
   weather,
+  cities,
+  onSeeAllCities,
   gardens,
   loading,
   loadError,
@@ -96,9 +123,18 @@ export default function WeatherBlock({
 
   const locations = weather.locations;
   // A key that disappeared on a re-fetch falls back to the first place rather
-  // than to an empty panel.
+  // than to an empty panel. A single-city formula shows the first place and
+  // nothing else: a tab chosen under the other formula does not survive the
+  // switch (lot F4).
   const active =
-    locations.find((location) => location.key === selectedKey) ?? locations[0] ?? null;
+    (cities === 'all' ? locations.find((location) => location.key === selectedKey) : undefined) ??
+    locations[0] ??
+    null;
+  /** The cities a single-city formula leaves out — the ones the honest line names. */
+  const otherCities =
+    cities === 'single' && active
+      ? locations.filter((location) => location.key !== active.key).map((location) => location.name)
+      : [];
 
   // The chip counts GARDENS, not places (§ F.4): « 1/3 localisé » on an account
   // of three gardens reading one place.
@@ -237,7 +273,71 @@ export default function WeatherBlock({
   const editPlaceLabel = (location: WeatherLocation) =>
     t('dashboard.blocks.weather.editLocation', { place: location.name });
 
-  /** A place the server could not describe: its line, and an honest statement. */
+  /**
+   * SMA-448, lot F4 — the honest line of a single-city formula (V3-02
+   * variant B; A-N1: on the Medium AND the Large card): « Vos jardins
+   * d’Annecy et de Grenoble ne sont pas affichés ici. », every city left out
+   * named (`cityList`, never « 2 autres »), a 16 px info glyph before it, the
+   * secondary 14 px (V11's floor — the mock-up's 13 px is not taken). On the
+   * Large card the line ends with « Voir toutes vos villes », a link the page
+   * answers by opening the formula choice screen. Nothing on Small: the card
+   * has no room for a sentence, and its one place reads as one place.
+   */
+  const honestLine = (withLink: boolean) => {
+    if (otherCities.length === 0) return null;
+    const ofCity = (name: string) =>
+      t(
+        frenchElides(name) ? 'dashboard.blocks.weather.cityOfVowel' : 'dashboard.blocks.weather.cityOf',
+        { place: name }
+      );
+    return (
+      <Box data-weather-honest sx={{ display: 'flex', alignItems: 'flex-start', gap: '6px', flexShrink: 0 }}>
+        <InfoOutlinedIcon aria-hidden sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0, mt: '2px' }} />
+        <Typography
+          component="span"
+          sx={{ fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.4, color: 'text.secondary', minWidth: 0 }}
+        >
+          {t('dashboard.blocks.weather.otherCities', {
+            places: cityList(otherCities, i18n.language, ofCity),
+          })}
+          {withLink && onSeeAllCities && (
+            <>
+              {' '}
+              <Box
+                component="button"
+                type="button"
+                data-weather-honest-link
+                onClick={(event: MouseEvent<HTMLButtonElement>) => onSeeAllCities(event.currentTarget)}
+                sx={{
+                  background: 'none',
+                  border: 0,
+                  p: 0,
+                  m: 0,
+                  font: 'inherit',
+                  fontWeight: 700,
+                  color: 'primary.main',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '3px',
+                  whiteSpace: 'nowrap',
+                  borderRadius: '4px',
+                  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                }}
+              >
+                {t('dashboard.blocks.weather.seeAllCities')}
+              </Box>
+            </>
+          )}
+        </Typography>
+      </Box>
+    );
+  };
+
+  /**
+   * A place the server could not describe: its line, an honest statement —
+   * and « Réessayer » (SMA-448 lot F4, Alexandre 22/09 18:52): the same
+   * re-read the load error offers, disabled while one is in flight.
+   */
   const unavailable = (location: WeatherLocation) => (
     <>
       <WeatherPlace
@@ -249,8 +349,21 @@ export default function WeatherBlock({
       <InviteState
         icon={<WeatherIcon />}
         message={t('dashboard.blocks.weather.unavailable')}
-        variant="catalogue"
+        variant="invite"
+        action={
+          <Button
+            data-weather-retry
+            size="small"
+            variant="outlined"
+            onClick={onRetry}
+            disabled={refreshing}
+            sx={{ mt: '8px' }}
+          >
+            {t('dashboard.retry')}
+          </Button>
+        }
       />
+      {size !== 'small' && honestLine(size === 'large')}
     </>
   );
 
@@ -346,6 +459,7 @@ export default function WeatherBlock({
         {head(location, false)}
         {band(location)}
         {note && subLine(note)}
+        {honestLine(false)}
       </>
     );
   };
@@ -389,6 +503,7 @@ export default function WeatherBlock({
             />
           </>
         )}
+        {honestLine(true)}
       </>
     );
   };
@@ -416,7 +531,8 @@ export default function WeatherBlock({
 
   const tabId = (key: string) => `weather-tab-${key.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
-  const tabs = locations.length > 1 && (
+  // Tabs are the Expert's: a single-city formula draws ONE city (lot F4).
+  const tabs = cities === 'all' && locations.length > 1 && (
     <Box
       role="tablist"
       aria-label={t('dashboard.blocks.weather.places')}

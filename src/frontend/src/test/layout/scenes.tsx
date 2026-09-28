@@ -644,7 +644,7 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
   const common = { size: scene.size, editing: scene.editing, loading: false, loadError: false, onRetry: noop };
   switch (scene.key) {
     case 'weather':
-      return <WeatherBlock {...common} weather={weather} gardens={gs} onLocate={noop} onLocated={noop} />;
+      return <WeatherBlock {...common} weather={weather} cities="all" gardens={gs} onLocate={noop} onLocated={noop} />;
     case 'gardens':
       return (
         <GardensBlock
