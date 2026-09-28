@@ -4,6 +4,7 @@ import './freeze';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import Box from '@mui/material/Box';
+import Popover from '@mui/material/Popover';
 import Typography from '@mui/material/Typography';
 import { ThemeProvider } from '@mui/material/styles';
 import i18next from '../../i18n/i18n';
@@ -11,6 +12,7 @@ import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { createAppTheme } from '../../theme';
 import DashboardActions from '../../components/Dashboard/DashboardActions';
 import DashboardGrid from '../../components/Dashboard/DashboardGrid';
+import GardensOptionsPanel from '../../components/Dashboard/blocks/GardensOptionsPanel';
 import { DASHBOARD_HEADER_SX } from '../../components/Dashboard/dashboardHeader';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import { formatSurface } from '../../utils/formatNumber';
@@ -20,11 +22,14 @@ import {
   HEADER_FIGURES,
   HEADER_SCENES,
   LAYOUT_SCENES,
+  PANEL_SCENES,
   gridCardScene,
+  panelSceneData,
   sceneWidget,
   type ActionsScene,
   type GridScene,
   type LayoutScene,
+  type PanelScene,
 } from './scenes';
 import { ACTIONS_PROBES, PROBE_SCENES, probeWidget, type ProbeScene } from './probes';
 import { measureFocus, type FocusMeasure } from './focusProbe';
@@ -99,6 +104,40 @@ export interface SceneMeasure extends CardMeasure {
      */
     overflow: number;
   }>;
+  /**
+   * SMA-448, lot F5-a — the Gardens widget under its settings: the rows its
+   * table draws (0 without a table), whether the search bar and the empty
+   * state of a search are drawn, how many rows a search marked « hors des N
+   * affichés », and the texts of the foot drawn over more than one line —
+   * none belongs on two. Zero and empty on every other card.
+   */
+  gardenRows: number;
+  gardensSearch: boolean;
+  gardensEmptySearch: boolean;
+  gardensBeyond: number;
+  gardensFootWrapped: string[];
+}
+
+/**
+ * SMA-448, lot F5-a — the Gardens widget's GEAR PANEL as a scene (V5), with
+ * 60 and 100 gardens, mounted in the 320 px `Popover` the product draws it in:
+ * the panel's content read as a CARD by `measureCard` — its atoms may not meet,
+ * nothing may be cut or spilled —, and the Popover's paper, which SCROLLS
+ * inside the screen: its box, what it can scroll, and whether the last row of
+ * the order is reached at the bottom of that scroll.
+ */
+export interface PanelMeasure extends CardMeasure {
+  scene: string;
+  viewport: number;
+  paper: { top: number; h: number; clientH: number; scrollH: number; viewportH: number };
+  /** The rows of the order's list. */
+  rows: number;
+  /** The « Nouveau » chips — the gardens not yet ranked. */
+  newChips: number;
+  /** Scrolled to the bottom, the last row's bottom is within the paper's. */
+  lastRowReachable: boolean;
+  /** The count group's labels drawn over more than one line — none belongs on two. */
+  countWrapped: string[];
 }
 
 /** One card of a grid scene: its measure, and its border box relative to the grid. */
@@ -182,6 +221,8 @@ export interface LayoutResults {
   actions: ActionsMeasure[];
   /** SMA-437, lot V39, PR B, T0 — the same zone under the header's real layout, scene by scene. */
   headers: HeaderMeasure[];
+  /** SMA-448, lot F5-a — the Gardens widget's gear panel with 60 and 100 gardens, scene by scene. */
+  panels: PanelMeasure[];
 }
 
 declare global {
@@ -413,10 +454,82 @@ function measureHeader(scene: ActionsScene, host: HTMLElement): HeaderMeasure {
   };
 }
 
+/**
+ * A panel scene (SMA-448, lot F5-a): the real `GardensOptionsPanel` inside a
+ * real MUI `Popover` — the container the gear draws it in, its paper 320 px
+ * wide, `backgroundImage: 'none'` as `SortableWidget` sets it — under the
+ * app's theme. Two plain wrappers above the panel, for `measureCard`.
+ */
+function panelTree(scene: PanelScene, mode: 'light' | 'dark') {
+  const data = panelSceneData(scene);
+  return (
+    <ThemeProvider theme={createAppTheme(mode)}>
+      <Popover
+        open
+        anchorReference="anchorPosition"
+        anchorPosition={{ top: 8, left: 8 }}
+        slotProps={{ paper: { sx: { width: 320, backgroundImage: 'none' } } }}
+      >
+        <Box sx={{ px: '18px', py: '8px' }}>
+          <div>
+            <GardensOptionsPanel
+              options={scene.options}
+              sorts={data.sorts}
+              gardens={data.gardens}
+              ready
+              onChange={noop}
+              order={data.order}
+            />
+          </div>
+        </Box>
+      </Popover>
+    </ThemeProvider>
+  );
+}
+
+/** Measures a mounted panel scene: the panel's content as a card, and the Popover's paper around it. */
+function measurePanel(scene: PanelScene): PanelMeasure {
+  // The Popover renders in a portal on the body, not in the host.
+  const card = document.querySelector<HTMLElement>('[data-gardens-options]');
+  const paper = card?.closest<HTMLElement>('.MuiPopover-paper') ?? null;
+  if (!card || !paper) throw new Error(`The panel scene ${scene.name} drew no panel or no paper.`);
+  const measure = measureCard(card);
+  const paperRect = paper.getBoundingClientRect();
+  const rows = card.querySelectorAll('[data-gardens-order] li');
+  const countGroup = card.querySelector('[role="group"]');
+  // Then, scrolled to the bottom of the paper: the last row must be reached.
+  paper.scrollTop = paper.scrollHeight;
+  const last = rows[rows.length - 1];
+  const lastRowReachable = last !== undefined && last.getBoundingClientRect().bottom <= paper.getBoundingClientRect().bottom + 1;
+  paper.scrollTop = 0;
+  return {
+    scene: scene.name,
+    viewport: window.innerWidth,
+    paper: {
+      top: Math.round(paperRect.top * 10) / 10,
+      h: Math.round(paperRect.height * 10) / 10,
+      clientH: paper.clientHeight,
+      scrollH: paper.scrollHeight,
+      viewportH: window.innerHeight,
+    },
+    rows: rows.length,
+    newChips: card.querySelectorAll('[data-gardens-order-new]').length,
+    lastRowReachable,
+    countWrapped: countGroup ? wrappedTexts(countGroup) : [],
+    ...measure,
+  };
+}
+
 /** What the harness reads of a card beyond `measureCard`, the same for a one-card scene and a card of a grid. */
 function cardExtras(card: HTMLElement) {
   const origin = card.getBoundingClientRect();
+  const foot = card.querySelector('[data-gardens-foot]');
   return {
+    gardenRows: card.querySelectorAll('tbody tr').length,
+    gardensSearch: card.querySelector('[data-gardens-search]') !== null,
+    gardensEmptySearch: card.querySelector('[data-gardens-search]') !== null && card.querySelector('[data-invite-panel]') !== null,
+    gardensBeyond: card.querySelectorAll('[data-garden-beyond]').length,
+    gardensFootWrapped: foot ? wrappedTexts(foot) : [],
     keyFigureTiles: Array.from(card.querySelectorAll('[data-key-figure]')).map((tile) => {
       const value = tile.querySelector('[data-key-figure-value]');
       const box = tile.getBoundingClientRect();
@@ -532,7 +645,7 @@ async function main() {
   await Promise.all([300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Inter`)));
   progress('fonts ready');
 
-  const results: LayoutResults = { scenes: [], grids: [], focus: [], actions: [], headers: [] };
+  const results: LayoutResults = { scenes: [], grids: [], focus: [], actions: [], headers: [], panels: [] };
   for (const scene of [...LAYOUT_SCENES, ...PROBE_SCENES].filter((s) => !only || s.name === only)) {
     const host = document.createElement('div');
     page.appendChild(host);
@@ -620,6 +733,21 @@ async function main() {
     await settle();
     progress(`settled ${scene.name}`);
     results.headers.push(measureHeader(scene, host));
+    root.unmount();
+    host.remove();
+  }
+
+  // The Gardens widget's gear panel with 60 and 100 gardens (SMA-448, lot
+  // F5-a), after the headers, the same way — in a Popover, so on the body.
+  for (const scene of PANEL_SCENES.filter((s) => !hold && (!only || s.name === only))) {
+    const host = document.createElement('div');
+    page.appendChild(host);
+    const root = createRoot(host);
+    root.render(panelTree(scene, mode));
+    progress(`rendered ${scene.name}`);
+    await settle();
+    progress(`settled ${scene.name}`);
+    results.panels.push(measurePanel(scene));
     root.unmount();
     host.remove();
   }

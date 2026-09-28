@@ -253,6 +253,9 @@ export default function GardensOptionsPanel({ options, sorts, gardens, ready, on
                       </Typography>
                     )}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      {/* A long name WRAPS (V5: no ellipsis a source did not
+                          allow — the widget's own name cell has one, this
+                          row has none), the row growing with it. */}
                       <Typography
                         component="span"
                         sx={{
@@ -260,9 +263,7 @@ export default function GardensOptionsPanel({ options, sorts, gardens, ready, on
                           fontWeight: 700,
                           lineHeight: 1.3,
                           minWidth: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
+                          overflowWrap: 'anywhere',
                         }}
                       >
                         {garden.name}

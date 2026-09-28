@@ -16,10 +16,19 @@ import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOpti
 import { cardBearsWeather, noviceCardsOf, type NoviceCard } from '../../components/Dashboard/noviceCards';
 import { LAYOUT_NOW_MS } from './clock';
 import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
+import { customOrderIds } from '../../components/Dashboard/blocks/gardensOptions';
+import type { GardenOrder } from '../../hooks/useGardenOrder';
 import type { GardenLayoutData } from '../../services/gardenLayoutApi';
 import type { Garden } from '../../types/Garden';
 import type { SaveState } from '../../hooks/useDashboardPreferences';
-import type { DashboardBlockKey, DashboardLevel, DashboardSize, FormulaRefusalReason, FormulasCatalog } from '../../types/Dashboard';
+import type {
+  DashboardBlockKey,
+  DashboardLevel,
+  DashboardSize,
+  FormulaCapabilities,
+  FormulaRefusalReason,
+  FormulasCatalog,
+} from '../../types/Dashboard';
 import type { DashboardData, DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
 import type { DashboardWeatherData, WeatherLocation } from '../../types/DashboardWeather';
 
@@ -221,10 +230,10 @@ export const weatherPartial = (): DashboardWeatherData =>
   );
 
 /** The `GardensBlock` view of the weather: each garden's location, or null when it has none. */
-const gardensWeather = (weather: DashboardWeatherData): GardensWeather => ({
+const gardensWeather = (weather: DashboardWeatherData, list: readonly DashboardGardenData[] = gardens): GardensWeather => ({
   status: 'ready',
   byGarden: new Map(
-    gardens.map((garden) => {
+    list.map((garden) => {
       const link = weather.gardens.find((l) => l.gardenId === garden.id);
       const key = link?.locationKey ?? null;
       return [garden.id, key ? (weather.locations.find((l) => l.key === key) ?? null) : null];
@@ -254,6 +263,13 @@ export interface LayoutScene {
    * nothing planted (« — », « Aucune », « Rien »).
    */
   band?: 'default' | 'extreme' | 'empty' | 'unplanted';
+  /**
+   * SMA-448, lot F5-a — the Gardens widget under its settings, on TWELVE
+   * gardens: at rest (the count as the cap — 8 on a desktop, 5 on a phone —,
+   * the foot, the search bar), unfolded in place, a search on, a search
+   * without a result, « Tous ».
+   */
+  gardens?: { expanded?: boolean; query?: string; options?: Record<string, unknown> | null };
 }
 
 const SIZES: DashboardSize[] = ['small', 'medium', 'large'];
@@ -281,6 +297,17 @@ export const LAYOUT_SCENES: LayoutScene[] = (() => {
   scenes.push({ name: 'keyfigures-wide-extreme', key: 'keyfigures', size: 'wide', weather: 'all', band: 'extreme' });
   scenes.push({ name: 'keyfigures-wide-empty', key: 'keyfigures', size: 'wide', weather: 'all', band: 'empty' });
   scenes.push({ name: 'keyfigures-wide-unplanted', key: 'keyfigures', size: 'wide', weather: 'all', band: 'unplanted' });
+  // SMA-448, lot F5-a — the Gardens widget's settings on twelve gardens (V5:
+  // every new form becomes a scene): the cut and its foot, the search bar;
+  // the list unfolded in place; a search that finds two, one beyond the cut;
+  // a search with no result, its state; « Tous »; and the Medium list, which
+  // keeps its three rows.
+  scenes.push({ name: 'gardens-large-twelve', key: 'gardens', size: 'large', weather: 'all', gardens: {} });
+  scenes.push({ name: 'gardens-large-unfolded', key: 'gardens', size: 'large', weather: 'all', gardens: { expanded: true } });
+  scenes.push({ name: 'gardens-large-search', key: 'gardens', size: 'large', weather: 'all', gardens: { query: 'verger' } });
+  scenes.push({ name: 'gardens-large-search-empty', key: 'gardens', size: 'large', weather: 'all', gardens: { query: 'verger nord' } });
+  scenes.push({ name: 'gardens-large-all', key: 'gardens', size: 'large', weather: 'all', gardens: { options: { count: 'all' } } });
+  scenes.push({ name: 'gardens-medium-twelve', key: 'gardens', size: 'medium', weather: 'all', gardens: {} });
   return scenes;
 })();
 
@@ -406,6 +433,92 @@ const carre: DashboardGardenData = {
   occupiedCells: 5,
   updatedAt: '2026-09-11T16:00:00Z',
 };
+
+/**
+ * SMA-448, lot F5-a — TWELVE gardens for the Gardens widget's settings: the
+ * five of the page, and seven more cloned from them under names a gardener
+ * types. Their last modification is set so that « Derniers ouverts » (never
+ * opened: the fallback on the modification) lists them in THIS order, with
+ * « Verger bas » tenth — beyond the eight of a desktop and the five of a
+ * phone — so a search for « verger » finds one shown and one beyond the cut.
+ */
+const TWELVE_NAMES = [
+  'Terrasse',
+  'Balcon sud',
+  'Serre nord',
+  'Potager du fond',
+  'Carré aromatique',
+  'Grand verger',
+  'Pépinière',
+  'Bac à fleurs',
+  'Haie fruitière',
+  'Verger bas',
+  'Jardin d’hiver',
+  'Rocaille',
+] as const;
+const FIVE: readonly DashboardGardenData[] = [terrasse, balcon, serre, potager, carre];
+export const gardensTwelve: DashboardGardenData[] = TWELVE_NAMES.map((name, index) => {
+  const base = FIVE[index % FIVE.length]!;
+  return {
+    ...base,
+    id: index < FIVE.length ? base.id : `g${index + 1}`,
+    name,
+    updatedAt: `2026-09-${String(27 - index).padStart(2, '0')}T12:00:00Z`,
+    createdAt: `2026-01-${String(index + 1).padStart(2, '0')}T12:00:00Z`,
+    // The three first ranked — 2, 0, 1 —, the others not: the custom order
+    // puts them after the nine unranked.
+    sortOrder: index === 0 ? 2 : index === 1 ? 0 : index === 2 ? 1 : null,
+  };
+});
+
+/**
+ * SMA-448, lot F5-a — THE GEAR PANEL as a scene, with 60 and 100 gardens: the
+ * Expert's custom order on the complete list, in the 320 px Popover the
+ * product draws it in, whose paper scrolls inside the screen. One garden in
+ * ten carries a long name — the row must wrap it, never cut it (V5).
+ */
+export interface PanelScene {
+  name: 'gardens-panel-60' | 'gardens-panel-100' | 'gardens-panel-100-all';
+  gardens: 60 | 100;
+  options: Record<string, unknown>;
+}
+
+export const PANEL_SCENES: PanelScene[] = [
+  { name: 'gardens-panel-60', gardens: 60, options: { sort: 'custom' } },
+  { name: 'gardens-panel-100', gardens: 100, options: { sort: 'custom' } },
+  { name: 'gardens-panel-100-all', gardens: 100, options: { sort: 'custom', count: 'all' } },
+];
+
+/** `count` gardens of the panel scenes: the twelve, then clones, a long name on every tenth; a third of them ranked. */
+export function panelGardens(count: number): DashboardGardenData[] {
+  const list: DashboardGardenData[] = [];
+  for (let index = 0; index < count; index++) {
+    const base = gardensTwelve[index % gardensTwelve.length]!;
+    const long = index > 0 && index % 10 === 0;
+    list.push({
+      ...base,
+      id: `p${index + 1}`,
+      name: long ? `${NOVICE_LONG_NAMES[(index / 10) % NOVICE_LONG_NAMES.length]}` : `${base.name} ${index + 1}`,
+      createdAt: `2026-0${1 + (index % 8)}-${String(1 + (index % 27)).padStart(2, '0')}T12:00:00Z`,
+      sortOrder: index % 3 === 0 ? Math.floor(index / 3) : null,
+    });
+  }
+  return list;
+}
+
+/** What the panel scene mounts: its gardens, their served order — read, never written — and the Expert's five sorts. */
+export function panelSceneData(scene: PanelScene): {
+  gardens: DashboardGardenData[];
+  order: GardenOrder;
+  sorts: FormulaCapabilities['gardenSorts'];
+} {
+  const list = panelGardens(scene.gardens);
+  return {
+    gardens: list,
+    order: { ids: customOrderIds(list), order: null, state: 'idle', move: noop },
+    sorts: capabilitiesFor('expert').gardenSorts,
+  };
+}
 
 /** The very long names of the long scene — real sentences a gardener might type. */
 export const NOVICE_LONG_NAMES = [
@@ -645,23 +758,29 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
   switch (scene.key) {
     case 'weather':
       return <WeatherBlock {...common} weather={weather} cities="all" gardens={gs} onLocate={noop} onLocated={noop} />;
-    case 'gardens':
+    case 'gardens': {
+      // SMA-448, lot F5-a: twelve gardens under the widget's settings when the
+      // scene says so; the page's three otherwise.
+      const list = scene.gardens ? gardensTwelve : gs;
       return (
         <GardensBlock
           {...common}
-          gardens={gs}
+          gardens={list}
           showWeatherColumn
           showHarvestColumn={false}
-          weather={gardensWeather(weather)}
+          weather={gardensWeather(weather, list)}
           onLocate={noop}
           onCreateClick={noop}
           onChanged={noop}
           onDeleted={noop}
           onExpand={noop}
-          options={null}
+          options={scene.gardens?.options ?? null}
           sorts={capabilitiesFor('expert').gardenSorts}
+          defaultExpanded={scene.gardens?.expanded}
+          defaultQuery={scene.gardens?.query}
         />
       );
+    }
     case 'counters':
       return (
         <CountersBlock

@@ -700,6 +700,7 @@ const page = {
         scrollH: content.scrollHeight,
         overflow: Math.max(0, content.scrollHeight - content.clientHeight),
         beyondCard: measured.body.beyondCard,
+        lowest: measured.body.lowest,
       },
       scene: sceneName ?? '',
       viewport: innerWidth,
