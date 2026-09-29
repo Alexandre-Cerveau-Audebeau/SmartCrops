@@ -48,6 +48,12 @@ interface Props {
   loadError: boolean;
   refreshing?: boolean;
   onRetry: () => void;
+  /**
+   * The grid unfolded at mount — the layout harness measures the unfolded
+   * Full width (SMA-437, lot V3-08). The page never passes it: the grid opens
+   * folded, and the fold is the reader's.
+   */
+  defaultExpanded?: boolean;
 }
 
 /** The three verbs the artboards count — flowering has a lane, never a counter. */
@@ -136,6 +142,18 @@ const NAME_BUDGET = Math.floor((NAME_COLUMN - NAME_GUTTER) / (LARGE_GRID.nameSiz
  */
 const NAME_COLUMN_PHONE = 84;
 const NAME_BUDGET_PHONE = Math.floor((NAME_COLUMN_PHONE - NAME_GUTTER) / (LARGE_GRID.nameSize * 0.52));
+
+/**
+ * SMA-437, lot V3-08 (A-14, form A of V3-08 — « la grille seule ») — the Full
+ * width WIDENS the grid: its name column is 200 px from 1 200 px and 160 px
+ * from 900, the Large's 108 and 84 below (V3-08, § 3). About twenty-four
+ * characters fit the widest whole, nineteen the other, by the same derivation
+ * as {@link NAME_BUDGET} — the tooltip of V32 has that much less to complete.
+ */
+const NAME_COLUMN_WIDE_LG = 200;
+const NAME_COLUMN_WIDE_MD = 160;
+const NAME_BUDGET_WIDE_LG = Math.floor((NAME_COLUMN_WIDE_LG - NAME_GUTTER) / (LARGE_GRID.nameSize * 0.52));
+const NAME_BUDGET_WIDE_MD = Math.floor((NAME_COLUMN_WIDE_MD - NAME_GUTTER) / (LARGE_GRID.nameSize * 0.52));
 
 /** `Main.dc.html` l. 309: « Thym, Romarin, Courgette +7 » — three names, then the rest as a figure. */
 const MEDIUM_NAMES = 3;
@@ -228,6 +246,14 @@ const LANE_TOKEN: Record<CalendarLane, keyof DashboardTokens> = {
  * connu pour 4 variétés » names exactly the placed varieties no lane knows a
  * month for. Three zeros above it are not a misleading zero — they are the
  * month, honestly — which is why the foot is what makes them readable.
+ *
+ * SMA-437, lot V3-08 (A-14, decided by Alexandre on 28/09: form A, « la
+ * grille seule ») — THE FULL WIDTH, the Expert's: the Large's counters, grid,
+ * legend and foot, the grid WIDENED — a 200 px name column and the months in
+ * full from 1 200 px, 160 px and the short months from 900 (V3-08, § 3). Ten
+ * rows at rest, then the same button unfolds the rest in place: the card
+ * grows, nothing scrolls inside it (A-N10), and the axis, with no scrolling
+ * zone to stick to, heads the grid.
  */
 export default function MonthBlock({
   size,
@@ -239,6 +265,7 @@ export default function MonthBlock({
   loadError,
   refreshing = false,
   onRetry,
+  defaultExpanded = false,
 }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
@@ -247,7 +274,17 @@ export default function MonthBlock({
   // to one column at: under it the name column is 84 px, and the tooltip of
   // V32 has to judge a clipped name by that column, not by the desktop's.
   const phone = useMediaQuery(theme.breakpoints.down('sm'));
-  const nameBudget = phone ? NAME_BUDGET_PHONE : NAME_BUDGET;
+  // The Full width's two further steps (lot V3-08): the theme's `lg` and `md`.
+  const fullMonths = useMediaQuery(theme.breakpoints.up('lg'));
+  const wideNames = useMediaQuery(theme.breakpoints.up('md'));
+  const nameBudget =
+    size === 'wide' && fullMonths
+      ? NAME_BUDGET_WIDE_LG
+      : size === 'wide' && wideNames
+        ? NAME_BUDGET_WIDE_MD
+        : phone
+          ? NAME_BUDGET_PHONE
+          : NAME_BUDGET;
   const MonthIcon = BLOCK_ICONS.month;
   /**
    * V26 — the Large grid deployed past its ten rows. Session-only, in React
@@ -256,7 +293,7 @@ export default function MonthBlock({
    * counters never read it — they count the whole calendar, deployed or not
    * (the `resolveCountersFigures` rule).
    */
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   /** Ties the deploy button to the region it opens, for `aria-controls`. */
   const gridId = useId();
 
@@ -285,6 +322,13 @@ export default function MonthBlock({
       ? (raw as string[])
       : monthsShort.map((label) => label.charAt(0));
   })();
+
+  /**
+   * The twelve IN FULL — « Septembre » — for the Full width's axis from
+   * 1 200 px (lot V3-08): the language's own names, the header chip's, where
+   * a column of 75 px holds them.
+   */
+  const monthsLong = MONTHS_OF_YEAR.map((value) => capitalizeFirst(monthLabel(value, i18n.language)) ?? '');
 
   const names = (entries: readonly VarietyCalendar[]): string[] =>
     entries.map((entry) => shownName(entry.variety));
@@ -480,7 +524,12 @@ export default function MonthBlock({
     </>
   );
 
-  const largeBody = () => {
+  /**
+   * The Large's body — and, `wide`, the Full width's (SMA-437, lot V3-08):
+   * the same counters, grid, legend and foot, the grid widened and never a
+   * scrolling zone.
+   */
+  const largeBody = (wide = false) => {
     const shown = expanded ? known : known.slice(0, LARGE_ROWS);
     // What the button offers to reveal — counted on the CAP, not on what is
     // currently drawn, so the collapsed and the deployed states name the same
@@ -489,9 +538,17 @@ export default function MonthBlock({
     // `.cal` — a 108 px name column, then the twelve months; 84 px on a phone
     // (mobile lot, step 4). ONE template for the axis and for every row, per
     // breakpoint, so the two grids can never disagree on where a month is.
+    // The Full width's column follows the page on (lot V3-08): 160 px from
+    // 900, 200 from 1 200.
     const gridColumns = {
       xs: `${NAME_COLUMN_PHONE}px repeat(12, minmax(0, 1fr))`,
       sm: `${NAME_COLUMN}px repeat(12, minmax(0, 1fr))`,
+      ...(wide
+        ? {
+            md: `${NAME_COLUMN_WIDE_MD}px repeat(12, minmax(0, 1fr))`,
+            lg: `${NAME_COLUMN_WIDE_LG}px repeat(12, minmax(0, 1fr))`,
+          }
+        : {}),
     };
     return (
       <>
@@ -564,10 +621,18 @@ export default function MonthBlock({
             table roles were still buying. Nothing is announced that a reader
             cannot act on, and the ownership F4 asked for is exact: a `list`
             whose every child is a `listitem`. */}
+        {/* SMA-437, lot V3-08 — the Full width neither takes the card's
+            leftover height nor clips: it is as tall as its rows, and the
+            card grows with them as the fold opens (A-N10). */}
         <Box
           data-month-grid
+          data-month-wide={wide ? '' : undefined}
           id={gridId}
-          sx={{ mt: '8px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          sx={
+            wide
+              ? { mt: '8px', display: 'flex', flexDirection: 'column' }
+              : { mt: '8px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }
+          }
         >
           {/* Round 2, V27 — the scrolling zone now opens on the axis, and the
               axis is INSIDE it.
@@ -595,25 +660,28 @@ export default function MonthBlock({
               effective width is an engine metric no stylesheet can know. */}
           <Box
             data-month-rows
-            sx={{
-              flex: 1,
-              minHeight: 0,
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
+            sx={
+              wide
+                ? { display: 'flex', flexDirection: 'column' }
+                : {
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }
+            }
           >
             {/* The axis: `.mh` 12 px / 700, each with its left rule; the current
                 month tinted. Stuck to the top of the scrolling zone, over an
                 OPAQUE ground — the card's own — without which the bars would
-                scroll visibly under the month names. */}
+                scroll visibly under the month names. The Full width has no
+                scrolling zone (lot V3-08): its axis simply heads the grid. */}
             <Box
               data-month-axis-row
               aria-hidden
               sx={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 2,
+                ...(wide ? {} : { position: 'sticky', top: 0, zIndex: 2 }),
                 flexShrink: 0,
                 backgroundColor: 'background.paper',
                 display: 'grid',
@@ -667,11 +735,22 @@ export default function MonthBlock({
                   {/* Two forms, one shown (mobile lot, step 4 — D3): the short
                       name from 600 px up, its initial under it, where 13 px a
                       column cannot hold « Juil ». Pure CSS: the same DOM at
-                      every width, and nothing for a desktop to re-render. */}
+                      every width, and nothing for a desktop to re-render.
+                      The Full width has a third (lot V3-08): the month in
+                      full from 1 200 px. */}
+                  {wide && (
+                    <Box
+                      component="span"
+                      data-month-axis-long
+                      sx={{ display: { xs: 'none', lg: 'inline' } }}
+                    >
+                      {monthsLong[index]}
+                    </Box>
+                  )}
                   <Box
                     component="span"
                     data-month-axis-short
-                    sx={{ display: { xs: 'none', sm: 'inline' } }}
+                    sx={{ display: wide ? { xs: 'none', sm: 'inline', lg: 'none' } : { xs: 'none', sm: 'inline' } }}
                   >
                     {monthsShort[index]}
                   </Box>
@@ -701,24 +780,31 @@ export default function MonthBlock({
               data-month-body
               role="list"
               aria-label={t('dashboard.blocks.month.gridLabel')}
-              sx={{
-                // NO `min-height: 0` here, and that omission is the whole of it:
-                // a column flex item's automatic minimum is its CONTENT, so this
-                // box can never be squeezed below the rows it holds. Without
-                // that, `space-evenly` would distribute NEGATIVE free space the
-                // moment the list outgrew the card and push the first rows above
-                // the scrollable area, where no scrollbar reaches them — the
-                // trap V26 met and escaped by packing from the top. The rows are
-                // taller since V30/V31, so the collapsed state can overflow too:
-                // the guard has to hold in BOTH states now, not just the
-                // deployed one.
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: expanded ? 'flex-start' : 'space-evenly',
-                gap: expanded ? '2px' : 0,
-                mt: '6px',
-              }}
+              sx={
+                wide
+                  ? // The Full width packs from the top in both states: its
+                    // card is as tall as its rows, there is no height left to
+                    // share (lot V3-08; `.mo-rows { gap: 0 }` of V3-08).
+                    { display: 'flex', flexDirection: 'column', mt: '6px' }
+                  : {
+                      // NO `min-height: 0` here, and that omission is the whole of it:
+                      // a column flex item's automatic minimum is its CONTENT, so this
+                      // box can never be squeezed below the rows it holds. Without
+                      // that, `space-evenly` would distribute NEGATIVE free space the
+                      // moment the list outgrew the card and push the first rows above
+                      // the scrollable area, where no scrollbar reaches them — the
+                      // trap V26 met and escaped by packing from the top. The rows are
+                      // taller since V30/V31, so the collapsed state can overflow too:
+                      // the guard has to hold in BOTH states now, not just the
+                      // deployed one.
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: expanded ? 'flex-start' : 'space-evenly',
+                      gap: expanded ? '2px' : 0,
+                      mt: '6px',
+                    }
+              }
             >
               {shown.map((entry, index) => (
                 <Box
@@ -905,7 +991,9 @@ export default function MonthBlock({
     if (varieties.length === 0) return nothing;
     if (size === 'small') return smallBody();
     if (size === 'medium') return mediumBody();
-    return largeBody();
+    // The Full width (lot V3-08): the Large's grid widened — never the Large
+    // stretched.
+    return largeBody(size === 'wide');
   };
 
   /** « Septembre » — `.pill.n`, the neutral header chip (`Main.dc.html` l. 309). */

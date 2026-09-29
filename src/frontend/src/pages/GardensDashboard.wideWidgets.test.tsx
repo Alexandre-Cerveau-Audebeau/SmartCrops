@@ -10,6 +10,7 @@ import { dashboardFixture, varietyFixture } from '../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
 import { gardens as sceneGardens, gardensTwelve } from '../test/layout/scenes';
 import { SAVE_DEBOUNCE_MS } from '../hooks/useDashboardPreferences';
+import type { KeyFigure } from '../components/Dashboard/blocks/keyFiguresOptions';
 import type { DashboardBlock, DashboardBlockKey, DashboardLevel, DashboardSize } from '../types/Dashboard';
 import type { DashboardGardenData, DashboardVarietyData } from '../types/DashboardData';
 
@@ -64,6 +65,8 @@ interface Served {
   gardens?: readonly DashboardGardenData[];
   weather?: DashboardWeatherData;
   varieties?: readonly DashboardVarietyData[];
+  /** The four figures of the Key figures band, when a test compares one of them. */
+  keyFigures?: readonly KeyFigure[];
 }
 
 /** Forty-four varieties on Terrasse, every one edible: 37 at rest over four columns, seven behind the fold. */
@@ -71,14 +74,37 @@ const fortyFour = Array.from({ length: 44 }, (_, index) =>
   varietyFixture({ plantId: `p-${index}`, commonName: `Variety ${index}`, gardenIds: ['g1'] })
 );
 
+/**
+ * Every month of the year, as the catalog writes a pruning list: a variety
+ * pruned in each is « to prune » whatever month the page is read in — no
+ * clock to pin, and no month's last midnight to fail on (SMA-434).
+ */
+const EVERY_MONTH = 'january,february,march,april,may,june,july,august,september,october,november,december';
+
+/** Sixteen varieties on Terrasse, each pruned every month: ten rows at rest, six behind the fold. */
+const sixteenPruned = Array.from({ length: 16 }, (_, index) =>
+  varietyFixture({
+    plantId: `m-${index}`,
+    commonName: `Plant ${String(index).padStart(2, '0')}`,
+    gardenIds: ['g1'],
+    pruningMonths: EVERY_MONTH,
+  })
+);
+
 /** The server: the Expert's capabilities, a stored layout — the preset, `key` at `size` — its gardens, their varieties and its weather. */
 function serve(
   key: DashboardBlockKey,
   size: DashboardSize,
-  { gardens = sceneGardens, weather = EMPTY_WEATHER_DATA, varieties = [] }: Served = {},
+  { gardens = sceneGardens, weather = EMPTY_WEATHER_DATA, varieties = [], keyFigures }: Served = {},
   level: DashboardLevel = 'expert'
 ) {
-  const blocks: DashboardBlock[] = presetFor(level).map((block) => (block.key === key ? { ...block, size, hidden: false } : block));
+  const blocks: DashboardBlock[] = presetFor(level).map((block) =>
+    block.key === key
+      ? { ...block, size, hidden: false }
+      : block.key === 'keyfigures' && keyFigures
+        ? { ...block, options: { figures: [...keyFigures] } }
+        : block
+  );
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level,
@@ -287,6 +313,71 @@ describe('Counts in the Full width, on the page (SMA-437, lot V3-08, S3 — A-14
     expect(within(card('counters')).getByText(`${band()} varieties`)).toBeInTheDocument();
 
     expect(card('counters').innerHTML).not.toMatch(/data-weather/);
+    await waitFor(() => expect(screen.getByRole('note')).toHaveAttribute('data-weather-disclaimer'));
+  });
+});
+
+// SMA-437, lot V3-08, step S4 — THIS MONTH IN THE FULL WIDTH, on the page: the
+// grid alone, widened (A-14) — ten rows at rest, then the fold, in place,
+// writing nothing.
+describe('This month in the Full width, on the page (SMA-437, lot V3-08, S4 — A-14)', () => {
+  const rows = () => card('month').querySelectorAll('[data-month-plant]').length;
+
+  it('the Expert’s corner handle on This month at Large steps to the Full width: the widened grid, and the layout is saved with « wide »', async () => {
+    stubWidth(1280);
+    serve('month', 'large', { varieties: sixteenPruned });
+    await renderPage('Terrasse');
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change the size of This month — currently Large' }));
+
+    expect(await screen.findByRole('button', { name: 'Change the size of This month — currently Full width' })).toBeInTheDocument();
+    expect(card('month').querySelector('[data-month-wide]')).not.toBeNull();
+    expect(card('month').querySelectorAll('[data-month-axis-long]')).toHaveLength(12);
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
+    expect(lastSaved().blocks.find((block) => block.key === 'month')!.size).toBe('wide');
+  });
+
+  it('sixteen varieties: ten rows at rest, « Show the 6 other varieties » unfolds them in place, « Show less » folds them — and nothing is written', async () => {
+    stubWidth(1280);
+    serve('month', 'wide', { varieties: sixteenPruned });
+    await renderPage('Terrasse');
+    expect(rows()).toBe(10);
+    // The debounce's time is ADVANCED, never waited: simulated from the
+    // gestures on, once the page has loaded on the real clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    fireEvent.click(within(card('month')).getByRole('button', { name: 'Show the 6 other varieties' }));
+    expect(rows()).toBe(16);
+
+    fireEvent.click(within(card('month')).getByRole('button', { name: 'Show less' }));
+    expect(rows()).toBe(10);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 100);
+    });
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
+  });
+
+  it('never contradicts the page (A-4): its « to prune » is the Key figures band’s, folded and unfolded, and it draws no weather figure — the warning is the Weather widget’s (V1)', async () => {
+    stubWidth(1280);
+    // « À tailler ce mois-ci » in the band — one derivation, `monthCalendar`,
+    // feeds both (contract § 4.5).
+    serve('month', 'wide', {
+      varieties: sixteenPruned,
+      weather: lyon(sceneGardens),
+      keyFigures: ['prune', 'free', 'occupancy', 'varieties'],
+    });
+    await renderPage('Terrasse');
+    const band = () => card('keyfigures').querySelector('[data-key-figure="prune"] [data-key-figure-value]')!.textContent;
+    const counter = () => card('month').querySelector('[data-month-count="prune"] b')!.textContent;
+
+    expect(band()).toBe('16');
+    expect(counter()).toBe(band());
+    fireEvent.click(within(card('month')).getByRole('button', { name: 'Show the 6 other varieties' }));
+    expect(counter()).toBe(band());
+
+    expect(card('month').innerHTML).not.toMatch(/data-weather/);
     await waitFor(() => expect(screen.getByRole('note')).toHaveAttribute('data-weather-disclaimer'));
   });
 });
