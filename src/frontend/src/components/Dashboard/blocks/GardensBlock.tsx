@@ -40,7 +40,7 @@ import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import type { DashboardSize, GardenSort } from '../../../types/Dashboard';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import type { WeatherLocation } from '../../../types/DashboardWeather';
-import { formatCount } from '../../../utils/formatNumber';
+import { formatCount, formatPercent, formatSurface } from '../../../utils/formatNumber';
 import { formatRelativeDate } from '../../../utils/formatRelativeDate';
 import { useGardenViews } from '../../../hooks/useGardenViews';
 import { useUnitSystem } from '../../../hooks/useUnitSystem';
@@ -222,6 +222,83 @@ const stickyActionsSx = (rule: string, paper: string) => ({
   },
 });
 
+/**
+ * SMA-448, lot F5-b — the FULL WIDTH of the widget (V3-03 § 1, V3-04 § 4;
+ * contract v3 § 4.7 a; pre-flight F5 § C.4, retained by Alexandre on 28/09):
+ * the identity column of its seven-column table is drawn at 290 px on the
+ * artboards, on 1 104 px of content. The description line takes at most this
+ * there — a `nowrap` line hands its WHOLE text to the column's preferred width
+ * (see `DESCRIPTION_MAX_PX`), and one long description would otherwise widen
+ * the column for every row.
+ */
+const WIDE_DESCRIPTION_MAX_PX = 250;
+/**
+ * The identity column never shrinks under this in the Full width: from 600 to
+ * 1 199 px the table scrolls horizontally under its frozen actions column
+ * (C.4 — the Large's idiom, no new one), and without a floor `table-layout:
+ * auto` would squeeze the names to their longest word before it scrolled.
+ */
+const WIDE_IDENTITY_MIN_PX = 200;
+/** The OCCUPATION column's floor in the Full width: the bar stretched, its figure under it (« 68 % · 26 cases libres »). */
+const WIDE_OCCUPANCY_MIN_PX = 150;
+/** The search bar (V3-04, [P]): 190 px in Large, 230 in the Full width, the whole width on a phone. */
+const LARGE_SEARCH_PX = 190;
+const WIDE_SEARCH_PX = 230;
+
+/**
+ * A cell of the comparison table — the Large's and the Full width's alike.
+ *
+ * >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
+ * `height`, not `min-height` (round 7, S45 — Extension #8-7): CSS leaves
+ * `min-height` on a table cell undefined and browsers ignore it, so the 44 px
+ * were declared and never enforced. On a table cell `height` IS the minimum —
+ * a taller content still grows the row.
+ */
+const TABLE_CELL_SX = {
+  height: 44,
+  py: '6px',
+  pr: '8px',
+  borderBottom: '1px solid',
+  borderColor: 'borderSubtle',
+  fontSize: DASHBOARD_TYPE.body,
+  verticalAlign: 'middle',
+} as const;
+
+/** A sub-line of a table cell: 13 px, one of the three sizes V11 allows under 14. */
+const TABLE_SUB_SX = {
+  fontSize: 13,
+  color: 'text.secondary',
+  whiteSpace: 'nowrap',
+} as const;
+
+/**
+ * A column header of the comparison table.
+ *
+ * 11px capitals: one of the three sizes the frozen design allows under 14, and
+ * the reason is measured — six labelled columns plus a chevron only fit a
+ * 516 px card at this size. The rest is `.tbl .th` verbatim (round 6, N5-4):
+ * `font-weight: 800; letter-spacing: 0.02em; line-height: 1.25; padding: 0
+ * 10px 10px 0; align-self: end`. The header wrote 700 / 0.04em with 4 px above
+ * and below.
+ */
+const TABLE_HEADER_SX = {
+  textAlign: 'left',
+  fontSize: 11,
+  lineHeight: 1.25,
+  fontWeight: 800,
+  letterSpacing: '0.02em',
+  textTransform: 'uppercase',
+  color: 'text.secondary',
+  pt: 0,
+  pr: '10px',
+  pb: '10px',
+  pl: 0,
+  verticalAlign: 'bottom',
+  borderBottom: '1px solid',
+  borderColor: 'borderSubtle',
+  whiteSpace: 'nowrap',
+} as const;
+
 interface Props {
   size: DashboardSize;
   editing?: boolean;
@@ -374,6 +451,14 @@ export default function GardensBlock({
     () => sortGardens(gardens, gardensOptions(options, sorts).sort, i18n.language, customOrder),
     [gardens, options, sorts, i18n.language, customOrder]
   );
+  // Each garden's RANK in that list, indexed once per sort (PR #300, fix
+  // round 1, A — Extension EXT-1 / EXT-2, GitHub 4132607962). A search draws
+  // every garden it finds, each marked when it lies beyond the cut, and the
+  // rank was a `sorted.indexOf` per row: a scan of the list for every row,
+  // O(n²) for an Expert, who has no limit on gardens. Keyed by the garden
+  // OBJECT, as `indexOf` compared: `sortGardens` and `searchGardens` hand
+  // the same objects on.
+  const rankOf = useMemo(() => new Map(sorted.map((garden, index) => [garden, index] as const)), [sorted]);
   // « + N autres jardins » unfolds the list IN PLACE (A-N23, [A] 28/09):
   // nothing is written — the widget owns the state, the layout never sees
   // it — and « Réduire à N jardins » comes back to the setting. The search
@@ -520,6 +605,89 @@ export default function GardensBlock({
       ? TYPE_CHIP_ICONS[garden.config.gardenType]
       : undefined;
     return Icon ? <Icon /> : undefined;
+  };
+
+  // ── The Full width's cells (SMA-448, lot F5-b — V3-03 § 1, V3-04 § 4;
+  // contract v3 § 4.7 a; pre-flight F5 § C.4, retained on 28/09) ────────────
+  /** The plan's surface, in the page's one format — hectares beyond 10 000 m² (A-N16). */
+  const surfaceText = (view: GardenView): string => {
+    const surface = formatSurface(view.surfaceM2, i18n.language);
+    return t(`dashboard.surface.${surface.unit}`, { value: surface.value });
+  };
+  /** « 50 cm » — the cell as the planner names it, or null for a cell this build does not know. */
+  const cellSizeLabel = (garden: DashboardGardenData): string | null =>
+    garden.cellSize && i18n.exists(`planner.templates.cellSizes.${garden.cellSize}`)
+      ? t(`planner.templates.cellSizes.${garden.cellSize}`)
+      : null;
+  /**
+   * The identity sub-line of the Full width — « 10 × 8 · 50 cm · 20 m² ·
+   * modifié il y a 2 h »: the plan's dimensions, its cell, its surface, and
+   * the modification, which has no column of its own there (C.4). Without a
+   * plan, « Plan non dessiné » stands for the three. The parts are joined by
+   * the middle dot the artboards write; a date that cannot be read draws the
+   * missing-data mark in its place, as the Large's own sub-line does.
+   */
+  const wideSubLine = (
+    garden: DashboardGardenData,
+    view: GardenView | undefined,
+    withModified: boolean
+  ): React.ReactNode => {
+    const parts: React.ReactNode[] = view?.hasPlan
+      ? [
+          t('dashboard.blocks.gardens.dimensions', { cols: garden.width, rows: garden.height }),
+          cellSizeLabel(garden),
+          surfaceText(view),
+        ]
+      : [t('dashboard.blocks.gardens.noPlan')];
+    if (withModified) {
+      const when = modifiedText(garden);
+      parts.push(
+        when !== null ? (
+          t('dashboard.blocks.gardens.wide.modified', { when })
+        ) : (
+          <MissingDataMark key="no-date" label={t('dashboard.blocks.gardens.noDate')} />
+        )
+      );
+    }
+    return parts.filter((part) => part !== null).flatMap((part, index) => (index === 0 ? [part] : [' · ', part]));
+  };
+  /** The TYPE cell: the type chip WITH its glyph (V3-03, V3-04), or the « Type ? » mark of the contract (§ 4.7 b) — no gesture: the row's name already opens the garden. */
+  const typeCell = (garden: DashboardGardenData): React.ReactNode =>
+    typeLabel(garden) ? (
+      <Chip
+        label={typeLabel(garden)}
+        size="small"
+        variant="outlined"
+        icon={typeChipIcon(garden)}
+        sx={{
+          height: DASHBOARD_TYPE.tableChipHeight,
+          fontSize: DASHBOARD_TYPE.chip,
+          borderColor: tk.chipBorder,
+          '& .MuiChip-icon': { color: 'primary.main', fontSize: 14, ml: '6px', mr: '-4px' },
+        }}
+      />
+    ) : (
+      <MissingDataMark label={t('dashboard.blocks.gardens.wide.noType')} />
+    );
+  /** « 68 % · 26 cases libres » — the figure written once, under the bar. */
+  const occupancyText = (view: GardenView): string =>
+    t('dashboard.blocks.gardens.wide.occupancy', {
+      count: view.freeCells,
+      percent: formatPercent(view.occupancyPercent, i18n.language),
+    });
+  /** « 12 variétés », in full — the Full width has the room the Large's « 12 var. » lacks. */
+  const varietiesText = (garden: DashboardGardenData): string =>
+    t('dashboard.blocks.gardens.wide.varieties', { count: garden.varietyCount });
+  /**
+   * « hors des 8 affichés » (V3-04): a garden a search found beyond the cut,
+   * or null — for the Large's rows, the Full width's and the phone's, read
+   * from `rankOf`.
+   */
+  const beyondOf = (garden: DashboardGardenData): string | null => {
+    const rank = rankOf.get(garden);
+    return searching && cap !== null && rank !== undefined && rank >= cap
+      ? t('dashboard.blocks.gardens.search.beyond', { count: cap })
+      : null;
   };
 
   /**
@@ -1126,36 +1294,16 @@ export default function GardensBlock({
     );
   };
 
-  const largeBody = () => {
-    // Resolved ONCE for the table (round 7, S07 — Extension #7-13): every row
-    // re-read the theme and the tokens and built a fresh sticky `sx` — with
-    // its nested `&::before` — on every render, per garden, on a table with
-    // no row cap. The header cell and every row share this one object.
-    const stickyActions = stickyActionsSx(ruleColor, paperColor);
-    const headers = [
-      t('dashboard.blocks.gardens.columns.garden'),
-      t('dashboard.blocks.gardens.columns.plants'),
-      t('dashboard.blocks.gardens.columns.occupancy'),
-      t('dashboard.blocks.gardens.columns.exposure'),
-      ...(showWeatherColumn
-        ? [t('dashboard.blocks.gardens.columns.weather')]
-        : []),
-      ...(showHarvestColumn
-        ? [t('dashboard.blocks.gardens.columns.harvest')]
-        : [t('dashboard.blocks.gardens.columns.modified')]),
-      // NO trailing empty entry (round 1, E9 / G2). The actions column has its
-      // own `th` below, with the screen-reader label this list cannot carry, so
-      // a placeholder here emitted a SEVENTH header for six body cells: every
-      // header after EXPOSURE sat one column right of the cells it named, and
-      // assistive technology read the actions cell under « MODIFIED ».
-    ];
-
-    const searchLabel = t('dashboard.blocks.gardens.search.placeholder');
-    // The discreet bar in the widget's head (A-N3, [A] 23/09 07:39; the form
-    // of V3-04: 32 px, a pill, 190 px in Large, the whole width on a phone),
-    // drawn only while a garden is hidden by the setting. Escape clears it
-    // and stops there, so the key never reaches a surface above.
-    const searchBar = searchable ? (
+  // ── What the Large and the Full width share (SMA-448, lot F5-a then F5-b):
+  // the search bar — 190 px in Large, 230 in the Full width, the whole width
+  // on a phone —, its announced results, its empty state, and the foot ────
+  const searchLabel = t('dashboard.blocks.gardens.search.placeholder');
+  // The discreet bar in the widget's head (A-N3, [A] 23/09 07:39; the form
+  // of V3-04: 32 px, a pill, 190 px in Large, the whole width on a phone),
+  // drawn only while a garden is hidden by the setting. Escape clears it
+  // and stops there, so the key never reaches a surface above.
+  const searchBar = (width: number) =>
+    searchable ? (
       <TextField
         data-gardens-search
         size="small"
@@ -1195,94 +1343,118 @@ export default function GardensBlock({
             sx: { height: 32, borderRadius: '16px', fontSize: DASHBOARD_TYPE.secondary },
           },
         }}
-        sx={{ width: { xs: '100%', sm: 190 }, flexShrink: 0 }}
+        sx={{ width: { xs: '100%', sm: width }, flexShrink: 0 }}
       />
     ) : null;
-    // The results, said once (V3-04: « le nombre de résultats est annoncé »):
-    // a region mounted with the Large body, born empty, its text changing
-    // with the query — never inserted already filled (the rule of #278).
-    // ANNOUNCED, not displayed: the list itself, or the empty state, is what
-    // the eye reads — a visible line would say the empty state's sentence
-    // twice on the screen.
-    const searchStatus = (
-      <Typography
-        role="status"
-        aria-live="polite"
-        data-gardens-search-status
-        sx={visuallyHidden}
-      >
-        {searching && results
-          ? results.length === 0
-            ? t('dashboard.blocks.gardens.search.none', { query: trimmedQuery })
-            : t('dashboard.blocks.gardens.search.results', {
-                count: results.length,
-                total: sorted.length,
-                query: trimmedQuery,
-              })
-          : ''}
-      </Typography>
-    );
-    // « Aucun résultat » is a state, not an error (R5; V3-04).
-    const emptySearch = (
-      <InviteState
-        icon={<SearchOffIcon />}
-        message={t('dashboard.blocks.gardens.search.none', { query: trimmedQuery })}
-        body={t('dashboard.blocks.gardens.search.scope', { count: sorted.length })}
-        action={
-          <Button variant="outlined" size="small" onClick={() => setQuery('')}>
-            {t('dashboard.blocks.gardens.search.clear')}
-          </Button>
-        }
-      />
-    );
-    // The foot (A-N23, [A] 28/09): « + N autres jardins » that unfolds in
-    // place, « Réduire à N jardins » that folds back, and, at the right, the
-    // sort in force — « Triés par … », « Dans votre ordre » — so an order
-    // never looks arbitrary. The button is not drawn while a search is on
-    // (the results replace the cut); the sort line always is.
-    const foot = (
-      <Box
-        data-gardens-foot
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '8px',
-          flexWrap: 'wrap',
-          pt: '6px',
-          borderTop: '1px solid',
-          borderColor: 'borderSubtle',
-        }}
-      >
-        {hiddenCount > 0 && !searching ? (
-          <Button
-            size="small"
-            aria-expanded={expanded}
-            onClick={() => {
-              revealRef.current = !expanded;
-              setExpanded(!expanded);
-            }}
-            sx={{ fontSize: DASHBOARD_TYPE.link, fontWeight: 700, px: '6px', ml: '-6px' }}
-          >
-            {expanded
-              ? t('dashboard.blocks.gardens.foot.less', { count: cap ?? 0 })
-              : t('dashboard.blocks.gardens.foot.more', { count: hiddenCount })}
-          </Button>
-        ) : (
-          <Box component="span" />
-        )}
-        <Typography
-          data-gardens-sorted-by
-          sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary', ml: 'auto', whiteSpace: 'nowrap' }}
+  // The results, said once (V3-04: « le nombre de résultats est annoncé »):
+  // a region mounted with the Large body, born empty, its text changing
+  // with the query — never inserted already filled (the rule of #278).
+  // ANNOUNCED, not displayed: the list itself, or the empty state, is what
+  // the eye reads — a visible line would say the empty state's sentence
+  // twice on the screen.
+  const searchStatus = (
+    <Typography
+      role="status"
+      aria-live="polite"
+      data-gardens-search-status
+      sx={visuallyHidden}
+    >
+      {searching && results
+        ? results.length === 0
+          ? t('dashboard.blocks.gardens.search.none', { query: trimmedQuery })
+          : t('dashboard.blocks.gardens.search.results', {
+              count: results.length,
+              total: sorted.length,
+              query: trimmedQuery,
+            })
+        : ''}
+    </Typography>
+  );
+  // « Aucun résultat » is a state, not an error (R5; V3-04).
+  const emptySearch = (
+    <InviteState
+      icon={<SearchOffIcon />}
+      message={t('dashboard.blocks.gardens.search.none', { query: trimmedQuery })}
+      body={t('dashboard.blocks.gardens.search.scope', { count: sorted.length })}
+      action={
+        <Button variant="outlined" size="small" onClick={() => setQuery('')}>
+          {t('dashboard.blocks.gardens.search.clear')}
+        </Button>
+      }
+    />
+  );
+  // The foot (A-N23, [A] 28/09): « + N autres jardins » that unfolds in
+  // place, « Réduire à N jardins » that folds back, and, at the right, the
+  // sort in force — « Triés par … », « Dans votre ordre » — so an order
+  // never looks arbitrary. The button is not drawn while a search is on
+  // (the results replace the cut); the sort line always is.
+  const foot = (
+    <Box
+      data-gardens-foot
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '8px',
+        flexWrap: 'wrap',
+        pt: '6px',
+        borderTop: '1px solid',
+        borderColor: 'borderSubtle',
+      }}
+    >
+      {hiddenCount > 0 && !searching ? (
+        <Button
+          size="small"
+          aria-expanded={expanded}
+          onClick={() => {
+            revealRef.current = !expanded;
+            setExpanded(!expanded);
+          }}
+          sx={{ fontSize: DASHBOARD_TYPE.link, fontWeight: 700, px: '6px', ml: '-6px' }}
         >
-          {t(`dashboard.blocks.gardens.foot.sortedBy.${sort}`)}
-        </Typography>
-      </Box>
-    );
+          {expanded
+            ? t('dashboard.blocks.gardens.foot.less', { count: cap ?? 0 })
+            : t('dashboard.blocks.gardens.foot.more', { count: hiddenCount })}
+        </Button>
+      ) : (
+        <Box component="span" />
+      )}
+      <Typography
+        data-gardens-sorted-by
+        sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary', ml: 'auto', whiteSpace: 'nowrap' }}
+      >
+        {t(`dashboard.blocks.gardens.foot.sortedBy.${sort}`)}
+      </Typography>
+    </Box>
+  );
+
+  const largeBody = () => {
+    // Resolved ONCE for the table (round 7, S07 — Extension #7-13): every row
+    // re-read the theme and the tokens and built a fresh sticky `sx` — with
+    // its nested `&::before` — on every render, per garden, on a table with
+    // no row cap. The header cell and every row share this one object.
+    const stickyActions = stickyActionsSx(ruleColor, paperColor);
+    const headers = [
+      t('dashboard.blocks.gardens.columns.garden'),
+      t('dashboard.blocks.gardens.columns.plants'),
+      t('dashboard.blocks.gardens.columns.occupancy'),
+      t('dashboard.blocks.gardens.columns.exposure'),
+      ...(showWeatherColumn
+        ? [t('dashboard.blocks.gardens.columns.weather')]
+        : []),
+      ...(showHarvestColumn
+        ? [t('dashboard.blocks.gardens.columns.harvest')]
+        : [t('dashboard.blocks.gardens.columns.modified')]),
+      // NO trailing empty entry (round 1, E9 / G2). The actions column has its
+      // own `th` below, with the screen-reader label this list cannot carry, so
+      // a placeholder here emitted a SEVENTH header for six body cells: every
+      // header after EXPOSURE sat one column right of the cells it named, and
+      // assistive technology read the actions cell under « MODIFIED ».
+    ];
 
     return (
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {searchBar}
+        {searchBar(LARGE_SEARCH_PX)}
         {searchStatus}
         <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {results && results.length === 0 ? emptySearch : (
@@ -1314,31 +1486,8 @@ export default function GardensBlock({
                   component="th"
                   key={index}
                   scope="col"
-                  sx={{
-                    textAlign: 'left',
-                    // 11px capitals: one of the three sizes the frozen design
-                    // allows under 14, and the reason is measured — six labelled
-                    // columns plus a chevron only fit a 516 px card at this size.
-                    //
-                    // The rest is `.tbl .th` verbatim (round 6, N5-4):
-                    // `font-weight: 800; letter-spacing: 0.02em; line-height:
-                    // 1.25; padding: 0 10px 10px 0; align-self: end`. The
-                    // header wrote 700 / 0.04em with 4 px above and below.
-                    fontSize: 11,
-                    lineHeight: 1.25,
-                    fontWeight: 800,
-                    letterSpacing: '0.02em',
-                    textTransform: 'uppercase',
-                    color: 'text.secondary',
-                    pt: 0,
-                    pr: '10px',
-                    pb: '10px',
-                    pl: 0,
-                    verticalAlign: 'bottom',
-                    borderBottom: '1px solid',
-                    borderColor: 'borderSubtle',
-                    whiteSpace: 'nowrap',
-                  }}
+                  // `TABLE_HEADER_SX`: 11px capitals, `.tbl .th` verbatim (round 6, N5-4).
+                  sx={TABLE_HEADER_SX}
                 >
                   {label}
                 </Box>
@@ -1354,11 +1503,7 @@ export default function GardensBlock({
             {largeRows.map((garden, index) => (
               <GardenRow
                 rowRef={expanded && !searching && cap !== null && index === cap ? firstRevealedRef : undefined}
-                beyond={
-                  searching && cap !== null && sorted.indexOf(garden) >= cap
-                    ? t('dashboard.blocks.gardens.search.beyond', { count: cap })
-                    : null
-                }
+                beyond={beyondOf(garden)}
                 stickyActions={stickyActions}
                 chipBorder={tk.chipBorder}
                 key={garden.id}
@@ -1382,6 +1527,232 @@ export default function GardensBlock({
       </Box>
     );
   };
+
+  /**
+   * SMA-448, lot F5-b — THE FULL WIDTH (V3-03 § 1, V3-04 § 4; contract v3
+   * § 4.7 a; pre-flight F5 § C.4, retained by Alexandre on 28/09), the
+   * Expert's alone (A-N11): the seven-column table — JARDIN (the name, its
+   * sub-line « 10 × 8 · 50 cm · 20 m² · modifié il y a 2 h », its description
+   * on a truncated line, V33), TYPE (the chip with its glyph), PLANTES (the
+   * pill and the varieties in full), OCCUPATION (the bar, « 68 % · 26 cases
+   * libres » under it), EXPOSITION, MÉTÉO when the Weather widget is on the
+   * page (V23), the frozen actions column — with NO MODIFIÉ column and NO
+   * RÉCOLTE column. The card grows with its rows (A-N10): nothing scrolls
+   * vertically; under 1 152 px of card the table scrolls horizontally under
+   * its frozen actions, the Large's idiom. The settings of lot F5-a hold: the
+   * count as the cap, « + N autres jardins » unfolding in place under a rule
+   * « Au-delà des N affichés » — the mark of what was hidden, since nothing
+   * scrolls to the first garden revealed —, the search while a garden is
+   * hidden, the sort in the foot. On a PHONE the rows of the A9 form replace
+   * the table: a 1 104 px table has no place in a 328 px card.
+   */
+  /** Where the unfolding's rule falls: before the first garden the cut hid, or nowhere. */
+  const cutAt = expanded && !searching && cap !== null && sorted.length > cap ? cap : null;
+  const cutLine = (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        fontSize: DASHBOARD_TYPE.secondary,
+        fontWeight: 700,
+        color: 'text.secondary',
+        whiteSpace: 'nowrap',
+        '&::before, &::after': { content: '""', flex: 1, borderTop: `1px dashed ${tk.chipBorder}` },
+      }}
+    >
+      {t('dashboard.blocks.gardens.foot.cut', { count: cap ?? 0 })}
+    </Box>
+  );
+  /** The identity link of the Full width: the name WRAPS (V5 — no ellipsis a source allows here; the card grows, A-N10). */
+  const wideNameSx = {
+    display: 'block',
+    fontSize: DASHBOARD_TYPE.gardenName,
+    fontWeight: 700,
+    lineHeight: 1.25,
+    textDecoration: 'none',
+    color: 'inherit',
+    overflowWrap: 'anywhere',
+  } as const;
+
+  const wideTable = () => {
+    const stickyActions = stickyActionsSx(ruleColor, paperColor);
+    const headers = [
+      t('dashboard.blocks.gardens.columns.garden'),
+      t('dashboard.blocks.gardens.columns.type'),
+      t('dashboard.blocks.gardens.columns.plants'),
+      t('dashboard.blocks.gardens.columns.occupancy'),
+      t('dashboard.blocks.gardens.columns.exposure'),
+      ...(showWeatherColumn ? [t('dashboard.blocks.gardens.columns.weather')] : []),
+    ];
+    const cutRow = (
+      <Box component="tr" key="cut" data-gardens-cut>
+        <Box component="td" colSpan={headers.length + 1} sx={{ py: '8px', borderBottom: '1px solid', borderColor: 'borderSubtle' }}>
+          {cutLine}
+        </Box>
+      </Box>
+    );
+    return (
+      // The horizontal scroll under 1 152 px of card (C.4): the table keeps
+      // its columns whole and slides under its frozen actions column.
+      <Box data-gardens-scroll sx={{ overflowX: 'auto' }}>
+        <Box
+          component="table"
+          aria-label={t('dashboard.blocks.gardens.title')}
+          sx={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'auto' }}
+        >
+          <Box component="thead">
+            <Box component="tr">
+              {headers.map((label, index) => (
+                <Box component="th" key={index} scope="col" sx={TABLE_HEADER_SX}>
+                  {label}
+                </Box>
+              ))}
+              <Box component="th" scope="col" sx={stickyActions}>
+                <Box component="span" sx={visuallyHidden}>
+                  {t('dashboard.blocks.gardens.columns.actions')}
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {largeRows.flatMap((garden, index) => [
+              ...(cutAt !== null && index === cutAt ? [cutRow] : []),
+              <WideRow
+                key={garden.id}
+                garden={garden}
+                view={views.get(garden.id)}
+                showWeatherColumn={showWeatherColumn}
+                weather={weatherCell(garden)}
+                subLine={wideSubLine(garden, views.get(garden.id), true)}
+                type={typeCell(garden)}
+                plants={countPill(garden)}
+                varieties={varietiesText(garden)}
+                ornamental={ornamentalChip(garden, 'table')}
+                actions={rowTrailing(garden)}
+                plannerPath={plannerPath(garden)}
+                stickyActions={stickyActions}
+                nameSx={wideNameSx}
+                beyond={beyondOf(garden)}
+                occupancy={occupancyText}
+              />,
+            ])}
+          </Box>
+        </Box>
+      </Box>
+    );
+  };
+
+  /**
+   * The Full width on a PHONE — the rows of the A9 form (V3-03 § 6, défaut 8 ;
+   * V3-04 `rowsPhone`; contract v3 § 4.7 a « Au téléphone »): the thumbnail,
+   * the name on its own line as the door to the garden, « 10 × 8 · 50 cm ·
+   * 20 m² », the chips (the type with its glyph, « N plantes », « Ornemental »,
+   * the MÉTÉO cell when the Weather widget is on the page) that wrap, « 68 % ·
+   * 26 cases libres · Plein soleil », the description (V33), and the pencil,
+   * the bin and the chevron at their place (V21). The unfolding's rule stands
+   * between the rows where the cut fell.
+   */
+  const wideRows = () => (
+    <Box component="ul" data-gardens-rows sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column' }}>
+      {largeRows.flatMap((garden, index) => {
+        const view = views.get(garden.id);
+        const beyond = beyondOf(garden);
+        const items: React.ReactNode[] = [];
+        if (cutAt !== null && index === cutAt) {
+          items.push(
+            <Box component="li" key="cut" data-gardens-cut sx={{ py: '8px' }}>
+              {cutLine}
+            </Box>
+          );
+        }
+        items.push(
+          <Box
+            component="li"
+            key={garden.id}
+            data-garden-row
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+              py: '12px',
+              borderBottom: '1px solid',
+              borderColor: 'borderSubtle',
+              '&:last-of-type': { borderBottom: 'none' },
+            }}
+          >
+            <Box sx={{ flexShrink: 0, pt: '2px' }}>
+              <GardenThumbnail garden={garden} maxW={MEDIUM_THUMB_W_PHONE} maxH={MEDIUM_THUMB_H_PHONE} />
+            </Box>
+            <Box
+              data-garden-row-group
+              sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px' }}
+            >
+              <Box
+                component={RouterLink}
+                to={plannerPath(garden)}
+                aria-label={t('dashboard.blocks.gardens.open', { name: garden.name })}
+                sx={wideNameSx}
+              >
+                {garden.name}
+              </Box>
+              {beyond && (
+                <Typography data-garden-beyond sx={{ ...TABLE_SUB_SX, fontStyle: 'italic' }}>
+                  {beyond}
+                </Typography>
+              )}
+              <Typography data-garden-sub sx={{ ...TABLE_SUB_SX, color: 'text.primary', whiteSpace: 'normal' }}>
+                {wideSubLine(garden, view, false)}
+              </Typography>
+              <Box data-garden-row-chips sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', minWidth: 0 }}>
+                {typeCell(garden)}
+                {countPill(garden)}
+                {ornamentalChip(garden, 'table')}
+                {showWeatherColumn && weatherCell(garden)}
+              </Box>
+              {view?.hasPlan && (
+                <Box
+                  data-garden-occupancy
+                  sx={{ ...TABLE_SUB_SX, whiteSpace: 'normal', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}
+                >
+                  <span>{occupancyText(view)}</span>
+                  {view.dominantExposure && (
+                    <>
+                      <span aria-hidden> · </span>
+                      <ExposureDot category={view.dominantExposure} />
+                      <span>{t(`dashboard.exposure.short.${view.dominantExposure}`)}</span>
+                    </>
+                  )}
+                </Box>
+              )}
+              {garden.description && (
+                <MaybeTooltip description={garden.description}>
+                  <Typography
+                    data-garden-description
+                    sx={{ ...TABLE_SUB_SX, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'help' }}
+                    tabIndex={0}
+                  >
+                    {garden.description}
+                  </Typography>
+                </MaybeTooltip>
+              )}
+            </Box>
+            {rowTrailing(garden)}
+          </Box>
+        );
+        return items;
+      })}
+    </Box>
+  );
+
+  const wideBody = () => (
+    <Box data-gardens-wide sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {searchBar(WIDE_SEARCH_PX)}
+      {searchStatus}
+      {results && results.length === 0 ? emptySearch : phone ? wideRows() : wideTable()}
+      {foot}
+    </Box>
+  );
 
   const body = () => {
     if (loading) {
@@ -1425,6 +1796,8 @@ export default function GardensBlock({
 
     if (size === 'small') return smallBody();
     if (size === 'medium') return mediumBody();
+    // The Full width (lot F5-b): the seven columns — never the Large stretched.
+    if (size === 'wide') return wideBody();
     return largeBody();
   };
 
@@ -1536,26 +1909,9 @@ function GardenRow({
 }: RowProps) {
   const { t, i18n } = useTranslation();
 
-  const cellSx = {
-    // >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
-    // `height`, not `min-height` (round 7, S45 — Extension #8-7): CSS leaves
-    // `min-height` on a table cell undefined and browsers ignore it, so the
-    // 44 px were declared and never enforced. On a table cell `height` IS the
-    // minimum — a taller content still grows the row.
-    height: 44,
-    py: '6px',
-    pr: '8px',
-    borderBottom: '1px solid',
-    borderColor: 'borderSubtle',
-    fontSize: DASHBOARD_TYPE.body,
-    verticalAlign: 'middle',
-  } as const;
-
-  const subSx = {
-    fontSize: 13,
-    color: 'text.secondary',
-    whiteSpace: 'nowrap',
-  } as const;
+  // The table's cell and sub-line, shared with the Full width's row (lot F5-b).
+  const cellSx = TABLE_CELL_SX;
+  const subSx = TABLE_SUB_SX;
 
   /**
    * The first sub-line of the identity cell — the artboard's own text: « 10 × 8 »
@@ -1811,6 +2167,167 @@ function GardenRow({
           pr: 0,
         }}
       >
+        {actions}
+      </Box>
+    </Box>
+  );
+}
+
+interface WideRowProps {
+  garden: DashboardGardenData;
+  /** Derived once for the whole page — see `useGardenViews`. */
+  view: GardenView | undefined;
+  showWeatherColumn: boolean;
+  /** The MÉTÉO cell, resolved by the block (`weatherCell`). */
+  weather: React.ReactNode;
+  /** « 10 × 8 · 50 cm · 20 m² · modifié il y a 2 h », resolved by the block (`wideSubLine`). */
+  subLine: React.ReactNode;
+  /** The TYPE cell: the chip with its glyph, or the « Type ? » mark (`typeCell`). */
+  type: React.ReactNode;
+  /** The green « N plantes » pill (`countPill`). */
+  plants: React.ReactNode;
+  /** « 12 variétés », in full. */
+  varieties: string;
+  /** « 68 % · 26 cases libres », from the view — read only with a plan. */
+  occupancy: (view: GardenView) => string;
+  ornamental: React.ReactNode;
+  actions: React.ReactNode;
+  plannerPath: string;
+  /** Resolved once by the table — see `stickyActionsSx`. */
+  stickyActions: ReturnType<typeof stickyActionsSx>;
+  /** The name's style: it wraps rather than ellipsizes (V5). */
+  nameSx: Record<string, unknown>;
+  /** « hors des 8 affichés »: a garden a search found beyond the cut (V3-04), or null. */
+  beyond?: string | null;
+}
+
+/**
+ * One line of the Full width's table (SMA-448, lot F5-b — V3-03, V3-04;
+ * contract v3 § 4.7 a). The identity cell is the row's HEADER (`scope="row"`,
+ * as the Large's — round 7, S31): the name as the door to the garden, the
+ * mark of a search beyond the cut, the sub-line, the description on its own
+ * truncated line (V33 — the one ellipsis a source allows here), then the
+ * thumbnail and « Ornemental ». The type is a column of its own.
+ */
+function WideRow({
+  garden,
+  view,
+  showWeatherColumn,
+  weather,
+  subLine,
+  type,
+  plants,
+  varieties,
+  occupancy,
+  ornamental,
+  actions,
+  plannerPath,
+  stickyActions,
+  nameSx,
+  beyond = null,
+}: WideRowProps) {
+  const { t } = useTranslation();
+
+  return (
+    <Box component="tr">
+      <Box
+        component="th"
+        scope="row"
+        sx={{ ...TABLE_CELL_SX, textAlign: 'left', fontWeight: 400, minWidth: WIDE_IDENTITY_MIN_PX }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Box
+            component={RouterLink}
+            to={plannerPath}
+            aria-label={t('dashboard.blocks.gardens.open', { name: garden.name })}
+            sx={nameSx}
+          >
+            {garden.name}
+          </Box>
+          {beyond && (
+            <Typography data-garden-beyond sx={{ ...TABLE_SUB_SX, fontStyle: 'italic' }}>
+              {beyond}
+            </Typography>
+          )}
+          {/* The sub-line WRAPS (V5): « 10 × 8 · 50 cm · 20 m² · modifié il y a
+              2 h » passes to a second line in a narrow column rather than
+              being cut — the artboard's `.ell` is not an ellipsis a source
+              allows (contract v3 § 6, V5). */}
+          <Typography data-garden-sub sx={{ ...TABLE_SUB_SX, color: 'text.primary', whiteSpace: 'normal' }}>
+            {subLine}
+          </Typography>
+          {garden.description && (
+            <MaybeTooltip description={garden.description}>
+              <Typography
+                data-garden-description
+                sx={{
+                  ...TABLE_SUB_SX,
+                  maxWidth: WIDE_DESCRIPTION_MAX_PX,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  cursor: 'help',
+                }}
+                tabIndex={0}
+              >
+                {garden.description}
+              </Typography>
+            </MaybeTooltip>
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mt: '2px', flexWrap: 'wrap' }}>
+            <GardenThumbnail garden={garden} maxW={TABLE_THUMB_W} maxH={TABLE_THUMB_H} />
+            {ornamental}
+          </Box>
+        </Box>
+      </Box>
+
+      <Box component="td" sx={TABLE_CELL_SX}>
+        {type}
+      </Box>
+
+      <Box component="td" sx={TABLE_CELL_SX}>
+        {/* The pill does not stretch to the column (V3-03: `align-items:
+            flex-start` — « les puces d'une cellule ne s'étirent pas »). */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+          {plants}
+          <Typography sx={TABLE_SUB_SX}>{varieties}</Typography>
+        </Box>
+      </Box>
+
+      <Box component="td" sx={{ ...TABLE_CELL_SX, minWidth: WIDE_OCCUPANCY_MIN_PX }}>
+        {view?.hasPlan ? (
+          <>
+            {/* The bar alone, stretched to its column; the figure written ONCE,
+                under it, with the free cells (contract v3 § 4.7 a). */}
+            <OccupancyBar percent={view.occupancyPercent} valueHidden stretch />
+            <Typography data-garden-occupancy sx={{ ...TABLE_SUB_SX, mt: '4px' }}>
+              {occupancy(view)}
+            </Typography>
+          </>
+        ) : (
+          <MissingDataMark label={t('dashboard.blocks.gardens.noPlanShort')} />
+        )}
+      </Box>
+
+      <Box component="td" sx={TABLE_CELL_SX}>
+        {view?.dominantExposure ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ExposureDot category={view.dominantExposure} />
+            <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+              {t(`dashboard.exposure.short.${view.dominantExposure}`)}
+            </Box>
+          </Box>
+        ) : (
+          <MissingDataMark label={t('dashboard.blocks.gardens.noPlanShort')} />
+        )}
+      </Box>
+
+      {showWeatherColumn && (
+        <Box component="td" data-weather-column sx={TABLE_CELL_SX}>
+          {weather}
+        </Box>
+      )}
+
+      <Box component="td" sx={{ ...TABLE_CELL_SX, ...stickyActions, pl: '2px', pr: 0 }}>
         {actions}
       </Box>
     </Box>

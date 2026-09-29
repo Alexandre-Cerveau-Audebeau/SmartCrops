@@ -351,6 +351,160 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     });
   });
 
+  // SMA-448, lot F5-b (V5: « toute forme nouvelle devient une scène ») — the
+  // Gardens widget in the FULL WIDTH, the Expert's (V3-03, V3-04): eleven
+  // scenes — one, five, twelve (at rest, unfolded, a search on, a search
+  // without a result, « Tous », in Edit mode), sixty (at rest, unfolded) and
+  // three very long names — at every width of the runs: zero overlap, zero
+  // text cut for good, the rows the count leaves, the rule under the unfolded
+  // lists, the actions inside the card, the table scrolling sideways under
+  // its frozen actions where the card is too narrow (600 to 1 024 px), never
+  // at 1 280 px; on a phone the rows of the A9 form. And the grid scene of a
+  // Full-width Gardens BETWEEN two pinned rows.
+  describe('the Gardens widget in the Full width (SMA-448, lot F5-b)', () => {
+    const phoneOf = (run: LayoutRun) => run.vw < 600;
+    const WIDE_SCENES = LAYOUT_SCENES.filter((scene) => scene.key === 'gardens' && scene.size === 'wide').map((scene) => scene.name);
+    /** The garden rows each scene draws: the count's cut — eight on a desktop, five on a phone — where more gardens than it are served. */
+    const rowsOf = (name: string, phone: boolean): number => {
+      const cut = phone ? 5 : 8;
+      switch (name) {
+        case 'gardens-wide-one':
+          return 1;
+        case 'gardens-wide-five':
+          return 5;
+        case 'gardens-wide-twelve':
+        case 'gardens-wide-edit':
+        case 'gardens-wide-sixty':
+          return cut;
+        case 'gardens-wide-unfolded':
+        case 'gardens-wide-all':
+          return 12;
+        case 'gardens-wide-sixty-unfolded':
+          return 60;
+        case 'gardens-wide-search':
+          return 2;
+        case 'gardens-wide-search-empty':
+          return 0;
+        case 'gardens-wide-long':
+          return 3;
+        default:
+          throw new Error(`No row count for ${name}`);
+      }
+    };
+    const UNFOLDED = ['gardens-wide-unfolded', 'gardens-wide-sixty-unfolded'];
+    /** The scenes where a garden is hidden by the count — the search exists (A-N3). */
+    const SEARCHABLE = [
+      'gardens-wide-twelve',
+      'gardens-wide-edit',
+      'gardens-wide-sixty',
+      'gardens-wide-unfolded',
+      'gardens-wide-sixty-unfolded',
+      'gardens-wide-search',
+      'gardens-wide-search-empty',
+    ];
+    /** As tall as its content (A-N10): the body holds all of it, nothing below its fold. */
+    const holdsItsContent = (scene: SceneMeasure, label: string) =>
+      expect(scene.body.scrollH, label).toBeLessThanOrEqual(scene.body.h + 1);
+
+    it('measures its eleven scenes in every run — one, five, twelve at rest, unfolded, searched, searched in vain, « Tous », sixty at rest and unfolded, three very long names, twelve in Edit mode', () => {
+      expect(WIDE_SCENES).toEqual([
+        'gardens-wide-one',
+        'gardens-wide-five',
+        'gardens-wide-twelve',
+        'gardens-wide-unfolded',
+        'gardens-wide-search',
+        'gardens-wide-search-empty',
+        'gardens-wide-all',
+        'gardens-wide-sixty',
+        'gardens-wide-sixty-unfolded',
+        'gardens-wide-long',
+        'gardens-wide-edit',
+      ]);
+      for (const run of RUNS) {
+        for (const name of WIDE_SCENES) expect(sceneOf(run, name).size, `${run.id} ${name}`).toBe('wide');
+      }
+    });
+
+    it('draws the rows the count leaves — the cut at eight on a desktop, five on a phone —, the rule « Au-delà des N affichés » under the unfolded lists alone, the search while a garden is hidden, the foot on one line, in every run', () => {
+      for (const run of RUNS) {
+        for (const name of WIDE_SCENES) {
+          const scene = sceneOf(run, name);
+          const label = `${run.id} ${name}`;
+          expect(scene.gardenRows, label).toBe(rowsOf(name, phoneOf(run)));
+          expect(scene.gardensCut, label).toBe(UNFOLDED.includes(name));
+          expect(scene.gardensSearch, label).toBe(SEARCHABLE.includes(name));
+          expect(scene.gardensEmptySearch, label).toBe(name === 'gardens-wide-search-empty');
+          expect(scene.gardensFootWrapped, label).toEqual([]);
+        }
+        expect(sceneOf(run, 'gardens-wide-search').gardensBeyond, run.id).toBe(phoneOf(run) ? 2 : 1);
+      }
+    });
+
+    it(`at ${DESKTOP_WIDTH} px: the whole grid (${gridWidthAt(DESKTOP_WIDTH)} px), as tall as its content — no scrolling zone, nothing cut, the actions inside the card, the table in every scene but the search without a result`, () => {
+      const run = runOf(`fr@${DESKTOP_WIDTH}`);
+      for (const name of WIDE_SCENES) {
+        const scene = sceneOf(run, name);
+        expect(scene.card.w, name).toBe(gridWidthAt(DESKTOP_WIDTH));
+        holdsItsContent(scene, name);
+        expect(scene.scrollers, name).toEqual([]);
+        expect(scene.hardClipped, name).toBe(0);
+        expect(scene.gardenActionsOutside, name).toBe(0);
+        expect(scene.gardensTable, name).toBe(name !== 'gardens-wide-search-empty');
+      }
+    });
+
+    it.each(TABLET_WIDTHS)('at %i px: both columns (A-N12), as tall as its content; the table may scroll sideways under its frozen actions — nothing cut for good, the actions inside the card', (width) => {
+      const run = runOf(`fr@${width}`);
+      for (const name of WIDE_SCENES) {
+        const scene = sceneOf(run, name);
+        expect(scene.card.w, name).toBe(gridWidthAt(width));
+        holdsItsContent(scene, name);
+        expect(scene.scrollers.filter((scroller) => scroller.axis.includes('y')), name).toEqual([]);
+        expect(scene.hardClipped, name).toBe(0);
+        expect(scene.gardenActionsOutside, name).toBe(0);
+      }
+    });
+
+    it.each(PHONE_WIDTHS)('at %i px: the rows of the A9 form — no table, no scrolling zone —, each name 130 px at least, the actions inside the card, the card 200 px at least', (width) => {
+      const run = runOf(`fr@${width}`);
+      for (const name of WIDE_SCENES) {
+        const scene = sceneOf(run, name);
+        expect(scene.gardensTable, name).toBe(false);
+        expect(scene.card.w, name).toBe(width - 32);
+        expect(scene.card.h, name).toBeGreaterThanOrEqual(200);
+        expect(scene.scrollers, name).toEqual([]);
+        expect(scene.gardenActionsOutside, name).toBe(0);
+        expect(scene.gardenNameWidths, name).toHaveLength(rowsOf(name, true));
+        for (const nameWidth of scene.gardenNameWidths) expect(nameWidth, name).toBeGreaterThanOrEqual(130);
+      }
+    });
+
+    it('ellipsizes nothing but a garden’s description (V33) — the names, the sub-lines and the foot wrap (V5) — in every run', () => {
+      for (const run of RUNS) {
+        for (const name of WIDE_SCENES) {
+          const cuts = sceneOf(run, name).ellipsized.filter((cut) => !cut.where.startsWith('garden-description'));
+          expect(cuts, `${run.id} ${name}`).toEqual([]);
+        }
+      }
+    });
+
+    it.each(WIDE_RUNS.map((run) => run.id))('the grid scene: the Gardens in Full width BETWEEN two pinned rows — the whole grid wide, its row as tall as it, the rows around it 273 px — %s', (id) => {
+      const run = runOf(id);
+      for (const editing of [false, true]) {
+        const name = `grid-expert-gardens-wide${editing ? '-edit' : ''}`;
+        const measured = gridOf(run, name);
+        const gardens = measured.cards.find((card) => card.key === 'gardens')!;
+        expect(gardens.size, `${id} ${name}`).toBe('wide');
+        expect(gardens.box.w, `${id} ${name}`).toBe(gridWidthAt(run.vw));
+        expect(measured.cardOverlaps, `${id} ${name}`).toEqual([]);
+        const tracks = measured.rows.split(' ').map(parseFloat);
+        // Weather M, Tips S and This month S above, To-do M and Counters M below: pinned rows on both sides of the Gardens' own.
+        expect(tracks.filter((track) => track === 273).length, `${id} ${name}`).toBeGreaterThanOrEqual(2);
+        expect(tracks.some((track) => Math.abs(track - gardens.box.h) < 1), `${id} ${name}: ${measured.rows}`).toBe(true);
+      }
+    });
+  });
+
   describe.each(RUNS)('$id', (run) => {
     it.each(LAYOUT_SCENES.map((scene) => scene.name))('%s: no overlap, nothing clipped, nothing beyond the card', (name) => {
       const scene = sceneOf(run, name);

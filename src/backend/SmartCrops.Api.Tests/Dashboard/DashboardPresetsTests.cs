@@ -92,10 +92,14 @@ public class DashboardPresetsTests
 
     /// <summary>
     /// « en tête du preset Expert » (contract § 3.3 [A], § 4.5): the band first,
-    /// in the Full width — its one size — then the eight widgets in Large.
+    /// in the Full width — its one size — then the eight widgets, in Large but
+    /// the Gardens: in the Full width since SMA-448, lot F5-b (PR #300, fix
+    /// round 1, P1 — Alexandre, 29/09: « personnellement je préfère que de
+    /// base, en Expert, le widget Jardins soit en large comme ça »). The seven
+    /// others keep their Large; their own default is lot V3-08's to decide.
     /// </summary>
     [Fact]
-    public void For_Expert_PutsTheKeyFiguresBandFirst_InFullWidth_ThenTheEightInLarge()
+    public void For_Expert_PutsTheKeyFiguresBandFirst_InFullWidth_ThenGardensInFullWidth_AndTheSevenOthersInLarge()
     {
         var expert = DashboardPresets.For(DashboardLayout.Levels.Expert);
 
@@ -103,7 +107,10 @@ public class DashboardPresetsTests
         Assert.Equal(
             DashboardLayout.Blocks.All.Where(key => key != "keyfigures"),
             expert.Skip(1).Select(b => b.Key));
-        Assert.All(expert.Skip(1), block => Assert.Equal(new DashboardPresetBlock(block.Key, "large", false), block));
+        Assert.Equal(new DashboardPresetBlock("gardens", "wide", false), expert.Single(b => b.Key == "gardens"));
+        Assert.All(
+            expert.Skip(1).Where(b => b.Key != "gardens"),
+            block => Assert.Equal(new DashboardPresetBlock(block.Key, "large", false), block));
     }
 
     [Theory]

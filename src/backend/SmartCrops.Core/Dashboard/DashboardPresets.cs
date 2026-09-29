@@ -16,8 +16,10 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// (<c>_spec.md</c> § 8): « Novice : Météo Moyen, Jardins Moyen, Conseils Petit,
 /// Ce mois-ci Petit », « Jardinier : Météo Moyen, Jardins Grand, Conseils Moyen,
 /// Ce mois-ci Moyen, À faire Moyen, Compteurs Moyen », « Expert : les huit
-/// widgets en Grand ». Since SMA-448 (lot F1) they are also the WIDGETS each
-/// formula has, and <see cref="FormulaCatalog"/> serves them.
+/// widgets en Grand » — the Expert's Gardens in the Full width since SMA-448,
+/// lot F5-b (see <see cref="ExpertPreset"/>). Since SMA-448 (lot F1) they are
+/// also the WIDGETS each formula has, and <see cref="FormulaCatalog"/> serves
+/// them.
 ///
 /// <para>Every preset lists every block its level permits: a block a level does
 /// not show is present and <c>Hidden</c>, so the Customize gallery can offer it
@@ -72,13 +74,19 @@ public static class DashboardPresets
 
     /// <summary>
     /// Written by hand since the band (pre-flight D8), where it was derived from
-    /// the keys: the band first, in the Full width, then the eight in Large.
+    /// the keys: the band first, in the Full width, then the eight in Large —
+    /// but the Gardens, in the Full width since SMA-448, lot F5-b (PR #300, fix
+    /// round 1, P1 — Alexandre, 29/09: « personnellement je préfère que de base,
+    /// en Expert, le widget Jardins soit en large comme ça »). What an account
+    /// arriving at the Expert formula without a layout of its own reads, and
+    /// what « Réinitialiser » brings back; a stored layout does not change. The
+    /// seven others keep their Large until lot V3-08 decides theirs.
     /// </summary>
     private static readonly IReadOnlyList<DashboardPresetBlock> ExpertPreset =
     [
         new(DashboardLayout.Blocks.KeyFigures, W, false),
         new(DashboardLayout.Blocks.Weather, L, false),
-        new(DashboardLayout.Blocks.Gardens, L, false),
+        new(DashboardLayout.Blocks.Gardens, W, false),
         new(DashboardLayout.Blocks.Tips, L, false),
         new(DashboardLayout.Blocks.Month, L, false),
         new(DashboardLayout.Blocks.Todo, L, false),

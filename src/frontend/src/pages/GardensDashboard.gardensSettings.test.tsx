@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -149,7 +149,17 @@ beforeEach(() => {
   vi.mocked(fetchDashboardData).mockResolvedValue(data);
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Unmount FIRST (PR #300, fix round 1, I1): this hook runs before Testing
+  // Library's automatic cleanup, and the page sends its pending layout save as
+  // it unmounts — cleared first, the mocks recorded that write for the next
+  // test. Unmounted here, it is cleared with them.
+  cleanup();
+  // The clock a test simulated (T1, below) goes back to the engine's own —
+  // after the unmount, which runs on the clock the test ran on.
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
 
 describe('the Large list under its count (A-N4)', () => {
   it('shows the eight first of twelve by default, « + 4 more gardens », the sort in the foot, and the search', async () => {
@@ -164,6 +174,13 @@ describe('the Large list under its count (A-N4)', () => {
 
   it('unfolds the list IN PLACE, folds it back — and writes NOTHING (A-N23)', async () => {
     await renderWith('expert', null);
+    // The debounce's time is ADVANCED, never waited (PR #300, fix round 1,
+    // T1): a real wait proves an absence only if the engine keeps time, and
+    // may conclude too early under load. From the gestures on, only
+    // `setTimeout` and `clearTimeout` — the debounce's two — are simulated:
+    // `Date` keeps the wall clock and the promises settle as they do (the
+    // clock of #286 is frozen on purpose, never by accident).
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
     fireEvent.click(within(widget()).getByRole('button', { name: '+ 4 more gardens' }));
 
@@ -177,7 +194,9 @@ describe('the Large list under its count (A-N4)', () => {
     expect(rowNames()).toEqual(NAMES.slice(0, 8));
 
     // Nothing is enregistré: past the debounce of the layout's save, no PUT.
-    await act(() => new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100)));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 100);
+    });
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 

@@ -277,7 +277,10 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     ]);
   });
 
-  it('brings a KNOWN size the formula does not permit back to the preset’s — Gardens has no Full width yet', async () => {
+  it('brings a KNOWN size the formula does not permit back to the preset’s — Tips has no Full width at any formula', async () => {
+    // Gardens stood here until SMA-448, lot F5-b gave it the Full width at the
+    // Expert formula (the test below); Tips never has one (A-N11: « pas
+    // Conseils ni À faire »).
     mockFetch({
       schemaVersion: 1,
       level: 'expert',
@@ -285,7 +288,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
       isPreset: false,
       formulaChosen: true,
       blocks: [
-        { key: 'gardens', size: 'wide', hidden: false },
+        { key: 'tips', size: 'wide', hidden: false },
         { key: 'weather', size: 'medium', hidden: false },
       ],
       updatedAt: null,
@@ -294,9 +297,35 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     const preferences = await fetchDashboardPreferences();
 
     expect(preferences.blocks).toEqual([
-      { key: 'gardens', size: 'large', hidden: false },
+      { key: 'tips', size: 'large', hidden: false },
       { key: 'weather', size: 'medium', hidden: false },
     ]);
+  });
+
+  it('keeps the Expert’s Gardens in the Full width — a size its formula permits since lot F5-b — and brings the Gardener’s back to Large', async () => {
+    // SMA-448, lot F5-b (V3-03, V3-04; C.4): the served capabilities say the
+    // Expert's Gardens takes the Full width; the Gardener's never does (A-N11).
+    mockFetch({
+      schemaVersion: 1,
+      level: 'expert',
+      capabilities: capabilitiesFor('expert'),
+      isPreset: false,
+      formulaChosen: true,
+      blocks: [{ key: 'gardens', size: 'wide', hidden: false }],
+      updatedAt: null,
+    });
+    expect((await fetchDashboardPreferences()).blocks).toEqual([{ key: 'gardens', size: 'wide', hidden: false }]);
+
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
+      isPreset: false,
+      formulaChosen: true,
+      blocks: [{ key: 'gardens', size: 'wide', hidden: false }],
+      updatedAt: null,
+    });
+    expect((await fetchDashboardPreferences()).blocks).toEqual([{ key: 'gardens', size: 'large', hidden: false }]);
   });
 
   it('keeps the Expert’s Weather in the Full width — a size its formula permits since lot F4 — and brings the Gardener’s back to Medium', async () => {

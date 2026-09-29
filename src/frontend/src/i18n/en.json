@@ -674,6 +674,7 @@
         "freeCells_other": "{{count, number}} free",
         "columns": {
           "garden": "Garden",
+          "type": "Type",
           "plants": "Plants",
           "occupancy": "Occupancy",
           "exposure": "Exposure",
@@ -700,6 +701,8 @@
           "more_other": "+ {{count, number}} more gardens",
           "less_one": "Show {{count, number}} garden",
           "less_other": "Show {{count, number}} gardens",
+          "cut_one": "Beyond the one shown",
+          "cut_other": "Beyond the {{count, number}} shown",
           "sortedBy": {
             "lastOpened": "Sorted by last opened",
             "name": "Sorted alphabetically",
@@ -707,6 +710,14 @@
             "updated": "Sorted by last modified",
             "custom": "In your order"
           }
+        },
+        "wide": {
+          "modified": "modified {{when}}",
+          "varieties_one": "{{count, number}} variety",
+          "varieties_other": "{{count, number}} varieties",
+          "occupancy_one": "{{percent}} · {{count, number}} free cell",
+          "occupancy_other": "{{percent}} · {{count, number}} free cells",
+          "noType": "Type?"
         },
         "options": {
           "countSection": "Gardens shown",

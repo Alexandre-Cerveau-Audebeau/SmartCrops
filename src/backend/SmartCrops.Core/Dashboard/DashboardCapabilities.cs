@@ -11,13 +11,14 @@ namespace SmartCrops.Core.Dashboard;
 /// <para>The rule it carries (A-N11): the Full width is an Expert capability,
 /// and a block gets it only once its Full-width version is DRAWN — until then
 /// a crafted request could show its Large stretched over the page's width. So
-/// the table follows what is drawn, not only what is permitted: Jardins,
-/// Statistiques, Compteurs and Ce mois-ci will each add
+/// the table follows what is drawn, not only what is permitted: Statistiques,
+/// Compteurs and Ce mois-ci will each add
 /// <see cref="DashboardLayout.Sizes.Wide"/> to their Expert row in their own
 /// lot, on both sides. The Key figures band arrived with it as its one size
 /// (PR B, step B1 — pre-flight D3: « keyfigures@Expert = [wide] ; tout le reste
 /// = [P, M, G] »); Météo followed with SMA-448, lot F4 (V3-02: every city at
-/// once), as its fourth size.</para>
+/// once), as its fourth size; Jardins with SMA-448, lot F5-b (V3-03: the
+/// seven-column table), as its fourth size too.</para>
 ///
 /// <para>Which level HAS a block is not this table's to say but its preset's
 /// (<see cref="DashboardPresets.Permits"/>, D4): the band's rows at the Novice
@@ -58,7 +59,9 @@ public static class DashboardCapabilities
             // SMA-448, lot F4 (V3-02): the Expert's Weather is drawn in Full
             // width — every city at once, one column per city.
             [DashboardLayout.Blocks.Weather] = ThreeSizesAndWide,
-            [DashboardLayout.Blocks.Gardens] = ThreeSizes,
+            // SMA-448, lot F5-b (V3-03, V3-04; pre-flight F5 § C.4): the
+            // Expert's Gardens is drawn in Full width — the seven-column table.
+            [DashboardLayout.Blocks.Gardens] = ThreeSizesAndWide,
             [DashboardLayout.Blocks.Tips] = ThreeSizes,
             [DashboardLayout.Blocks.Month] = ThreeSizes,
             [DashboardLayout.Blocks.Todo] = ThreeSizes,

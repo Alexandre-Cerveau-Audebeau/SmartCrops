@@ -1848,7 +1848,13 @@ describe('GardensDashboard — no widget draws outside its card (V7)', () => {
 // as it is.
 describe('GardensDashboard — Weather and Harvest name two things each (E″7)', () => {
   it('at Expert, the widget and the table column carry the same words', async () => {
-    servePreferences('expert');
+    // The Gardens widget in LARGE, the table whose columns reuse the widget
+    // titles: the Expert preset puts it in the Full width since PR #300 (fix
+    // round 1, P1), whose seven columns carry no RÉCOLTE (C.4).
+    servePreferences(
+      'expert',
+      presetFor('expert').map((block) => (block.key === 'gardens' ? { ...block, size: 'large' } : block))
+    );
 
     renderPage();
     await screen.findByRole('heading', { level: 2, name: 'Harvest' });

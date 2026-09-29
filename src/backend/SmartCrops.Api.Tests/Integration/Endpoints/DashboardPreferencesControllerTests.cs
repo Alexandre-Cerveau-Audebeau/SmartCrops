@@ -508,13 +508,16 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// must not be able to show a widget's Large stretched over the page's
     /// width. Strict on write. Tips has no Full width at any formula; the
     /// Weather has one at the Expert's alone (SMA-448, lot F4), never at the
-    /// Gardener's. At the two formulas that have widgets — the Novice has
+    /// Gardener's — and so does the Gardens widget (SMA-448, lot F5-b): a
+    /// Gardener cannot store it in Full width, by the interface nor by the
+    /// server (R8). At the two formulas that have widgets — the Novice has
     /// none since SMA-448, lot F2, and refuses every document for that reason.
     /// </summary>
     [Theory]
     [InlineData(DashboardLayout.Levels.Expert, DashboardLayout.Blocks.Tips)]
     [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Tips)]
     [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Weather)]
+    [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Gardens)]
     public async Task PutPreferences_SizeTheFormulaDoesNotPermit_Returns400(string level, string block)
     {
         var userId = Guid.NewGuid().ToString();
@@ -563,6 +566,71 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.NotNull(body);
         Assert.False(body.IsPreset);
         Assert.Equal(DashboardLayout.Sizes.Wide, Block(body, DashboardLayout.Blocks.Weather).Size);
+    }
+
+    /// <summary>
+    /// SMA-448, lot F5-b (V3-03, V3-04; pre-flight F5 § C.4): the Expert's
+    /// Gardens in Full width — the seven-column table — is a size the server
+    /// permits, stores and reads back as written. The Gardener's PUT of the
+    /// same is refused (the Theory above), and a stored one comes back to
+    /// Large (below): the Full width is the Expert's alone (A-N11).
+    /// </summary>
+    [Fact]
+    public async Task PutThenGetPreferences_GardensInTheFullWidth_AtTheExpert_IsStoredAsWritten()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. DashboardPresets.For(DashboardLayout.Levels.Expert).Select(b => new SaveDashboardBlockRequest(
+                b.Key,
+                b.Key == DashboardLayout.Blocks.Gardens ? DashboardLayout.Sizes.Wide : b.Size,
+                b.Hidden,
+                null))]);
+
+        var put = await Client.PutAsJsonAsync(Url, request);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.False(body.IsPreset);
+        Assert.Equal(DashboardLayout.Sizes.Wide, Block(body, DashboardLayout.Blocks.Gardens).Size);
+    }
+
+    /// <summary>
+    /// A Gardener's stored layout with the Gardens widget in Full width — the
+    /// Expert's document relayed by the archive at a change of formula, or a
+    /// row written by hand — is read back at the Gardener preset's size, Large,
+    /// in place: forgiving on read, where R8 refuses on write.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_StoredGardensInTheFullWidth_AtTheGardener_FallsBackToLarge()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            """
+            {"schemaVersion":1,"level":"gardener","blocks":[
+              {"key":"gardens","size":"wide","hidden":false,"options":null},
+              {"key":"weather","size":"small","hidden":false,"options":null}]}
+            """);
+
+        var response = await Client.GetAsync(Url);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
+
+        Assert.NotNull(body);
+        Assert.Equal(DashboardLayout.Blocks.Gardens, body.Blocks[0].Key);
+        // The Gardener preset's Gardens size.
+        Assert.Equal(DashboardLayout.Sizes.Large, body.Blocks[0].Size);
+        Assert.Equal(DashboardLayout.Sizes.Small, Block(body, DashboardLayout.Blocks.Weather).Size);
     }
 
     /// <summary>
@@ -786,6 +854,67 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// SMA-448, lot F5-b — PR #300, fix round 1, P1 (Alexandre, 29/09:
+    /// « personnellement je préfère que de base, en Expert, le widget Jardins
+    /// soit en large comme ça »): the preset an Expert who never saved a layout
+    /// reads puts the Gardens widget in the Full width — and the preset the
+    /// capabilities carry, which « Réinitialiser » brings back, is the same.
+    /// Every other widget stays where it was: the band in the Full width, the
+    /// seven others in Large (their own default is lot V3-08's). Literals on
+    /// purpose: this is the decision, not a copy of the constant.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_AnExpertWhoNeverSavedALayout_ReadsGardensInTheFullWidth_AsTheResetDoes()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.True(body.IsPreset);
+        (string Key, string Size)[] expected =
+        [
+            ("keyfigures", "wide"), ("weather", "large"), ("gardens", "wide"), ("tips", "large"), ("month", "large"),
+            ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large"),
+        ];
+        Assert.Equal(expected, body.Blocks.Select(b => (b.Key, b.Size)));
+        Assert.Equal(expected, body.Capabilities.Preset.Select(b => (b.Key, b.Size)));
+    }
+
+    /// <summary>
+    /// PR #300, fix round 1, P1 — and a layout an Expert STORED does not change
+    /// (the decision's scope): stored with the Gardens widget in Large, it reads
+    /// back in Large, block for block, although the preset moved to the Full
+    /// width.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_AnExpertLayoutStoredWithGardensInLarge_ReadsBackInLarge_ThePresetMovedWithoutIt()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+        var stored = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. DashboardPresets.For(DashboardLayout.Levels.Expert).Select(b => new SaveDashboardBlockRequest(
+                b.Key,
+                b.Key == DashboardLayout.Blocks.Gardens ? DashboardLayout.Sizes.Large : b.Size,
+                b.Hidden,
+                null))]);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(Url, stored)).StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.False(body.IsPreset);
+        Assert.Equal(DashboardLayout.Sizes.Large, Block(body, DashboardLayout.Blocks.Gardens).Size);
+        Assert.Equal(
+            stored.Blocks.Select(b => (b.Key, b.Size, b.Hidden)),
+            body.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
+    }
+
+    /// <summary>
     /// The API serves the capabilities (pre-flight § C.2 a): the layout comes
     /// with those of the account's formula — the catalogue's own entry, as
     /// <c>GET /api/formulas</c> serves it — so the client draws what it is told
@@ -907,14 +1036,19 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
 
     /// <summary>
     /// Arbitrage 3 — THE case: an Expert who saved the eight-widget preset before
-    /// this PR. The band arrives at the head, visible, in the Full width — and the
-    /// layout read back IS the Expert preset, block for block (key, size,
-    /// visibility, in order: what <c>isAdjusted</c> compares), so the chip does
-    /// not turn « · ajustée » for a change the user did not make. It used to
-    /// arrive at the END: a band at the foot of the page, and the chip adjusted.
+    /// the band. The band arrives at the head, visible, in the Full width — and
+    /// the eight read back as they were stored, block for block (key, size,
+    /// visibility, in order: what <c>isAdjusted</c> compares). It used to arrive
+    /// at the END: a band at the foot of the page, and the chip adjusted.
+    ///
+    /// <para>Until PR #300 (fix round 1, P1) that read-back WAS the Expert preset,
+    /// so the chip did not turn « · ajustée ». Since the preset puts the Gardens
+    /// widget in the Full width (Alexandre, 29/09) and a stored layout does not
+    /// change — the decision's scope —, this one keeps its Gardens in Large: it
+    /// no longer reads as the preset, and « Réinitialiser » brings the preset.</para>
     /// </summary>
     [Fact]
-    public async Task GetPreferences_ExpertLayoutSavedBeforeTheBand_ReceivesItFirst_AndReadsAsThePreset()
+    public async Task GetPreferences_ExpertLayoutSavedBeforeTheBand_ReceivesItFirst_AndKeepsItsEightAsStored()
     {
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
@@ -931,7 +1065,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.False(body.IsPreset);
         Assert.Equal(("keyfigures", "wide", false), (body.Blocks[0].Key, body.Blocks[0].Size, body.Blocks[0].Hidden));
         Assert.Equal(
-            DashboardPresets.For(DashboardLayout.Levels.Expert).Select(b => (b.Key, b.Size, b.Hidden)),
+            [("keyfigures", "wide", false), .. EightWidgets.Select(key => (key, "large", false))],
             body.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
     }
 

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -136,7 +136,15 @@ beforeEach(() => {
   vi.mocked(fetchDashboardData).mockResolvedValue(data);
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Unmount FIRST (PR #300, fix round 1, I1): this hook runs before Testing
+  // Library's automatic cleanup, and the page sends its pending layout save as
+  // it unmounts — cleared first, the mocks recorded that write for the next
+  // test (the `beforeEach` above clears that mock again; this hook no longer
+  // relies on it). Unmounted here, it is cleared with them.
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe('the count (A-N4)', () => {
   it('offers 5 · 8 · 10 · All, 8 pressed by default with the default’s help, and writes the choice on the block', async () => {
