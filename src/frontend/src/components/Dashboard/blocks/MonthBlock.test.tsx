@@ -896,7 +896,15 @@ describe('MonthBlock — Large on a phone: one letter a month, an 84px name colu
         }))
       );
 
-    afterEach(() => vi.unstubAllGlobals());
+    // Unmounted BEFORE `matchMedia` is unstubbed (the trap of fix round 1, #3 —
+    // GitHub `4059024241`), as the Full width's hook below does: this hook runs
+    // before Testing Library's own cleanup under vitest's stacked hooks, and a
+    // tree still mounted could read the global the stub installed (PR #301,
+    // fix round 1, R4 — the family, in the code the lot rewrites).
+    afterEach(() => {
+      cleanup();
+      vi.unstubAllGlobals();
+    });
 
     /** Ten characters: whole in the 108px column (twelve fit), clipped in the 84px one (nine fit). */
     const tenLetters = pruned({ plantId: 'ten', commonName: 'courgettes', count: 1, gardenIds: ['g1'] });
