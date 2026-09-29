@@ -185,6 +185,9 @@ afterEach(() => {
   // had failed before its save. Unmounted here, the write lands while the mocks
   // are in place, and is cleared with them.
   cleanup();
+  // The clock a test simulated (T1, below) goes back to the engine's own —
+  // after the unmount, which runs on the clock the test ran on.
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   localStorage.clear();
@@ -248,6 +251,11 @@ describe('the settings of lot F5-a hold in the Full width (SMA-448, lot F5-b, W3
   it('unfolds the table IN PLACE under the rule « Beyond the 8 shown », folds it back — and writes NOTHING (A-N23)', async () => {
     serve('expert', 'wide', { gardens: gardensTwelve });
     await renderPage();
+    // The debounce's time is ADVANCED, never waited (PR #300, fix round 1,
+    // T1): see the same test of `GardensDashboard.gardensSettings.test.tsx`,
+    // whose wait this one copied — only `setTimeout` and `clearTimeout` are
+    // simulated, from the gestures on; `Date` and the promises stay real.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
     fireEvent.click(within(widget()).getByRole('button', { name: '+ 4 more gardens' }));
 
@@ -265,7 +273,9 @@ describe('the settings of lot F5-a hold in the Full width (SMA-448, lot F5-b, W3
     expect(widget().querySelector('[data-gardens-cut]')).toBeNull();
 
     // Nothing is written: past the debounce of the layout's save, no PUT.
-    await act(() => new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100)));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 100);
+    });
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 
