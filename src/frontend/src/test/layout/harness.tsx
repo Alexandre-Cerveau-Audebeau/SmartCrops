@@ -127,6 +127,15 @@ export interface SceneMeasure extends CardMeasure {
   gardensTable: boolean;
   gardensCut: boolean;
   gardenActionsOutside: number;
+  /**
+   * SMA-437, lot V3-08, step S2 — every bar of a Statistics row, in px, with
+   * the width of the NEXT cell of its row: the figure the bar illustrates
+   * (« 20 m² · 68 % » beside the occupancy track, the dominant share beside
+   * the exposure bar). A bar narrower than its own figure says nothing — the
+   * mock-ups measured the phone's Large with its occupancy bar at 0 px at 360
+   * and 12 px at 390 (« the bar collapses first »). Empty on every other card.
+   */
+  statBars: Array<{ kind: 'occupancy' | 'exposure'; bar: number; value: number }>;
 }
 
 /**
@@ -556,6 +565,20 @@ function cardExtras(card: HTMLElement) {
     gardensEmptySearch: card.querySelector('[data-gardens-search]') !== null && card.querySelector('[data-invite-panel]') !== null,
     gardensBeyond: card.querySelectorAll('[data-garden-beyond]').length,
     gardensFootWrapped: foot ? wrappedTexts(foot) : [],
+    // Each bar of each Statistics row, beside the cell after the one that
+    // holds it — its figure (SMA-437, lot V3-08, S2).
+    statBars: Array.from(card.querySelectorAll('[data-stat-row]')).flatMap((row) =>
+      Array.from(row.querySelectorAll('[data-occupancy-track], [data-exposure-bar]')).map((bar) => {
+        let cell: Element = bar;
+        while (cell.parentElement && cell.parentElement !== row) cell = cell.parentElement;
+        const figure = cell.nextElementSibling;
+        return {
+          kind: bar.hasAttribute('data-occupancy-track') ? ('occupancy' as const) : ('exposure' as const),
+          bar: Math.round(bar.getBoundingClientRect().width * 10) / 10,
+          value: figure ? Math.round(figure.getBoundingClientRect().width * 10) / 10 : 0,
+        };
+      })
+    ),
     keyFigureTiles: Array.from(card.querySelectorAll('[data-key-figure]')).map((tile) => {
       const value = tile.querySelector('[data-key-figure-value]');
       const box = tile.getBoundingClientRect();

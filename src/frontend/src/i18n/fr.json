@@ -904,7 +904,10 @@
         "freeCellsCount_one": "{{count, number}} case libre",
         "freeCellsCount_other": "{{count, number}} cases libres",
         "sunnyCount_one": "dont {{count, number}} en plein soleil",
-        "sunnyCount_other": "dont {{count, number}} en plein soleil"
+        "sunnyCount_other": "dont {{count, number}} en plein soleil",
+        "moreGardens_one": "Afficher l’autre jardin",
+        "moreGardens_other": "Afficher les {{count, number}} autres jardins",
+        "collapse": "Réduire"
       },
       "harvest": {
         "title": "Récolte",

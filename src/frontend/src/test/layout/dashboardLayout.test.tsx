@@ -505,6 +505,35 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     });
   });
 
+  // SMA-437, lot V3-08, step S2 — the Statistics bars, at every width of the
+  // runs. The mock-ups (V3-08, § 4.2 of their report) measured the phone's
+  // Large with its occupancy bar at 0 px at 360 and 12 px at 390: the row's
+  // tracks — 160 + 14 + 1fr + 14 + 116 — leave the bar nothing on a 280 px
+  // card, « the bar collapses first ». A bar is drawn when it is at least as
+  // wide as the figure it illustrates; narrower, it says nothing.
+  describe('the Statistics bars (SMA-437, lot V3-08, S2)', () => {
+    const STATS_SCENES = LAYOUT_SCENES.filter((scene) => scene.key === 'stats' && scene.size !== 'small').map((scene) => scene.name);
+
+    it('measures bars in every Statistics scene that draws rows, in every run — never a pass on nothing', () => {
+      for (const run of RUNS) {
+        for (const name of STATS_SCENES) {
+          const kinds = new Set(sceneOf(run, name).statBars.map((bar) => bar.kind));
+          expect(kinds.has('occupancy'), `${run.id} ${name}`).toBe(true);
+        }
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: every bar of every Statistics row is drawn, at least as wide as its own figure — the occupancy and the exposure alike', (id) => {
+      const run = runOf(id);
+      const faults = STATS_SCENES.flatMap((name) =>
+        sceneOf(run, name)
+          .statBars.filter((bar) => !(bar.bar > 0 && bar.bar >= bar.value))
+          .map((bar) => `${name}: the ${bar.kind} bar ${bar.bar} px beside a figure of ${bar.value} px`)
+      );
+      expect(faults).toEqual([]);
+    });
+  });
+
   describe.each(RUNS)('$id', (run) => {
     it.each(LAYOUT_SCENES.map((scene) => scene.name))('%s: no overlap, nothing clipped, nothing beyond the card', (name) => {
       const scene = sceneOf(run, name);
