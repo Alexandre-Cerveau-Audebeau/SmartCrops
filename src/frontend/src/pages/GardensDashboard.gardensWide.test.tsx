@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -176,6 +176,15 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (PR #300, fix round 1, I1 — the family of the `cleanup()`
+  // before the language reset of #294, SMA-174). This hook runs before Testing
+  // Library's automatic cleanup (vitest's `sequence.hooks = 'stack'`), and the
+  // page SENDS its pending layout save as it unmounts (`useDashboardPreferences`,
+  // `flushNow()`): cleared first, the mocks then recorded that write for the
+  // NEXT test — the Gardener's handle read the « wide » of an Expert's test that
+  // had failed before its save. Unmounted here, the write lands while the mocks
+  // are in place, and is cleared with them.
+  cleanup();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   localStorage.clear();
