@@ -226,10 +226,33 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     expect(panel.querySelector('[data-gardens-order-beyond]')).toBeNull();
   });
 
-  it('says where the widget’s cut falls when the count is under the list', async () => {
-    const panel = await openGardensOptions('expert', { sort: 'custom' });
-    // 8 by default, five gardens: nothing beyond. With 5 → nothing either; the rule needs a cut: count 5 on five is none.
-    expect(panel.querySelector('[data-gardens-order-beyond]')).toBeNull();
+  it('says where the widget’s cut falls: the rule on the FIRST row beyond the count, and on no other row', async () => {
+    // Six gardens under a count of 5 (PR #299, fix round 1, B): a sixth,
+    // ranked LAST, so the five shown keep the five names the page waits for.
+    const sixth = gardenFixture({
+      id: 'g5',
+      name: 'Verger bas',
+      updatedAt: '2026-09-15T12:00:00Z',
+      createdAt: '2026-01-06T12:00:00Z',
+      sortOrder: 3,
+    });
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardFixture([...GARDENS, sixth]));
+    const panel = await openGardensOptions('expert', { sort: 'custom', count: 5 });
+
+    const list = within(panel).getByRole('list', { name: 'Your gardens, in your order' });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(6);
+    // The two never ranked at the head, then the four ranked: « Verger bas »
+    // sixth, the first beyond the cut of five — the rule on it, and on it alone.
+    expect(rows.map((row) => row.querySelector('[data-gardens-order-beyond]')?.textContent ?? null)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+      'Beyond the 5 shown in the widget',
+    ]);
+    expect(rows[5]!.textContent).toContain('Verger bas');
   });
 
   it('▼ moves a garden, the widget follows at once, the order is written to the garden’s route after the pause — never to the layout — and the region says it', async () => {
