@@ -451,6 +451,14 @@ export default function GardensBlock({
     () => sortGardens(gardens, gardensOptions(options, sorts).sort, i18n.language, customOrder),
     [gardens, options, sorts, i18n.language, customOrder]
   );
+  // Each garden's RANK in that list, indexed once per sort (PR #300, fix
+  // round 1, A — Extension EXT-1 / EXT-2, GitHub 4132607962). A search draws
+  // every garden it finds, each marked when it lies beyond the cut, and the
+  // rank was a `sorted.indexOf` per row: a scan of the list for every row,
+  // O(n²) for an Expert, who has no limit on gardens. Keyed by the garden
+  // OBJECT, as `indexOf` compared: `sortGardens` and `searchGardens` hand
+  // the same objects on.
+  const rankOf = useMemo(() => new Map(sorted.map((garden, index) => [garden, index] as const)), [sorted]);
   // « + N autres jardins » unfolds the list IN PLACE (A-N23, [A] 28/09):
   // nothing is written — the widget owns the state, the layout never sees
   // it — and « Réduire à N jardins » comes back to the setting. The search
@@ -670,11 +678,17 @@ export default function GardensBlock({
   /** « 12 variétés », in full — the Full width has the room the Large's « 12 var. » lacks. */
   const varietiesText = (garden: DashboardGardenData): string =>
     t('dashboard.blocks.gardens.wide.varieties', { count: garden.varietyCount });
-  /** « hors des 8 affichés » (V3-04): a garden a search found beyond the cut, or null. */
-  const beyondOf = (garden: DashboardGardenData): string | null =>
-    searching && cap !== null && sorted.indexOf(garden) >= cap
+  /**
+   * « hors des 8 affichés » (V3-04): a garden a search found beyond the cut,
+   * or null — for the Large's rows, the Full width's and the phone's, read
+   * from `rankOf`.
+   */
+  const beyondOf = (garden: DashboardGardenData): string | null => {
+    const rank = rankOf.get(garden);
+    return searching && cap !== null && rank !== undefined && rank >= cap
       ? t('dashboard.blocks.gardens.search.beyond', { count: cap })
       : null;
+  };
 
   /**
    * The header chip, FILLED (round 5, A10-5).
@@ -1489,11 +1503,7 @@ export default function GardensBlock({
             {largeRows.map((garden, index) => (
               <GardenRow
                 rowRef={expanded && !searching && cap !== null && index === cap ? firstRevealedRef : undefined}
-                beyond={
-                  searching && cap !== null && sorted.indexOf(garden) >= cap
-                    ? t('dashboard.blocks.gardens.search.beyond', { count: cap })
-                    : null
-                }
+                beyond={beyondOf(garden)}
                 stickyActions={stickyActions}
                 chipBorder={tk.chipBorder}
                 key={garden.id}

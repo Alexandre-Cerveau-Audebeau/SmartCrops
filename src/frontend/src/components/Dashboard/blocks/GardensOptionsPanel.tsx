@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -121,11 +121,18 @@ export default function GardensOptionsPanel({ options, sorts, gardens, ready, on
 
   const byId = new Map(gardens.map((garden) => [garden.id, garden]));
   const ordered = order.ids.map((id) => byId.get(id)).filter((garden): garden is DashboardGardenData => garden !== undefined);
+  // What `isNew` asks of the WHOLE list, read once per list (PR #300, fix
+  // round 1, A — the family of the rank lookup): whether any garden is ranked
+  // on the server, and the local order as a set. Each row ran
+  // `gardens.some` or `order.order.includes` for its own chip, and the list
+  // holds every garden — a scan per row, O(n²) for an Expert without a limit.
+  const anyRanked = useMemo(() => gardens.some((candidate) => candidate.sortOrder !== null), [gardens]);
+  const localOrder = useMemo(() => (order.order === null ? null : new Set(order.order)), [order.order]);
   /** « Nouveau »: a garden not yet ranked while others are — at the head, without a write (A-N5). */
   const isNew = (garden: DashboardGardenData) =>
-    order.order === null
-      ? garden.sortOrder === null && gardens.some((candidate) => candidate.sortOrder !== null)
-      : !order.order.includes(garden.id) && order.order.length > 0;
+    localOrder === null
+      ? garden.sortOrder === null && anyRanked
+      : !localOrder.has(garden.id) && localOrder.size > 0;
   const placeOf = (index: number) => t('dashboard.blocks.gardens.options.place', { count: index + 1, ordinal: true });
 
   return (

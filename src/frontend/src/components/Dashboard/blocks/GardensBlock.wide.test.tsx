@@ -36,9 +36,11 @@ interface RenderOptions {
   showWeatherColumn?: boolean;
   showHarvestColumn?: boolean;
   options?: Record<string, unknown> | null;
+  /** The Full width unless said — the Large for what the two sizes share. */
+  size?: 'large' | 'wide';
 }
 
-function renderWide({ gardens = sceneGardens, showWeatherColumn = true, showHarvestColumn = false, options = null }: RenderOptions = {}) {
+function renderWide({ gardens = sceneGardens, showWeatherColumn = true, showHarvestColumn = false, options = null, size = 'wide' }: RenderOptions = {}) {
   localStorage.setItem('smartcrops-language', 'en');
   render(
     <ThemeProvider theme={createTheme()}>
@@ -46,7 +48,7 @@ function renderWide({ gardens = sceneGardens, showWeatherColumn = true, showHarv
         <UnitSystemProvider>
           <MemoryRouter>
             <GardensBlock
-              size="wide"
+              size={size}
               gardens={[...gardens]}
               loading={false}
               loadError={false}
@@ -261,5 +263,93 @@ describe('GardensBlock in the Full width — on a phone, the rows of the A9 form
     const cut = card.querySelector('[data-gardens-cut]') as HTMLElement;
     expect(cut).toHaveTextContent('Beyond the 5 shown');
     expect(items.indexOf(cut)).toBe(5);
+  });
+});
+
+// PR #300, fix round 1, A (Extension EXT-1 / EXT-2, GitHub 4132607962) — THE
+// RANK OF A GARDEN A SEARCH FOUND, read from an index built once per sort. A
+// search draws EVERY garden it finds, each marked when it lies beyond the cut;
+// `beyondOf` read that rank with `sorted.indexOf(garden)`, and the Large
+// carried the same scan inline — one scan of the sorted list per row, O(n²)
+// for an Expert, who has no limit on gardens. The marks are unchanged by
+// construction (the tests above hold them): what is proven here is the
+// mechanism, as for A of #299 — the renders look no garden up in a list.
+
+/** The array lookups by value, then by predicate. */
+const VALUE_LOOKUPS = ['indexOf', 'lastIndexOf', 'includes'] as const;
+const PREDICATE_LOOKUPS = ['find', 'findIndex', 'findLast', 'findLastIndex', 'some', 'every'] as const;
+type Lookup = (typeof VALUE_LOOKUPS)[number] | (typeof PREDICATE_LOOKUPS)[number];
+
+/**
+ * Every lookup `draw` makes in a list of `gardens` — a garden sought by value
+ * (named: `indexOf(Verger bas)`), or an array of gardens searched by a
+ * predicate (the method alone). Spied on `Array.prototype`, since the lists
+ * the widget sorts and filters are its own; the calls are copied out, then the
+ * spies restored, before anything is read.
+ */
+function gardenLookups(gardens: readonly DashboardGardenData[], draw: () => void): string[] {
+  const methods: readonly Lookup[] = [...VALUE_LOOKUPS, ...PREDICATE_LOOKUPS];
+  const spies = methods.map((name) => ({ name, spy: vi.spyOn(Array.prototype, name) }));
+  let calls: { name: Lookup; value: unknown; context: unknown }[] = [];
+  try {
+    draw();
+  } finally {
+    calls = spies.flatMap(({ name, spy }) =>
+      spy.mock.calls.map((args, index) => ({ name, value: args[0], context: spy.mock.contexts[index] }))
+    );
+    for (const { spy } of spies) spy.mockRestore();
+  }
+  const own = new Set<unknown>(gardens);
+  return calls.flatMap(({ name, value, context }) => {
+    if ((VALUE_LOOKUPS as readonly string[]).includes(name)) {
+      return own.has(value) ? [`${name}(${(value as DashboardGardenData).name})`] : [];
+    }
+    return Array.isArray(context) && context.some((item) => own.has(item)) ? [name] : [];
+  });
+}
+
+/** The « beyond » marks of the drawn rows, top to bottom. */
+const beyondMarks = (card: HTMLElement) => [...card.querySelectorAll('[data-garden-beyond]')].map((node) => node.textContent);
+
+describe('GardensBlock — a search marks the gardens beyond the cut from an index, never a scan per row (PR #300, fix round 1, A)', () => {
+  // « e »: eleven of the twelve (all but « Balcon sud »), in the index order
+  // « Derniers ouverts » lists them — so the four last lie beyond a cut of 8,
+  // the seven last beyond a cut of 5.
+  const search = (card: HTMLElement) =>
+    fireEvent.change(within(card).getByRole('textbox', { name: 'Search a garden' }), { target: { value: 'e' } });
+
+  it('Large: four gardens marked beyond the 8 shown — and no garden looked up in a list', () => {
+    let card!: HTMLElement;
+    const lookups = gardenLookups(gardensTwelve, () => {
+      card = renderWide({ gardens: gardensTwelve, size: 'large' });
+      search(card);
+    });
+
+    expect(beyondMarks(card)).toEqual(Array(4).fill('beyond the 8 shown'));
+    expect(lookups).toEqual([]);
+  });
+
+  it('Full width: four gardens marked beyond the 8 shown — and no garden looked up in a list', () => {
+    let card!: HTMLElement;
+    const lookups = gardenLookups(gardensTwelve, () => {
+      card = renderWide({ gardens: gardensTwelve });
+      search(card);
+    });
+
+    expect(beyondMarks(card)).toEqual(Array(4).fill('beyond the 8 shown'));
+    expect(lookups).toEqual([]);
+  });
+
+  it('Full width on a phone: seven gardens marked beyond the 5 shown — and no garden looked up in a list', () => {
+    stubPhone();
+    let card!: HTMLElement;
+    const lookups = gardenLookups(gardensTwelve, () => {
+      card = renderWide({ gardens: gardensTwelve });
+      search(card);
+    });
+
+    expect(card.querySelector('table')).toBeNull();
+    expect(beyondMarks(card)).toEqual(Array(7).fill('beyond the 5 shown'));
+    expect(lookups).toEqual([]);
   });
 });
