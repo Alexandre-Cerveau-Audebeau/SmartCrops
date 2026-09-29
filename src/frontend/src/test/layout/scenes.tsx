@@ -93,6 +93,65 @@ export const varieties: DashboardVarietyData[] = [
   variety('strawberry', 'fraisier', 'Fragaria × ananassa', { count: 3, cells: 3, gardenIds: ['g3'], wateringNeedLevel: 'Average', minToleratedTempC: null, harvestPeriod: 'may-june', floweringSeason: 'Spring' }),
 ];
 
+/**
+ * SMA-437, lot V3-08, step S6 — FORTY-FOUR varieties, the sixty gardens'
+ * aggregate, so Counts has something to fold in the Full width (37 at rest
+ * over four columns, 28 over three, 19 over two). The sixteen of the scenes,
+ * then REAL plants only (V24: no name invented): the eighteen more of the
+ * repository's seeder (`DataSeeder.cs`), under its French names and its plant
+ * types, and ten of the repository's fixtures — seven of them without a
+ * common name, shown by their scientific one as the product shows an
+ * enrichment gap. None of the twenty-eight has a known calendar: This month
+ * counts them in its foot.
+ */
+const seeded = (plantId: string, commonName: string | null, scientificName: string, plantType: string, index: number) =>
+  varietyFixture({
+    plantId,
+    commonName,
+    scientificName,
+    plantType,
+    isEdible: null,
+    count: 1 + (index % 3),
+    cells: 1 + (index % 3),
+    gardenIds: [`p${index + 1}`],
+  });
+
+export const varietiesFortyFour: DashboardVarietyData[] = [
+  ...varieties,
+  ...(
+    [
+      ['pepper', 'poivron', 'Capsicum annuum', 'Vegetable'],
+      ['raspberry', 'framboise', 'Rubus idaeus', 'Fruit'],
+      ['blueberry', 'myrtille', 'Vaccinium corymbosum', 'Fruit'],
+      ['fig', 'figue', 'Ficus carica', 'Fruit'],
+      ['grape', 'raisin', 'Vitis vinifera', 'Fruit'],
+      ['apple', 'pomme', 'Malus domestica', 'Fruit'],
+      ['parsley', 'persil', 'Petroselinum crispum', 'Herb'],
+      ['cilantro', 'coriandre', 'Coriandrum sativum', 'Herb'],
+      ['sunflower', 'tournesol', 'Helianthus annuus', 'Ornamental'],
+      ['rose', 'rose', 'Rosa gallica', 'Ornamental'],
+      ['dahlia', 'dahlia', 'Dahlia pinnata', 'Ornamental'],
+      ['tulip', 'tulipe', 'Tulipa gesneriana', 'Ornamental'],
+      ['jasmine', 'jasmin', 'Jasminum officinale', 'Ornamental'],
+      ['chamomile', 'camomille', 'Matricaria chamomilla', 'Medicinal'],
+      ['aloe', 'aloe vera', 'Aloe vera', 'Medicinal'],
+      ['echinacea', 'échinacée', 'Echinacea purpurea', 'Medicinal'],
+      ['sage', 'sauge', 'Salvia officinalis', 'Medicinal'],
+      ['calendula', 'souci', 'Calendula officinalis', 'Medicinal'],
+      ['ivy', 'lierre', 'Hedera helix', 'Ornamental'],
+      ['maize', 'maïs', 'Zea mays', 'Vegetable'],
+      ['eggplant', 'aubergine', 'Solanum melongena', 'Vegetable'],
+      ['athyrium', null, 'Athyrium vidalii', 'Ornamental'],
+      ['aster', null, 'Aster amellus', 'Ornamental'],
+      ['sneezewort', null, 'Achillea ptarmica', 'Ornamental'],
+      ['yarrow', null, 'Achillea millefolium', 'Medicinal'],
+      ['peppermint', null, 'Mentha piperita', 'Herb'],
+      ['abelia', null, 'Abelia chinensis', 'Ornamental'],
+      ['bauhinia', null, 'Bauhinia blakeana', 'Ornamental'],
+    ] as const
+  ).map(([plantId, commonName, scientificName, plantType], index) => seeded(plantId, commonName, scientificName, plantType, index)),
+];
+
 /** One placement of a variety at a cell. */
 const plant = (plantId: string, row: number, col: number) =>
   placement({ id: `${plantId}-${row}-${col}`, plantId, startRow: row, startCol: col });
@@ -270,6 +329,12 @@ export interface LayoutScene {
    * without a result, « Tous ».
    */
   gardens?: { expanded?: boolean; query?: string; options?: Record<string, unknown> | null; list?: GardensListKind };
+  /**
+   * SMA-437, lot V3-08, step S6 — Statistics, Counts or This month in the
+   * Full width, on the gardens of `list` (their forty-four varieties with the
+   * sixty), folded at rest or unfolded in place.
+   */
+  wide?: { list: GardensListKind; expanded?: boolean };
 }
 
 /**
@@ -333,6 +398,20 @@ export const LAYOUT_SCENES: LayoutScene[] = (() => {
   scenes.push({ name: 'gardens-wide-sixty-unfolded', key: 'gardens', size: 'wide', weather: 'all', gardens: { list: 'sixty', expanded: true } });
   scenes.push({ name: 'gardens-wide-long', key: 'gardens', size: 'wide', weather: 'all', gardens: { list: 'long' } });
   scenes.push({ name: 'gardens-wide-edit', key: 'gardens', size: 'wide', weather: 'all', editing: true, gardens: {} });
+  // SMA-437, lot V3-08, step S6 (V5) — STATISTICS, COUNTS AND THIS MONTH IN
+  // THE FULL WIDTH (A-14): on one garden, five, twelve, sixty and three very
+  // long names, at rest — ten lines —, then unfolded in place where the list
+  // outgrows them: the twelve and the sixty gardens of Statistics, the
+  // forty-four varieties of Counts, the thirteen calendars of This month.
+  for (const key of ['stats', 'counters', 'month'] as const) {
+    for (const list of GARDENS_LIST_KINDS) {
+      scenes.push({ name: `${key}-wide-${list}`, key, size: 'wide', weather: 'all', wide: { list } });
+    }
+  }
+  scenes.push({ name: 'stats-wide-twelve-unfolded', key: 'stats', size: 'wide', weather: 'all', wide: { list: 'twelve', expanded: true } });
+  scenes.push({ name: 'stats-wide-sixty-unfolded', key: 'stats', size: 'wide', weather: 'all', wide: { list: 'sixty', expanded: true } });
+  scenes.push({ name: 'counters-wide-sixty-unfolded', key: 'counters', size: 'wide', weather: 'all', wide: { list: 'sixty', expanded: true } });
+  scenes.push({ name: 'month-wide-twelve-unfolded', key: 'month', size: 'wide', weather: 'all', wide: { list: 'twelve', expanded: true } });
   return scenes;
 })();
 
@@ -853,6 +932,10 @@ function bandWidget(scene: LayoutScene, weather: DashboardWeatherData): ReactNod
   );
 }
 
+/** The varieties of a Full-width scene (SMA-437, lot V3-08, S6): the forty-four with the sixty gardens, the scenes' sixteen otherwise. */
+export const wideVarietiesOf = (list: GardensListKind): DashboardVarietyData[] =>
+  list === 'sixty' ? varietiesFortyFour : varieties;
+
 /** The widget of a scene, with the props the page would hand it. */
 export function sceneWidget(scene: LayoutScene): ReactNode {
   const weather = scene.weather === 'all' ? weatherAll() : weatherPartial();
@@ -886,7 +969,24 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
         />
       );
     }
-    case 'counters':
+    case 'counters': {
+      // SMA-437, lot V3-08, S6: the Full width on the gardens the scene names
+      // — and, with the sixty, their forty-four varieties, whose fold is drawn.
+      if (scene.wide) {
+        const list = gardensListOf(scene.wide.list);
+        const kinds = wideVarietiesOf(scene.wide.list);
+        return (
+          <CountersBlock
+            {...common}
+            options={null}
+            varieties={kinds}
+            gardens={list}
+            totals={{ ...dashboardFixture(list).totals, varietyCount: kinds.length }}
+            onOptionsChange={noop}
+            defaultExpanded={scene.wide.expanded}
+          />
+        );
+      }
       return (
         <CountersBlock
           {...common}
@@ -897,11 +997,26 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
           onOptionsChange={noop}
         />
       );
+    }
     case 'month':
+      if (scene.wide) {
+        return (
+          <MonthBlock
+            {...common}
+            gardens={gardensListOf(scene.wide.list)}
+            varieties={wideVarietiesOf(scene.wide.list)}
+            weather={weather}
+            defaultExpanded={scene.wide.expanded}
+          />
+        );
+      }
       return <MonthBlock {...common} gardens={gs} varieties={varieties} weather={weather} />;
     case 'tips':
       return <TipsBlock {...common} gardens={gs} views={vs} varieties={varieties} weather={weather} onExpand={noop} />;
     case 'stats':
+      if (scene.wide) {
+        return <StatsBlock {...common} gardens={gardensListOf(scene.wide.list)} defaultExpanded={scene.wide.expanded} />;
+      }
       return <StatsBlock {...common} gardens={gs} />;
     case 'todo':
       return <TodoBlock {...common} gardens={gs} varieties={varieties} weather={weather} onLocate={noop} onExpand={noop} />;
