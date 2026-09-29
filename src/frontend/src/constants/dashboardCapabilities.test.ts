@@ -30,17 +30,19 @@ function walk(start: DashboardSize, sizes: DashboardSizeList, steps: number): Da
 
 /** Whether a (widget, formula) is the Key figures band at the Expert formula — the one row of the table that is not Small, Medium, Large. */
 const isExpertBand = (key: string, level: string) => key === 'keyfigures' && level === 'expert';
-/** Whether a (widget, formula) is the Weather at the Expert formula — a row that is Small, Medium, Large AND the Full width (SMA-448, lot F4). */
-const isExpertWeather = (key: string, level: string) => key === 'weather' && level === 'expert';
-/** Whether a (widget, formula) is the Gardens at the Expert formula — the third such row (SMA-448, lot F5-b). */
-const isExpertGardens = (key: string, level: string) => key === 'gardens' && level === 'expert';
+/**
+ * The widgets drawn in Full width besides the band, the Expert's alone: the
+ * Weather (SMA-448, lot F4), the Gardens (lot F5-b), and Statistics, Counts
+ * and This month (SMA-437, lot V3-08 — A-14, decided on 28/09).
+ */
+const EXPERT_FULL_WIDTH = ['weather', 'gardens', 'month', 'counters', 'stats'];
+/** Whether a (widget, formula) is one of them at the Expert formula — a row that is Small, Medium, Large AND the Full width. */
+const isExpertFullWidth = (key: string, level: string) => EXPERT_FULL_WIDTH.includes(key) && level === 'expert';
 /** Every widget of a formula whose row is the plain three sizes. */
 const threeSizedWidgets = (level: DashboardLevel) =>
-  capabilitiesFor(level).widgets.filter(
-    (key) => !isExpertBand(key, level) && !isExpertWeather(key, level) && !isExpertGardens(key, level)
-  );
+  capabilitiesFor(level).widgets.filter((key) => !isExpertBand(key, level) && !isExpertFullWidth(key, level));
 
-describe('sizesFor — as served: the Key figures band takes the Full width, at the Expert formula, the Weather and the Gardens add it there, and nothing else has it', () => {
+describe('sizesFor — as served: the Key figures band takes the Full width, at the Expert formula, the Weather, the Gardens, Statistics, Counts and This month add it there, and nothing else has it', () => {
   // SMA-437 lot 1, PR B, step B1 (pre-flight D3): « keyfigures@Expert =
   // [wide] ; tout le reste = [P, M, G] ». The band is the one widget DRAWN in
   // Full width — its only size — and the Expert the one formula that has it
@@ -60,6 +62,18 @@ describe('sizesFor — as served: the Key figures band takes the Full width, at 
   it('the Gardens takes the three sizes and then the Full width at the Expert formula — and the three sizes alone at the Gardener (SMA-448, lot F5-b)', () => {
     expect(sizesFor('gardens', capabilitiesFor('expert'))).toEqual(['small', 'medium', 'large', 'wide']);
     expect(sizesFor('gardens', capabilitiesFor('gardener'))).toEqual(['small', 'medium', 'large']);
+  });
+
+  // SMA-437, lot V3-08 (A-14, Alexandre 28/09): Statistics in one line per
+  // garden, Counts in four columns from 1 200 px, This month the grid alone.
+  it.each(['stats', 'counters', 'month'] as const)('%s takes the three sizes and then the Full width at the Expert formula (SMA-437, lot V3-08)', (key) => {
+    expect(sizesFor(key, capabilitiesFor('expert'))).toEqual(['small', 'medium', 'large', 'wide']);
+  });
+
+  it('This month and Counts keep the three sizes alone at the Gardener — who has no Statistics at all (SMA-437, lot V3-08; R1)', () => {
+    expect(sizesFor('month', capabilitiesFor('gardener'))).toEqual(['small', 'medium', 'large']);
+    expect(sizesFor('counters', capabilitiesFor('gardener'))).toEqual(['small', 'medium', 'large']);
+    expect(sizesFor('stats', capabilitiesFor('gardener'))).toBeNull();
   });
 
   it.each(DASHBOARD_LEVELS)('at %s, every other widget of the formula takes Small, Medium and Large, in that order', (level) => {
@@ -111,11 +125,17 @@ describe('the corner handle, per formula (A-N11)', () => {
     }
   });
 
-  it('the Expert’s cycle of every resizable widget but the Weather and the Gardens is Small → Medium → Large → Small', () => {
+  it('the Expert’s cycle of every resizable widget not drawn in Full width — Tips, To do, Harvest — is Small → Medium → Large → Small', () => {
     const capabilities = capabilitiesFor('expert');
-    for (const key of capabilities.widgets.filter((candidate) => !['keyfigures', 'weather', 'gardens'].includes(candidate))) {
+    const threeSized = capabilities.widgets.filter((candidate) => candidate !== 'keyfigures' && !EXPERT_FULL_WIDTH.includes(candidate));
+    expect(threeSized).toEqual(['tips', 'todo', 'harvest']);
+    for (const key of threeSized) {
       expect(walk('small', sizesFor(key, capabilities)!, 3), key).toEqual(['medium', 'large', 'small']);
     }
+  });
+
+  it.each(['stats', 'counters', 'month'] as const)('the Expert’s %s cycles through the Full width: Small → Medium → Large → Full width → Small (A-N11; SMA-437, lot V3-08)', (key) => {
+    expect(walk('small', sizesFor(key, capabilitiesFor('expert'))!, 4)).toEqual(['medium', 'large', 'wide', 'small']);
   });
 
   it('the Expert’s Weather cycles through the Full width: Small → Medium → Large → Full width → Small (A-N11; SMA-448, lot F4)', () => {

@@ -508,16 +508,22 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// must not be able to show a widget's Large stretched over the page's
     /// width. Strict on write. Tips has no Full width at any formula; the
     /// Weather has one at the Expert's alone (SMA-448, lot F4), never at the
-    /// Gardener's — and so does the Gardens widget (SMA-448, lot F5-b): a
-    /// Gardener cannot store it in Full width, by the interface nor by the
-    /// server (R8). At the two formulas that have widgets — the Novice has
-    /// none since SMA-448, lot F2, and refuses every document for that reason.
+    /// Gardener's — and so does the Gardens widget (SMA-448, lot F5-b), and so
+    /// do This month and Counts (SMA-437, lot V3-08): a Gardener cannot store
+    /// them in Full width, by the interface nor by the server (R8). At the two
+    /// formulas that have widgets — the Novice has none since SMA-448, lot F2,
+    /// and refuses every document for that reason. Statistics is not the
+    /// Gardener's at all: refused as a block, below.
     /// </summary>
     [Theory]
     [InlineData(DashboardLayout.Levels.Expert, DashboardLayout.Blocks.Tips)]
+    [InlineData(DashboardLayout.Levels.Expert, DashboardLayout.Blocks.Todo)]
+    [InlineData(DashboardLayout.Levels.Expert, DashboardLayout.Blocks.Harvest)]
     [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Tips)]
     [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Weather)]
     [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Gardens)]
+    [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Month)]
+    [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Counters)]
     public async Task PutPreferences_SizeTheFormulaDoesNotPermit_Returns400(string level, string block)
     {
         var userId = Guid.NewGuid().ToString();
@@ -598,6 +604,102 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.NotNull(body);
         Assert.False(body.IsPreset);
         Assert.Equal(DashboardLayout.Sizes.Wide, Block(body, DashboardLayout.Blocks.Gardens).Size);
+    }
+
+    /// <summary>
+    /// SMA-437, lot V3-08 (A-14 — Alexandre, 28/09): Statistics, Counts and
+    /// This month in Full width, at the Expert's, are sizes the server permits,
+    /// stores and reads back as written — each on its own, every other block
+    /// at its preset size.
+    /// </summary>
+    [Theory]
+    [InlineData(DashboardLayout.Blocks.Stats)]
+    [InlineData(DashboardLayout.Blocks.Counters)]
+    [InlineData(DashboardLayout.Blocks.Month)]
+    public async Task PutThenGetPreferences_AV308WidgetInTheFullWidth_AtTheExpert_IsStoredAsWritten(string block)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. DashboardPresets.For(DashboardLayout.Levels.Expert).Select(b => new SaveDashboardBlockRequest(
+                b.Key,
+                b.Key == block ? DashboardLayout.Sizes.Wide : b.Size,
+                b.Hidden,
+                null))]);
+
+        var put = await Client.PutAsJsonAsync(Url, request);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.False(body.IsPreset);
+        Assert.Equal(DashboardLayout.Sizes.Wide, Block(body, block).Size);
+        Assert.Equal(
+            request.Blocks.Select(b => (b.Key, b.Size, b.Hidden)),
+            body.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
+    }
+
+    /// <summary>
+    /// R8 on the widget the Gardener does not have (SMA-448, lot F1 — R1):
+    /// Statistics in Full width is refused as the BLOCK it is — shown, at a
+    /// formula without it — whatever its size, and nothing is stored.
+    /// </summary>
+    [Fact]
+    public async Task PutPreferences_GardenerShowingStatisticsInTheFullWidth_Returns400_NamingTheLevel()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Gardener,
+            [
+                new(DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Large, false, null),
+                new(DashboardLayout.Blocks.Stats, DashboardLayout.Sizes.Wide, false, null),
+            ]);
+
+        var response = await Client.PutAsJsonAsync(Url, request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("block 'stats' is not available at level 'gardener'", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    /// <summary>
+    /// A Gardener's stored layout with This month or Counts in Full width — a
+    /// row written by hand, since the server refuses it on write — reads back
+    /// at the Gardener preset's size, Medium, in place: forgiving on read,
+    /// where R8 refuses on write (SMA-437, lot V3-08).
+    /// </summary>
+    [Theory]
+    [InlineData(DashboardLayout.Blocks.Month)]
+    [InlineData(DashboardLayout.Blocks.Counters)]
+    public async Task GetPreferences_StoredV308WidgetInTheFullWidth_AtTheGardener_FallsBackToMedium(string block)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            "{\"schemaVersion\":1,\"level\":\"gardener\",\"blocks\":[" +
+            $"{{\"key\":\"{block}\",\"size\":\"wide\",\"hidden\":false,\"options\":null}}," +
+            "{\"key\":\"weather\",\"size\":\"small\",\"hidden\":false,\"options\":null}]}");
+
+        var response = await Client.GetAsync(Url);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
+
+        Assert.NotNull(body);
+        Assert.Equal(block, body.Blocks[0].Key);
+        // The Gardener preset's size for both.
+        Assert.Equal(DashboardLayout.Sizes.Medium, body.Blocks[0].Size);
+        Assert.Equal(DashboardLayout.Sizes.Small, Block(body, DashboardLayout.Blocks.Weather).Size);
     }
 
     /// <summary>
