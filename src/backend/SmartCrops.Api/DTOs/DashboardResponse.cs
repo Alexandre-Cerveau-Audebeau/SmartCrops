@@ -37,6 +37,21 @@ namespace SmartCrops.Api.DTOs;
 /// </param>
 /// <param name="Config">Orientation, type, hemisphere, latitude band and indoor light slots — the exposure engine's inputs.</param>
 /// <param name="UpdatedAt">Last write to the garden, for the « modified 2 h ago » line.</param>
+/// <param name="CreatedAt">
+/// SMA-448, lot F5-a — when the garden was created, for the « Date de
+/// création » sort (A-N3): in the table since AddGardens, carried since this
+/// lot rather than read off the aggregate's implicit order.
+/// </param>
+/// <param name="LastOpenedAt">
+/// SMA-448, lot F5-a — the planner's last opening (A-N6), ONE stamp written by
+/// <c>POST /api/gardens/{id}/open</c>; null until the first, and the
+/// « Derniers ouverts » sort then falls back on <see cref="UpdatedAt"/>.
+/// </param>
+/// <param name="SortOrder">
+/// SMA-448, lot F5-a — the garden's place in the account's custom order
+/// (A-N5), written by <c>PUT /api/gardens/order</c>; null until ranked, which
+/// the client reads as the HEAD — a garden created after the order was set.
+/// </param>
 /// <param name="Placements">
 /// Every placement of the garden, in a STABLE order (see
 /// <see cref="Controllers.DashboardController"/>): row, then column, then plant.
@@ -61,6 +76,9 @@ public record DashboardGardenDto(
     string? CellsJson,
     GardenConfigDto Config,
     DateTime UpdatedAt,
+    DateTime CreatedAt,
+    DateTime? LastOpenedAt,
+    int? SortOrder,
     IReadOnlyList<PlacementResponse> Placements,
     int PlacementCount,
     int VarietyCount,

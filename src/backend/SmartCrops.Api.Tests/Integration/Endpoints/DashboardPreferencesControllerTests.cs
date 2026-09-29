@@ -1032,6 +1032,162 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
+    // ── The Gardens widget's settings (SMA-448, lot F5-a) ────────────────────
+    // A-N3, A-N4 (Alexandre, 28/09): `count` is 5, 8, 10 or "all"; `sort` is
+    // one of the sorts the account's FORMULA serves — three for the Gardener,
+    // five for the Expert (R8: a right refused on the server, never only in
+    // the interface). Strict on write; on read a stored sort the formula lacks
+    // comes back to the default — the key is dropped, the rest of the
+    // document passes as stored, never an error.
+
+    [Theory]
+    [InlineData("\"custom\"")]
+    [InlineData("\"created\"")]
+    public async Task PutPreferences_GardensSortTheFormulaDoesNotServe_Returns400(string sort)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(
+            Url,
+            RequestWithBlockOptions(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Gardens, new() { ["sort"] = JsonValue(sort) }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains($"sort {sort.Replace('"', '\'')} for block 'gardens' is not available at level 'gardener'", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    [Theory]
+    [InlineData("\"compost\"")]
+    [InlineData("3")]
+    [InlineData("null")]
+    public async Task PutPreferences_GardensSortUnknown_Returns400(string sort)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(
+            Url,
+            RequestWithBlockOptions(DashboardLayout.Levels.Expert, DashboardLayout.Blocks.Gardens, new() { ["sort"] = JsonValue(sort) }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("for block 'gardens' is not available at level 'expert'", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    [Theory]
+    [InlineData("7")]
+    [InlineData("0")]
+    [InlineData("\"8\"")]
+    [InlineData("\"tous\"")]
+    [InlineData("null")]
+    public async Task PutPreferences_GardensCountNotOfTheList_Returns400(string count)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(
+            Url,
+            RequestWithBlockOptions(DashboardLayout.Levels.Expert, DashboardLayout.Blocks.Gardens, new() { ["count"] = JsonValue(count) }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("count for block 'gardens' must be 5, 8, 10 or 'all'", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    [Fact]
+    public async Task PutPreferences_GardensCountAndSortOfTheFormula_AreStoredAsSent_TheExpertsFiveIncluded()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var put = await Client.PutAsJsonAsync(
+            Url,
+            RequestWithBlockOptions(
+                DashboardLayout.Levels.Expert,
+                DashboardLayout.Blocks.Gardens,
+                new() { ["count"] = JsonValue("\"all\""), ["sort"] = JsonValue("\"custom\""), ["theme"] = JsonValue("\"soft\"") }));
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+        Assert.NotNull(body);
+        var options = Block(body, DashboardLayout.Blocks.Gardens).Options;
+        Assert.NotNull(options);
+        Assert.Equal("all", options["count"].GetString());
+        Assert.Equal("custom", options["sort"].GetString());
+        // A key a newer client keeps there travels as it came.
+        Assert.Equal("soft", options["theme"].GetString());
+    }
+
+    [Theory]
+    [InlineData("5", "\"lastOpened\"")]
+    [InlineData("8", "\"name\"")]
+    [InlineData("10", "\"updated\"")]
+    public async Task PutPreferences_GardensCountAndSortTheGardenerServes_AreAccepted(string count, string sort)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(
+            Url,
+            RequestWithBlockOptions(
+                DashboardLayout.Levels.Gardener,
+                DashboardLayout.Blocks.Gardens,
+                new() { ["count"] = JsonValue(count), ["sort"] = JsonValue(sort) }));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetPreferences_StoredGardensSortTheFormulaLacks_ComesBackWithoutIt_TheRestKept()
+    {
+        // The Expert's custom order stored while the account was an Expert,
+        // read as a Gardener — the layout archive keeps a formula's document
+        // verbatim and a hand-edit can write anything: the sort the Gardener
+        // does not have is dropped, the count and the rest pass as stored.
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            "{\"schemaVersion\":1,\"level\":\"gardener\",\"blocks\":[{\"key\":\"gardens\",\"size\":\"large\",\"hidden\":false,\"options\":{\"count\":8,\"sort\":\"custom\",\"theme\":\"soft\"}}]}");
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        var options = Block(body, DashboardLayout.Blocks.Gardens).Options;
+        Assert.NotNull(options);
+        Assert.False(options.ContainsKey("sort"));
+        Assert.Equal(8, options["count"].GetInt32());
+        Assert.Equal("soft", options["theme"].GetString());
+    }
+
+    [Fact]
+    public async Task GetPreferences_StoredGardensCountNotOfTheList_ComesBackWithoutIt()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            "{\"schemaVersion\":1,\"level\":\"expert\",\"blocks\":[{\"key\":\"gardens\",\"size\":\"large\",\"hidden\":false,\"options\":{\"count\":7,\"sort\":\"custom\"}}]}");
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        var options = Block(body, DashboardLayout.Blocks.Gardens).Options;
+        Assert.NotNull(options);
+        Assert.False(options.ContainsKey("count"));
+        Assert.Equal("custom", options["sort"].GetString());
+    }
+
     // ── Bounded options (round 1, E1 / G2) ───────────────────────────────────
 
     [Fact]
@@ -1171,6 +1327,19 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
                     b.Size,
                     b.Hidden,
                     b.Key == DashboardLayout.Blocks.Weather ? options : null))]);
+
+    /// <summary>A level's preset, one of its blocks carrying the given options (SMA-448, lot F5-a).</summary>
+    private static SaveDashboardPreferencesRequest RequestWithBlockOptions(
+        string level,
+        string key,
+        Dictionary<string, JsonElement> options) =>
+        new(level,
+            [.. DashboardPresets.For(level)
+                .Select(b => new SaveDashboardBlockRequest(
+                    b.Key,
+                    b.Size,
+                    b.Hidden,
+                    b.Key == key ? options : null))]);
 
     /// <summary>The Expert preset, its Key figures band carrying the given options.</summary>
     private static SaveDashboardPreferencesRequest ExpertRequestWithBandOptions(

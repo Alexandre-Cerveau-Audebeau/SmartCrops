@@ -38,6 +38,7 @@ function renderTable(weather: GardensWeather | undefined, onLocate?: (id: string
               onChanged={() => {}}
               onDeleted={() => {}}
               onExpand={() => {}}
+              sorts={['lastOpened', 'name', 'updated']}
             />
           </MemoryRouter>
         </UnitSystemProvider>

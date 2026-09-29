@@ -1,11 +1,13 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
 import Skeleton from '@mui/material/Skeleton';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
@@ -14,7 +16,10 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import AddIcon from '@mui/icons-material/Add';
 import AddLocationAltOutlinedIcon from '@mui/icons-material/AddLocationAltOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloseIcon from '@mui/icons-material/Close';
 import FilterVintageOutlinedIcon from '@mui/icons-material/FilterVintageOutlined';
+import SearchIcon from '@mui/icons-material/Search';
+import SearchOffIcon from '@mui/icons-material/SearchOff';
 import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
 import DeleteGardenDialog from '../../Garden/DeleteGardenDialog';
 import RenameGardenDialog from '../../Garden/RenameGardenDialog';
@@ -29,9 +34,10 @@ import OccupancyBar from '../OccupancyBar';
 import { useGlyphsFit } from '../useGlyphsFit';
 import WeatherGlyph from './WeatherGlyph';
 import { displayTemperature } from './weatherFormat';
+import { defaultGardensCount, gardensCap, gardensOptions, searchGardens, sortGardens } from './gardensOptions';
 import { DASHBOARD_TYPE, DASHBOARD_WEATHER } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
-import type { DashboardSize } from '../../../types/Dashboard';
+import type { DashboardSize, GardenSort } from '../../../types/Dashboard';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import type { WeatherLocation } from '../../../types/DashboardWeather';
 import { formatCount } from '../../../utils/formatNumber';
@@ -249,6 +255,23 @@ interface Props {
   onDeleted: () => void;
   /** "+N" - the rest of the list is reached by growing the widget. */
   onExpand: () => void;
+  /**
+   * The widget's stored settings (SMA-448, lot F5-a; V3-04) — `{ count, sort }`
+   * and whatever else another build keeps there — read through
+   * `gardensOptions` against the sorts the formula serves.
+   */
+  options?: Record<string, unknown> | null;
+  /** The sorts the account's formula serves (`FormulaCapabilities.gardenSorts`): what a stored sort is read against (R8). */
+  sorts: readonly GardenSort[];
+  /**
+   * The page's LOCAL custom order — the ids the gear panel is moving, not yet
+   * or just written — or null to read the places the server serves.
+   */
+  customOrder?: readonly string[] | null;
+  /** The Large list unfolded from the start — the harness's scenes; the widget owns the state after. */
+  defaultExpanded?: boolean;
+  /** A search typed from the start — the harness's scenes; the widget owns the state after. */
+  defaultQuery?: string;
 }
 
 /**
@@ -292,6 +315,11 @@ export default function GardensBlock({
   onChanged,
   onDeleted,
   onExpand,
+  options = null,
+  sorts,
+  customOrder = null,
+  defaultExpanded = false,
+  defaultQuery = '',
 }: Props) {
   // ONE locale source (round 6, Extension #5-9 / #5-10): this widget formatted
   // counts with `i18n.language` and dates with a `language` prop the page
@@ -328,6 +356,51 @@ export default function GardensBlock({
    */
   const phone = useMediaQuery(theme.breakpoints.down('sm'));
 
+  // ── The widget's settings (SMA-448, lot F5-a; V3-04) ─────────────────────
+  // The stored document read against the sorts the formula SERVES
+  // (`gardensOptions`): the count — 8 on a desktop, 5 on a phone until the
+  // user chooses (contract v3 § 4.7 d) — and the sort, « Derniers ouverts »
+  // by default. The list is sorted ONCE per (gardens, sort, language, local
+  // order) — every keystroke of the search filters the sorted list, it never
+  // re-sorts it (pre-flight F5, risks).
+  const parsed = gardensOptions(options, sorts);
+  const count = parsed.count ?? defaultGardensCount(phone);
+  const cap = gardensCap(count);
+  const sort = parsed.sort;
+  // The memo reads the PROPS, frozen, and the reader again — not `parsed`,
+  // a fresh object of the render the hooks lint cannot see as stable
+  // (`react-hooks/preserve-manual-memoization`).
+  const sorted = useMemo(
+    () => sortGardens(gardens, gardensOptions(options, sorts).sort, i18n.language, customOrder),
+    [gardens, options, sorts, i18n.language, customOrder]
+  );
+  // « + N autres jardins » unfolds the list IN PLACE (A-N23, [A] 28/09):
+  // nothing is written — the widget owns the state, the layout never sees
+  // it — and « Réduire à N jardins » comes back to the setting. The search
+  // (A-N3) exists only while at least one garden is hidden by the SETTING
+  // (never by the unfolding: « la règle regarde le réglage, pas le
+  // dépliage »), and looks through ALL the gardens, the hidden ones marked.
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [query, setQuery] = useState(defaultQuery);
+  const hiddenCount = cap === null ? 0 : Math.max(0, sorted.length - cap);
+  const searchable = hiddenCount > 0;
+  const trimmedQuery = query.trim();
+  const searching = searchable && trimmedQuery.length > 0;
+  const results = useMemo(
+    () => (searching ? searchGardens(sorted, trimmedQuery) : null),
+    [searching, sorted, trimmedQuery]
+  );
+  const largeRows = results ?? (cap === null || expanded ? sorted : sorted.slice(0, cap));
+  // In Large the card has a fixed height: unfolding scrolls to the FIRST
+  // garden revealed (V3-04). A flag raised by the click, read by the callback
+  // ref of that row as it mounts — never a state written in an effect.
+  const revealRef = useRef(false);
+  const firstRevealedRef = useCallback((node: HTMLElement | null) => {
+    if (!node || !revealRef.current) return;
+    revealRef.current = false;
+    if (typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' });
+  }, []);
+
   /**
    * The Medium rows' chips drawn BARE, the A9 form — no type glyph, no
    * « Ornemental » glyph — when one row of the card cannot hold them with
@@ -351,7 +424,7 @@ export default function GardensBlock({
     '[data-garden-row-group]',
     [
       i18n.language,
-      ...gardens
+      ...sorted
         .slice(0, MEDIUM_ROWS)
         .map((garden) => `${garden.id} ${garden.name} ${garden.config.gardenType} ${garden.isEdible}`),
     ].join('\n'),
@@ -676,8 +749,12 @@ export default function GardensBlock({
   );
 
   const mediumBody = () => {
-    const shown = gardens.slice(0, MEDIUM_ROWS);
-    const remaining = gardens.length - shown.length;
+    // The three first of the SORTED list ([P], lot F5-a): the sort is a
+    // setting of the widget, and R4 wants a larger size to show MORE, never
+    // something else. The three rows and « +N → » are otherwise unchanged
+    // (A-N4: the Medium keeps its growth; the cap and the search are Large's).
+    const shown = sorted.slice(0, MEDIUM_ROWS);
+    const remaining = sorted.length - shown.length;
     return (
       <Box
         ref={mediumBodyRef}
@@ -1073,8 +1150,142 @@ export default function GardensBlock({
       // assistive technology read the actions cell under « MODIFIED ».
     ];
 
+    const searchLabel = t('dashboard.blocks.gardens.search.placeholder');
+    // The discreet bar in the widget's head (A-N3, [A] 23/09 07:39; the form
+    // of V3-04: 32 px, a pill, 190 px in Large, the whole width on a phone),
+    // drawn only while a garden is hidden by the setting. Escape clears it
+    // and stops there, so the key never reaches a surface above.
+    const searchBar = searchable ? (
+      <TextField
+        data-gardens-search
+        size="small"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && query.length > 0) {
+            event.stopPropagation();
+            setQuery('');
+          }
+        }}
+        placeholder={searchLabel}
+        slotProps={{
+          htmlInput: { 'aria-label': searchLabel },
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+              </InputAdornment>
+            ),
+            endAdornment:
+              query.length > 0 ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    // Its own name: « Effacer la recherche » is the empty
+                    // state's button, and two controls of one widget must not
+                    // share a name.
+                    aria-label={t('dashboard.blocks.gardens.search.clearField')}
+                    onClick={() => setQuery('')}
+                    sx={{ mr: '-6px' }}
+                  >
+                    <CloseIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : undefined,
+            sx: { height: 32, borderRadius: '16px', fontSize: DASHBOARD_TYPE.secondary },
+          },
+        }}
+        sx={{ width: { xs: '100%', sm: 190 }, flexShrink: 0 }}
+      />
+    ) : null;
+    // The results, said once (V3-04: « le nombre de résultats est annoncé »):
+    // a region mounted with the Large body, born empty, its text changing
+    // with the query — never inserted already filled (the rule of #278).
+    // ANNOUNCED, not displayed: the list itself, or the empty state, is what
+    // the eye reads — a visible line would say the empty state's sentence
+    // twice on the screen.
+    const searchStatus = (
+      <Typography
+        role="status"
+        aria-live="polite"
+        data-gardens-search-status
+        sx={visuallyHidden}
+      >
+        {searching && results
+          ? results.length === 0
+            ? t('dashboard.blocks.gardens.search.none', { query: trimmedQuery })
+            : t('dashboard.blocks.gardens.search.results', {
+                count: results.length,
+                total: sorted.length,
+                query: trimmedQuery,
+              })
+          : ''}
+      </Typography>
+    );
+    // « Aucun résultat » is a state, not an error (R5; V3-04).
+    const emptySearch = (
+      <InviteState
+        icon={<SearchOffIcon />}
+        message={t('dashboard.blocks.gardens.search.none', { query: trimmedQuery })}
+        body={t('dashboard.blocks.gardens.search.scope', { count: sorted.length })}
+        action={
+          <Button variant="outlined" size="small" onClick={() => setQuery('')}>
+            {t('dashboard.blocks.gardens.search.clear')}
+          </Button>
+        }
+      />
+    );
+    // The foot (A-N23, [A] 28/09): « + N autres jardins » that unfolds in
+    // place, « Réduire à N jardins » that folds back, and, at the right, the
+    // sort in force — « Triés par … », « Dans votre ordre » — so an order
+    // never looks arbitrary. The button is not drawn while a search is on
+    // (the results replace the cut); the sort line always is.
+    const foot = (
+      <Box
+        data-gardens-foot
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+          flexWrap: 'wrap',
+          pt: '6px',
+          borderTop: '1px solid',
+          borderColor: 'borderSubtle',
+        }}
+      >
+        {hiddenCount > 0 && !searching ? (
+          <Button
+            size="small"
+            aria-expanded={expanded}
+            onClick={() => {
+              revealRef.current = !expanded;
+              setExpanded(!expanded);
+            }}
+            sx={{ fontSize: DASHBOARD_TYPE.link, fontWeight: 700, px: '6px', ml: '-6px' }}
+          >
+            {expanded
+              ? t('dashboard.blocks.gardens.foot.less', { count: cap ?? 0 })
+              : t('dashboard.blocks.gardens.foot.more', { count: hiddenCount })}
+          </Button>
+        ) : (
+          <Box component="span" />
+        )}
+        <Typography
+          data-gardens-sorted-by
+          sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary', ml: 'auto', whiteSpace: 'nowrap' }}
+        >
+          {t(`dashboard.blocks.gardens.foot.sortedBy.${sort}`)}
+        </Typography>
+      </Box>
+    );
+
     return (
-      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {searchBar}
+        {searchStatus}
+        <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        {results && results.length === 0 ? emptySearch : (
         <Box
           component="table"
           // NAMED (round 7, S35 — Extension #8-5): with column headers and no
@@ -1140,8 +1351,14 @@ export default function GardensBlock({
             </Box>
           </Box>
           <Box component="tbody">
-            {gardens.map((garden) => (
+            {largeRows.map((garden, index) => (
               <GardenRow
+                rowRef={expanded && !searching && cap !== null && index === cap ? firstRevealedRef : undefined}
+                beyond={
+                  searching && cap !== null && sorted.indexOf(garden) >= cap
+                    ? t('dashboard.blocks.gardens.search.beyond', { count: cap })
+                    : null
+                }
                 stickyActions={stickyActions}
                 chipBorder={tk.chipBorder}
                 key={garden.id}
@@ -1159,6 +1376,9 @@ export default function GardensBlock({
             ))}
           </Box>
         </Box>
+        )}
+        </Box>
+        {foot}
       </Box>
     );
   };
@@ -1291,6 +1511,10 @@ interface RowProps {
   stickyActions: ReturnType<typeof stickyActionsSx>;
   /** The outlined-chip border token, read once by the table. */
   chipBorder: string;
+  /** The row's node, for the first garden an unfolding reveals (SMA-448, lot F5-a). */
+  rowRef?: (node: HTMLElement | null) => void;
+  /** « hors des 8 affichés »: a garden a search found beyond the cut (V3-04), or null. */
+  beyond?: string | null;
 }
 
 /** One line of the comparison table. */
@@ -1307,6 +1531,8 @@ function GardenRow({
   plannerPath,
   stickyActions,
   chipBorder,
+  rowRef,
+  beyond = null,
 }: RowProps) {
   const { t, i18n } = useTranslation();
 
@@ -1359,7 +1585,7 @@ function GardenRow({
   );
 
   return (
-    <Box component="tr">
+    <Box component="tr" ref={rowRef}>
       {/* THREE children, FOUR when the garden has a description (round 5, V18).
 
           `Main.dc.html` puts three in a `.td`:
@@ -1408,6 +1634,14 @@ function GardenRow({
           >
             {garden.name}
           </Box>
+          {/* « hors des 8 affichés » (V3-04): the garden a search found past
+              the cut, said under its name — the one line of the lot on the
+              identity cell, drawn only while a search is on. */}
+          {beyond && (
+            <Typography data-garden-beyond sx={{ ...subSx, color: 'text.secondary', fontStyle: 'italic' }}>
+              {beyond}
+            </Typography>
+          )}
           {/* The artboard's own sub-line, at `text.primary` (round 5, V18).
 
               The pair had to be told apart by COLOUR — « une couleur plus

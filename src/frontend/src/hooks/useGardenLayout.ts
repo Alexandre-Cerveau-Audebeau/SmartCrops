@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchGarden } from '../services/gardenApi';
 import { fetchLayout } from '../services/gardenLayoutApi';
+import { openGarden } from '../services/gardenSettingsApi';
 import type { GardenLayoutData } from '../services/gardenLayoutApi';
 import type { Garden } from '../types/Garden';
 
@@ -64,6 +65,20 @@ export function useGardenLayout(gardenId: string | undefined) {
       controller.abort();
     };
   }, [gardenId, epoch]);
+
+  // SMA-448, lot F5-a (contract v3 A-N6; pre-flight § C.1 i) — the planner
+  // was OPENED on this garden: one call per garden opened, keyed on the id
+  // alone — never on a refetch —, launched without waiting for it and SILENT
+  // on failure: a server before this lot answers 404 during the promotion
+  // window, and a network that drops must show nothing on the plan. Never a
+  // GET that writes (the two reads above stay reads), never keepalive, never
+  // blocking. `Promise.resolve().then(…)` holds a synchronous throw too.
+  useEffect(() => {
+    if (!gardenId) return;
+    void Promise.resolve()
+      .then(() => openGarden(gardenId))
+      .catch(() => undefined);
+  }, [gardenId]);
 
   return { data, loading, error, refetch };
 }

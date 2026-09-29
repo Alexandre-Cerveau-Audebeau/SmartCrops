@@ -26,7 +26,10 @@
  *   edge is then read on ITS OWN axis (fix round 3, #12 — ledger `ac9da25d`):
  *   an ancestor that hides its horizontal overflow beside a scrolling
  *   vertical one cuts its left and right edges for good, and a single flag
- *   for both axes made that cut pass for a fold;
+ *   for both axes made that cut pass for a fold. What falls BELOW the card
+ *   (`beyondCard`) is read outside every scrolling zone up to the card (fix
+ *   round 4, #14 — SMA-448 lot F5-a): an `overflow: hidden` box INSIDE a
+ *   scrolling zone is reached by the zone's scroll like the row around it;
  * - the text wider than its own block (a spill), the ellipsized lines, the
  *   scrolling zones and their excess, the smallest font drawn;
  * - a CROP BY DESIGN (`data-crop` — SMA-448, PR #296, fix round 1, V1): a
@@ -105,7 +108,14 @@ export interface ScrollerMeasure {
 
 export interface CardMeasure {
   card: { w: number; h: number; padding: string };
-  body: { h: number; scrollH: number; overflow: number; beyondCard: number };
+  body: {
+    h: number;
+    scrollH: number;
+    overflow: number;
+    beyondCard: number;
+    /** The atom whose bottom set `beyondCard` — the lowest one outside every scrolling zone —, or null when nothing is below the card. */
+    lowest: string | null;
+  };
   gridAutoRows: string;
   gridColumns: string;
   atoms: number;
@@ -300,10 +310,14 @@ const edgeScrolls = (clipper: Clipper, edge: Edge): boolean =>
  * Where an element can be seen, and WHO bounds each side of it (#11): the
  * card's padding box cut by every clipping ancestor — one intersection — with
  * each edge owned by the ancestor whose box is tightest there, the nearest one
- * when two coincide. `nearest` is the innermost clipping ancestor: what says
- * whether the element sits in a scrolling zone.
+ * when two coincide. `nearest` is the innermost clipping ancestor. `inScrollY`
+ * says whether ANY clipping ancestor up to the card scrolls vertically (#14,
+ * SMA-448 lot F5-a): an `overflow: hidden` box INSIDE a scrolling zone — the
+ * occupancy bar's track in a row of the Gardens table — is reached by the
+ * zone's scroll like the row around it; read on the nearest ancestor alone,
+ * it counted its content as lost below the card, and twelve rows found it.
  */
-function clipFrame(el: Element, card: Element): { box: Box; owner: Record<Edge, Clipper>; nearest: Clipper } {
+function clipFrame(el: Element, card: Element): { box: Box; owner: Record<Edge, Clipper>; nearest: Clipper; inScrollY: boolean } {
   const all = clippers(el, card);
   const outer = all[all.length - 1]!;
   const owner: Record<Edge, Clipper> = { top: outer, right: outer, bottom: outer, left: outer };
@@ -316,7 +330,7 @@ function clipFrame(el: Element, card: Element): { box: Box; owner: Record<Edge, 
     if (c.box.right <= owner.right.box.right) owner.right = c;
   }
   const box = boxOf({ top: owner.top.box.top, left: owner.left.box.left, bottom: owner.bottom.box.bottom, right: owner.right.box.right });
-  return { box, owner, nearest: all[0]! };
+  return { box, owner, nearest: all[0]!, inScrollY: all.some((c) => c.scrollY) };
 }
 
 /** The region an element can be seen in: the card's padding box, cut by EVERY clipping ancestor — and, with `includeSelf`, by its own `overflow`. */
@@ -401,6 +415,12 @@ export function measureCard(card: HTMLElement): CardMeasure {
     // design, not over it.
     if (el.classList.contains('MuiOutlinedInput-notchedOutline')) continue;
     if (!visible(el)) continue;
+    // MUI's Radio draws its checked state as TWO SVGs stacked in one span —
+    // the ring, and the dot scaled over it (SMA-448, lot F5-a: the first
+    // radio group a scene measures, the Gardens gear's « Trier par »). One
+    // glyph by design, not one over another: the dot is read as part of the
+    // ring, and skipped.
+    if (tag === 'svg' && el.closest('.MuiRadio-root') !== null && el.previousElementSibling?.tagName.toLowerCase() === 'svg') continue;
     const cs = getComputedStyle(el);
     const txt = ownText(el);
     let kind: Atom['kind'];
@@ -471,6 +491,7 @@ export function measureCard(card: HTMLElement): CardMeasure {
   const smallFonts: { label: string; px: number; chip: boolean }[] = [];
   let minFont = 999;
   let maxBottom = -Infinity;
+  let lowest: string | null = null;
   for (const at of atoms) {
     // Against every clipping ancestor at once (#11): the tightest edge on
     // each side, whoever owns it — the card's bottom inside a zone that runs
@@ -551,8 +572,12 @@ export function measureCard(card: HTMLElement): CardMeasure {
     // clip.bottom`, the card's padding box below. Nothing horizontal enters
     // it — a text wider than its block is a `spill`, an atom past the card's
     // side is a clip on `right` or `left`. So the axis that says whether that
-    // bottom is reachable is the VERTICAL one, and `scrollY` alone is read.
-    if (!frame.nearest.scrollY && at.rect.bottom > maxBottom) maxBottom = at.rect.bottom;
+    // bottom is reachable is the VERTICAL one, and `scrollY` alone is read —
+    // on EVERY clipping ancestor up to the card (#14), not the nearest alone.
+    if (!frame.inScrollY && at.rect.bottom > maxBottom) {
+      maxBottom = at.rect.bottom;
+      lowest = at.label;
+    }
   }
 
   const ellipsized: EllipsisMeasure[] = [];
@@ -592,6 +617,7 @@ export function measureCard(card: HTMLElement): CardMeasure {
       scrollH: body.scrollHeight,
       overflow: Math.max(0, body.scrollHeight - body.clientHeight),
       beyondCard: round(Math.max(0, maxBottom - clip.bottom)),
+      lowest: maxBottom > clip.bottom ? lowest : null,
     },
     gridAutoRows: gridStyle.gridAutoRows,
     gridColumns: gridStyle.gridTemplateColumns,

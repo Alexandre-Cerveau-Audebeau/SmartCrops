@@ -104,6 +104,30 @@ export const WEATHER_MODES = ['gardenCards', 'singleCity', 'allCities'] as const
 export type WeatherMode = (typeof WEATHER_MODES)[number];
 
 /**
+ * SMA-448, lot F5-a — the sorts of the Gardens widget (V3-04; A-N3, decided
+ * by Alexandre on 28/09), in the gear panel's order: the most recently OPENED
+ * first (the default — a garden never opened ranks by its last modification),
+ * A to Z, the most recently CREATED first, the most recently MODIFIED first,
+ * and the order the user set by hand — the Expert's alone. The vocabulary the
+ * wire is parsed with; which of them a formula offers is what the server
+ * serves (`FormulaCapabilities.gardenSorts`) and refuses by (R8).
+ */
+export const GARDEN_SORTS = ['lastOpened', 'name', 'created', 'updated', 'custom'] as const;
+
+export type GardenSort = (typeof GARDEN_SORTS)[number];
+
+/** The default sort of every formula that has the widget (decision of 23/09). */
+export const DEFAULT_GARDEN_SORT: GardenSort = 'lastOpened';
+
+/** How many gardens the widget shows — 5 · 8 · 10 — beside « Tous » (A-N4: the cap, in Large as in the Full width). */
+export const GARDENS_COUNTS = [5, 8, 10] as const;
+
+/** « Tous »: every garden, no cap. */
+export const GARDENS_COUNT_ALL = 'all';
+
+export type GardensCount = (typeof GARDENS_COUNTS)[number] | typeof GARDENS_COUNT_ALL;
+
+/**
  * SMA-448, lot F1 — what a formula permits, as the API SERVES it (pre-flight
  * § C.2 a, decided by Alexandre on 26/09): the client draws from this rather
  * than from a copy of its own. The server builds it from the tables it refuses
@@ -126,6 +150,12 @@ export interface FormulaCapabilities {
   weather: WeatherMode;
   /** Whether the page draws the compact action bar (A-9). */
   compactBar: boolean;
+  /**
+   * The sorts its Gardens widget offers, in the gear panel's order (lot F5-a,
+   * A-N3): none for the Novice, three for the Gardener, the five of
+   * {@link GARDEN_SORTS} for the Expert. The panel draws these and no other.
+   */
+  gardenSorts: GardenSort[];
 }
 
 /** GET /api/dashboard/preferences. */
@@ -244,6 +274,10 @@ export function isDashboardSize(value: string): value is DashboardSize {
 
 export function isWeatherMode(value: string): value is WeatherMode {
   return (WEATHER_MODES as readonly string[]).includes(value);
+}
+
+export function isGardenSort(value: string): value is GardenSort {
+  return (GARDEN_SORTS as readonly string[]).includes(value);
 }
 
 /**

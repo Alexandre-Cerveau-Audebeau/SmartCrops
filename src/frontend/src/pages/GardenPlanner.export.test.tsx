@@ -26,6 +26,11 @@ import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 
 vi.mock('../services/plantApi', () => ({ fetchPlants: vi.fn() }));
+vi.mock('../services/gardenSettingsApi', () => ({
+  openGarden: vi.fn(() => Promise.resolve()),
+  saveGardenOrder: vi.fn(),
+}));
+
 vi.mock('../services/gardenApi', () => ({
   fetchGarden: vi.fn(),
   updateGarden: vi.fn(),

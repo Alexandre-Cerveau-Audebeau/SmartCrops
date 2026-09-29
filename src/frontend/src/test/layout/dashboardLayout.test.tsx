@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACTIONS_SCENES, GRID_SCENES, HEADER_SCENES, LAYOUT_SCENES } from './scenes';
+import { ACTIONS_SCENES, GRID_SCENES, HEADER_SCENES, LAYOUT_SCENES, PANEL_SCENES } from './scenes';
 import { ACTIONS_PROBES, FORCED_ACTION_LABEL, PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
-import type { ActionsMeasure, GridMeasure, HeaderMeasure, SceneMeasure } from './harness';
+import type { ActionsMeasure, GridMeasure, HeaderMeasure, PanelMeasure, SceneMeasure } from './harness';
 import type { FocusMeasure } from './focusProbe';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { sizesFor } from '../fixtures/formulas';
@@ -141,6 +141,8 @@ const actionsCases = new Map<string, Map<string, ActionsMeasure>>();
 const actionsProbes = new Map<string, Map<string, ActionsMeasure>>();
 /** The zone under the header's real layout, by run then by scene name (SMA-437, lot V39, PR B, T0). */
 const headerCases = new Map<string, Map<string, HeaderMeasure>>();
+/** The Gardens widget's gear panel, by run then by scene name (SMA-448, lot F5-a). */
+const panelCases = new Map<string, Map<string, PanelMeasure>>();
 let outDir = '';
 
 /** The runs whose grid has two or four columns — the tablets and the desktop — where the rows are `auto` and the cards pinned. */
@@ -163,6 +165,9 @@ function defects(scene: CardMeasure) {
       .map((c) => `${c.label} by ${c.by}: top ${c.top} right ${c.right} bottom ${c.bottom} left ${c.left}`),
     spills: scene.spills.map((s) => `${s.label}: ${s.textW} px in ${s.container} of ${s.containerW}`),
     beyondCard: scene.body.beyondCard,
+    // Named only when something IS beyond the card, so a failure says which
+    // atom — and a clean scene keeps the four keys the expectation lists.
+    ...(scene.body.beyondCard > 0 ? { lowest: scene.body.lowest } : {}),
   };
 }
 
@@ -206,7 +211,7 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       settled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') {
           const byName = (measured: SceneMeasure[]) => new Map(measured.map((scene) => [scene.scene, scene]));
-          const { scenes, grids: measuredGrids, focus, actions, headers } = outcome.value;
+          const { scenes, grids: measuredGrids, focus, actions, headers, panels } = outcome.value;
           results.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe === null)));
           probes.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe !== null)));
           grids.set(RUNS[index]!.id, new Map(measuredGrids.map((grid) => [grid.scene, grid])));
@@ -214,6 +219,7 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
           actionsCases.set(RUNS[index]!.id, new Map(actions.filter((zone) => zone.probe === null).map((zone) => [zone.scene, zone])));
           actionsProbes.set(RUNS[index]!.id, new Map(actions.filter((zone) => zone.probe !== null).map((zone) => [zone.scene, zone])));
           headerCases.set(RUNS[index]!.id, new Map(headers.map((header) => [header.scene, header])));
+          panelCases.set(RUNS[index]!.id, new Map(panels.map((panel) => [panel.scene, panel])));
         }
       });
       const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
@@ -250,7 +256,99 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         expect(zone.fontLoaded, `${run.id} ${zone.scene}: Inter not loaded`).toBe(true);
       }
       expect(headerCases.get(run.id)?.size, run.id).toBe(HEADER_SCENES.length);
+      expect(panelCases.get(run.id)?.size, run.id).toBe(PANEL_SCENES.length);
+      for (const panel of panelCases.get(run.id)?.values() ?? []) {
+        expect(panel.fontLoaded, `${run.id} ${panel.scene}: Inter not loaded`).toBe(true);
+      }
     }
+  });
+
+  // SMA-448, lot F5-a (V5: « toute forme nouvelle devient une scène ») — the
+  // Gardens widget under its settings, on twelve gardens, and its gear panel
+  // with 60 and 100 gardens, at every width of the runs: zero overlap, zero
+  // text cut, the rows the cut leaves, the search and its states, the
+  // panel's internal scroll.
+  describe('the Gardens widget’s settings (SMA-448, lot F5-a)', () => {
+    const phoneOf = (run: LayoutRun) => run.vw < 600;
+
+    it('cuts the twelve at the count — eight on a desktop, five on a phone — with the search bar and a foot on one line, in every run', () => {
+      for (const run of RUNS) {
+        const scene = sceneOf(run, 'gardens-large-twelve');
+        expect(scene.gardenRows, run.id).toBe(phoneOf(run) ? 5 : 8);
+        expect(scene.gardensSearch, run.id).toBe(true);
+        expect(scene.gardensEmptySearch, run.id).toBe(false);
+        expect(scene.gardensFootWrapped, run.id).toEqual([]);
+      }
+    });
+
+    it('unfolded in place, draws every one of the twelve, the search bar kept', () => {
+      for (const run of RUNS) {
+        const scene = sceneOf(run, 'gardens-large-unfolded');
+        expect(scene.gardenRows, run.id).toBe(12);
+        expect(scene.gardensSearch, run.id).toBe(true);
+        expect(scene.gardensFootWrapped, run.id).toEqual([]);
+      }
+    });
+
+    it('a search for « verger » finds two, the one beyond the cut marked — two beyond it on a phone, where the cut is five', () => {
+      for (const run of RUNS) {
+        const scene = sceneOf(run, 'gardens-large-search');
+        expect(scene.gardenRows, run.id).toBe(2);
+        expect(scene.gardensBeyond, run.id).toBe(phoneOf(run) ? 2 : 1);
+        expect(scene.gardensEmptySearch, run.id).toBe(false);
+      }
+    });
+
+    it('a search without a result draws its state, no table', () => {
+      for (const run of RUNS) {
+        const scene = sceneOf(run, 'gardens-large-search-empty');
+        expect(scene.gardenRows, run.id).toBe(0);
+        expect(scene.gardensEmptySearch, run.id).toBe(true);
+      }
+    });
+
+    it('« Tous » draws the twelve and no search bar', () => {
+      for (const run of RUNS) {
+        const scene = sceneOf(run, 'gardens-large-all');
+        expect(scene.gardenRows, run.id).toBe(12);
+        expect(scene.gardensSearch, run.id).toBe(false);
+      }
+    });
+
+    it('the Medium list keeps its three rows on twelve gardens', () => {
+      for (const run of RUNS) {
+        const scene = sceneOf(run, 'gardens-medium-twelve');
+        expect(scene.gardenRows, run.id).toBe(0);
+        expect(scene.gardenNameWidths, run.id).toHaveLength(3);
+        expect(scene.gardensSearch, run.id).toBe(false);
+      }
+    });
+
+    const panelOf = (run: LayoutRun, name: string): PanelMeasure => {
+      const panel = panelCases.get(run.id)?.get(name);
+      if (!panel) throw new Error(`No measurement for the panel scene ${name} in ${run.id}`);
+      return panel;
+    };
+
+    it.each(PANEL_SCENES.map((scene) => scene.name))('%s: every row of the order, nothing overlapping, nothing cut, nothing spilled, the count labels on one line, in every run', (name) => {
+      const scene = PANEL_SCENES.find((candidate) => candidate.name === name)!;
+      for (const run of RUNS) {
+        const panel = panelOf(run, name);
+        expect(panel.rows, run.id).toBe(scene.gardens);
+        expect(panel.newChips, run.id).toBeGreaterThan(0);
+        expect(defects(panel), run.id).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0 });
+        expect(panel.countWrapped, run.id).toEqual([]);
+      }
+    });
+
+    it.each(PANEL_SCENES.map((scene) => scene.name))('%s: the Popover’s paper fits the screen and SCROLLS inside it, down to the last row, in every run', (name) => {
+      for (const run of RUNS) {
+        const panel = panelOf(run, name);
+        expect(panel.paper.top + panel.paper.h, `${run.id}: the paper past the screen`).toBeLessThanOrEqual(panel.paper.viewportH);
+        expect(panel.paper.scrollH, `${run.id}: the paper does not scroll`).toBeGreaterThan(panel.paper.clientH);
+        expect(panel.lastRowReachable, `${run.id}: the last row out of reach`).toBe(true);
+      }
+    });
   });
 
   describe.each(RUNS)('$id', (run) => {

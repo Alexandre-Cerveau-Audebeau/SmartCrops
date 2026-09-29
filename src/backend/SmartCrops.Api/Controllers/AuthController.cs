@@ -117,6 +117,12 @@ public record AccountExportGarden(
     double? Latitude,
     double? Longitude,
     DateTime? LocationResolvedAt,
+    // SMA-448, lot F5-a (A-N6, A-N5; decided by Alexandre on 28/09): the
+    // planner's last opening of the garden — ONE stamp, no history — and its
+    // place in the user's own order, each null until the first. The user's
+    // data, carried where it is stored; additive, the schema version stays.
+    DateTime? LastOpenedAt,
+    int? SortOrder,
     List<AccountExportPlacement> Placements);
 /// <summary>Top-level export document: <see cref="ExportedAt"/> dates it,
 /// <see cref="SchemaVersion"/> versions it — an undatable, unversionable
@@ -1187,6 +1193,8 @@ public class AuthController(
                 g.Latitude,
                 g.Longitude,
                 g.LocationResolvedAt,
+                g.LastOpenedAt,
+                g.SortOrder,
                 g.Placements
                     .OrderBy(p => p.PlacedAt)
                     .Select(p => new AccountExportPlacement(

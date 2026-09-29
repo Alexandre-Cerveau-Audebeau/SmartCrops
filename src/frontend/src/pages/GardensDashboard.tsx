@@ -23,6 +23,7 @@ import { DASHBOARD_HEADER_SX } from '../components/Dashboard/dashboardHeader';
 import { useCompactActionBar } from '../components/Dashboard/useCompactActionBar';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
+import GardensOptionsPanel from '../components/Dashboard/blocks/GardensOptionsPanel';
 import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
 import { gardenAdvice } from '../components/Dashboard/blocks/gardenAdvice';
 import GardensBlock, {
@@ -50,6 +51,7 @@ import { hasActionBar, isCardsPage, showsEveryCity, sizesFor } from '../constant
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
+import { useGardenOrder } from '../hooks/useGardenOrder';
 import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
 import { createGarden } from '../services/gardenApi';
@@ -163,6 +165,12 @@ export default function GardensDashboard() {
     refetch,
   } = useDashboardData(language);
   const gardens = dashboardData.gardens;
+
+  // SMA-448, lot F5-a (A-N5) — the account's custom order of its gardens: a
+  // second write surface, the garden's own column, owned by the page so it
+  // outlives the gear panel that moves it; a write that landed re-reads the
+  // aggregate, passively, so the places the server holds catch up.
+  const gardenOrder = useGardenOrder(gardens, refetch);
 
   // SMA-336 PR 3b/5: the weather of every place the gardens sit in, in ONE
   // call, read by three surfaces — the Weather widget, the MÉTÉO column of the
@@ -560,6 +568,15 @@ export default function GardensDashboard() {
     }
   };
 
+  // SMA-448, lot F5-a — the widget's door to the creation dialog ENDS the
+  // Edit mode first, as the header's does (A-7 amended 25/09; the constat C1
+  // of PR #291, versed to this lot): the page behind the dialog is back at
+  // rest, and the pending save of the layout runs on under it.
+  const createFromWidget = () => {
+    if (editing) changeEditing(false);
+    setCreateDialogOpen(true);
+  };
+
   const handleDeleted = () => {
     setToastSeq((sequence) => sequence + 1);
     setToastOpen(true);
@@ -651,12 +668,18 @@ export default function GardensDashboard() {
             showHarvestColumn={isBlockVisible('harvest')}
             weather={gardensWeather}
             onLocate={openLocate}
-            onCreateClick={() => setCreateDialogOpen(true)}
+            onCreateClick={createFromWidget}
             onChanged={refetch}
             onDeleted={handleDeleted}
             onExpand={() =>
               patchBlock('gardens', (current) => ({ ...current, size: 'large' }))
             }
+            // SMA-448, lot F5-a — the widget's settings, and the sorts the
+            // formula serves (R8: the panel draws them and the server refuses
+            // by them).
+            options={block.options ?? null}
+            sorts={capabilities?.gardenSorts ?? []}
+            customOrder={gardenOrder.order}
           />
         );
       case 'counters':
@@ -824,6 +847,21 @@ export default function GardensDashboard() {
             onChange={(options) =>
               patchBlock('counters', (current) => ({ ...current, options }))
             }
+          />
+        );
+      case 'gardens':
+        // SMA-448, lot F5-a — the count, the sorts the formula serves and,
+        // for the Expert's custom order, the complete list of the gardens.
+        return (
+          <GardensOptionsPanel
+            options={block.options ?? null}
+            sorts={capabilities?.gardenSorts ?? []}
+            gardens={gardens}
+            ready={!gardensLoading && !gardensError}
+            onChange={(options) =>
+              patchBlock('gardens', (current) => ({ ...current, options }))
+            }
+            order={gardenOrder}
           />
         );
       case 'weather':

@@ -682,7 +682,65 @@
           "modified": "Modified",
           "actions": "Actions"
         },
-        "columnSoon": "Soon"
+        "columnSoon": "Soon",
+        "search": {
+          "placeholder": "Search a garden",
+          "clear": "Clear the search",
+          "clearField": "Clear the field",
+          "results_one": "{{count, number}} garden of {{total, number}} contains “{{query}}”",
+          "results_other": "{{count, number}} gardens of {{total, number}} contain “{{query}}”",
+          "none": "No garden contains “{{query}}”",
+          "scope_one": "The search covers the name of your garden, regardless of case and accents.",
+          "scope_other": "The search covers the names of your {{count, number}} gardens, regardless of case and accents.",
+          "beyond_one": "beyond the one shown",
+          "beyond_other": "beyond the {{count, number}} shown"
+        },
+        "foot": {
+          "more_one": "+ {{count, number}} more garden",
+          "more_other": "+ {{count, number}} more gardens",
+          "less_one": "Show {{count, number}} garden",
+          "less_other": "Show {{count, number}} gardens",
+          "sortedBy": {
+            "lastOpened": "Sorted by last opened",
+            "name": "Sorted alphabetically",
+            "created": "Sorted by creation date",
+            "updated": "Sorted by last modified",
+            "custom": "In your order"
+          }
+        },
+        "options": {
+          "countSection": "Gardens shown",
+          "countGroup": "Number of gardens shown",
+          "countAll": "All",
+          "countHelp": "By default: 8 on a desktop, 5 on a phone. As soon as you choose, your choice holds on every screen.",
+          "countChosen": "Your choice — it holds on every screen.",
+          "countReset": "Back to the default",
+          "sortSection": "Sort by",
+          "sortGroup": "Gardens sort",
+          "sorts": {
+            "lastOpened": { "label": "Last opened", "sense": "the most recent first — a garden never opened ranks by its last change" },
+            "name": { "label": "Alphabetical", "sense": "from A to Z" },
+            "created": { "label": "Creation date", "sense": "the most recent first" },
+            "updated": { "label": "Last modified", "sense": "the most recent first" },
+            "custom": { "label": "Custom order", "sense": "the order you choose" }
+          },
+          "orderSection_one": "Your order — {{count, number}} garden",
+          "orderSection_other": "Your order — {{count, number}} gardens",
+          "orderHelp": "Drag ⠿, or use ▲ ▼. The first {{count, number}} are shown in the widget.",
+          "orderHelpAll": "Drag ⠿, or use ▲ ▼. All are shown in the widget.",
+          "orderBeyond": "Beyond the {{count, number}} shown in the widget",
+          "orderList": "Your gardens, in your order",
+          "orderKept": "Your order is kept: switch to another sort and come back, it is intact.",
+          "orderNew": "A garden you create enters at the head of your order.",
+          "newChip": "New",
+          "orderSaved": "Order saved.",
+          "orderError": "Order not saved — the next change retries.",
+          "notReady": "Your gardens are loading…",
+          "place_ordinal_one": "{{count}}st position",
+          "place_ordinal_two": "{{count}}nd position",
+          "place_ordinal_few": "{{count}}rd position",
+          "place_ordinal_other": "{{count}}th position"
+        }
       },
       "tips": {
         "title": "Tips",

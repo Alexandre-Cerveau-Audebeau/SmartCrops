@@ -58,6 +58,9 @@ const garden = (id: string, name: string): DashboardGardenData => ({
     latitudeBand: 'mid',
   },
   updatedAt: `2026-05-0${(seq++ % 8) + 1}T00:00:00Z`,
+  createdAt: '2026-05-01T00:00:00Z',
+  lastOpenedAt: null,
+  sortOrder: null,
   placements: [],
   placementCount: 0,
   varietyCount: 0,
@@ -81,6 +84,7 @@ function renderBoth(gardens: DashboardGardenData[]) {
             onChanged={() => {}}
             onDeleted={() => {}}
             onExpand={() => {}}
+            sorts={['lastOpened', 'name', 'updated']}
           />
           <StatsBlock
             size="large"

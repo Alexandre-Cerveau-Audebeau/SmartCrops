@@ -5,8 +5,13 @@ import {
   DASHBOARD_LEVELS,
   DASHBOARD_SIZES,
   DEFAULT_DASHBOARD_LEVEL,
+  DEFAULT_GARDEN_SORT,
+  GARDENS_COUNTS,
+  GARDENS_COUNT_ALL,
+  GARDEN_SORTS,
   NON_HIDABLE_BLOCK,
   WEATHER_MODES,
+  isGardenSort,
   isWeatherMode,
 } from '../types/Dashboard';
 
@@ -57,5 +62,26 @@ describe('the dashboard layout reference — the client’s vocabulary against t
     expect(reference.formulas.novice.weather).toBe('gardenCards');
     expect(reference.formulas.gardener.weather).toBe('singleCity');
     expect(reference.formulas.expert.weather).toBe('allCities');
+  });
+
+  // SMA-448, lot F5-a — the Gardens widget's settings (V3-04; A-N3, A-N4,
+  // decided by Alexandre on 28/09): the counts, the sorts and the default
+  // sort are one vocabulary on both sides; which sorts a formula serves is
+  // its row of the file — none for the Novice, three for the Gardener, five
+  // for the Expert.
+  it('knows the reference’s gardens settings — the counts, the sorts, the default sort', () => {
+    expect([...GARDENS_COUNTS]).toEqual(reference.gardensSettings.counts);
+    expect(GARDENS_COUNT_ALL).toBe(reference.gardensSettings.countAll);
+    expect([...GARDEN_SORTS]).toEqual(reference.gardensSettings.sorts);
+    expect(DEFAULT_GARDEN_SORT).toBe(reference.gardensSettings.defaultSort);
+  });
+
+  it('writes garden sorts the client knows for every formula — none, three, five', () => {
+    for (const level of DASHBOARD_LEVELS) {
+      for (const sort of reference.formulas[level].gardenSorts) expect(isGardenSort(sort), `${level}: ${sort}`).toBe(true);
+    }
+    expect(reference.formulas.novice.gardenSorts).toEqual([]);
+    expect(reference.formulas.gardener.gardenSorts).toEqual(['lastOpened', 'name', 'updated']);
+    expect(reference.formulas.expert.gardenSorts).toEqual(['lastOpened', 'name', 'created', 'updated', 'custom']);
   });
 });

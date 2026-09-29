@@ -71,6 +71,9 @@ const GARDEN = {
     latitudeBand: 'mid',
   },
   updatedAt: '2026-05-01T00:00:00Z',
+  createdAt: '2026-05-01T00:00:00Z',
+  lastOpenedAt: null,
+  sortOrder: null,
   placements: [],
   placementCount: 0,
   varietyCount: 0,
@@ -1177,5 +1180,51 @@ describe('matches — a validator that the compiler holds to the type', () => {
     expect(isPoint({ x: 1 })).toBe(false);
     expect(isPoint(null)).toBe(false);
     expect(isPoint([1, 2])).toBe(false);
+  });
+});
+
+// SMA-448, lot F5-a — the sorts of the Gardens widget are a capability the
+// page draws the gear panel by, and the server refuses by (A-N3): served as
+// a list of sorts this build knows, or the capabilities are refused whole —
+// like an unknown widget, never drawn as a guess.
+describe('fetchDashboardPreferences — the garden sorts a formula serves (SMA-448, lot F5-a)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const layoutWith = (capabilities: unknown) => ({
+    schemaVersion: 1,
+    level: 'gardener',
+    isPreset: true,
+    formulaChosen: true,
+    blocks: presetFor('gardener'),
+    updatedAt: null,
+    capabilities,
+  });
+
+  it('reads the served list — three for the Gardener, five for the Expert', async () => {
+    mockFetch({ ...layoutWith(capabilitiesFor('gardener')) });
+    expect((await fetchDashboardPreferences()).capabilities.gardenSorts).toEqual(['lastOpened', 'name', 'updated']);
+
+    mockFetch({ ...layoutWith(capabilitiesFor('expert')), level: 'expert', blocks: presetFor('expert') });
+    expect((await fetchDashboardPreferences()).capabilities.gardenSorts).toEqual([
+      'lastOpened',
+      'name',
+      'created',
+      'updated',
+      'custom',
+    ]);
+  });
+
+  it('refuses capabilities without a list of garden sorts', async () => {
+    const capabilities: Record<string, unknown> = { ...capabilitiesFor('gardener') };
+    delete capabilities.gardenSorts;
+    mockFetch(layoutWith(capabilities));
+
+    await expect(fetchDashboardPreferences()).rejects.toThrow(/garden sorts/);
+  });
+
+  it('refuses a sort this build does not know', async () => {
+    mockFetch(layoutWith({ ...capabilitiesFor('gardener'), gardenSorts: ['lastOpened', 'byMoonPhase'] }));
+
+    await expect(fetchDashboardPreferences()).rejects.toThrow(/garden sort/);
   });
 });

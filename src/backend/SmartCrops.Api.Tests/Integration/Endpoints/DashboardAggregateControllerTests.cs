@@ -49,6 +49,10 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         "cellSize",
         "cellsJson",
         "config",
+        // SMA-448, lot F5-a — the creation instant, for the « Date de
+        // création » sort (A-N3): in the table since AddGardens, carried here
+        // since this lot rather than read off the aggregate's implicit order.
+        "createdAt",
         // The GARDEN's own description — the widget owns the rename dialog, and
         // PUT /api/gardens/{id} replaces name and description together. NOT the
         // plant catalog's free text; the test below tells the two apart.
@@ -56,10 +60,16 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         "height",
         "id",
         "isEdible",
+        // SMA-448, lot F5-a — the planner's last opening (A-N6), null until the
+        // first; the « Derniers ouverts » sort falls back on updatedAt.
+        "lastOpenedAt",
         "name",
         "occupiedCells",
         "placementCount",
         "placements",
+        // SMA-448, lot F5-a — the garden's place in the account's custom order
+        // (A-N5), null until ranked: the client puts it at the head.
+        "sortOrder",
         "updatedAt",
         "varietyCount",
         "width",
@@ -153,6 +163,39 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         Assert.Equal(GardenWhitelist, Keys(root.GetProperty("gardens")[0]));
         Assert.Equal(VarietyWhitelist, Keys(root.GetProperty("varieties")[0]));
         Assert.Equal(TotalsWhitelist, Keys(root.GetProperty("totals")));
+    }
+
+    /// <summary>
+    /// SMA-448, lot F5-a — the three data the Gardens widget sorts by travel
+    /// with each garden (pre-flight F5 § C.1, § C.2): the creation instant,
+    /// the last opening and the place in the custom order — the two latter
+    /// NULL until the first opening and the first ranking, which is how the
+    /// client tells « never » from a value. The client sorts; the server
+    /// transports (D9) and keeps serving the gardens newest first.
+    /// </summary>
+    [Fact]
+    public async Task GetDashboard_CarriesTheCreation_TheLastOpening_AndThePlace_NullUntilTheFirst()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var createdAt = new DateTime(2026, 9, 3, 7, 30, 0, DateTimeKind.Utc);
+        var opened = await SeedGardenAsync(userId, "Ouvert", createdAt: createdAt);
+        var never = await SeedGardenAsync(userId, "Jamais", createdAt: createdAt.AddMinutes(-1));
+        var lastOpenedAt = new DateTime(2026, 9, 20, 18, 45, 0, DateTimeKind.Utc);
+        await SetSettingsAsync(opened, lastOpenedAt, sortOrder: 2);
+        AuthAs(userId);
+
+        using var document = JsonDocument.Parse(await Client.GetStringAsync(Url));
+        var gardens = document.RootElement.GetProperty("gardens").EnumerateArray()
+            .ToDictionary(garden => garden.GetProperty("id").GetGuid(), garden => garden);
+
+        Assert.Equal(createdAt, gardens[opened].GetProperty("createdAt").GetDateTime().ToUniversalTime());
+        Assert.Equal(lastOpenedAt, gardens[opened].GetProperty("lastOpenedAt").GetDateTime().ToUniversalTime());
+        Assert.Equal(2, gardens[opened].GetProperty("sortOrder").GetInt32());
+
+        Assert.Equal(createdAt.AddMinutes(-1), gardens[never].GetProperty("createdAt").GetDateTime().ToUniversalTime());
+        Assert.Equal(JsonValueKind.Null, gardens[never].GetProperty("lastOpenedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, gardens[never].GetProperty("sortOrder").ValueKind);
     }
 
     [Fact]
@@ -962,6 +1005,19 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         db.Gardens.Add(garden);
         await db.SaveChangesAsync();
         return garden.Id;
+    }
+
+    /// <summary>
+    /// Writes the two settings columns of lot F5-a straight to the row — the
+    /// state the two routes of <c>GardensSettingsEndpointsTests</c> produce.
+    /// </summary>
+    private async Task SetSettingsAsync(Guid gardenId, DateTime lastOpenedAt, int sortOrder)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        await db.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Gardens"" SET ""LastOpenedAt"" = {1}, ""SortOrder"" = {2} WHERE ""Id"" = {0};",
+            gardenId, lastOpenedAt, sortOrder);
     }
 
     /// <summary>

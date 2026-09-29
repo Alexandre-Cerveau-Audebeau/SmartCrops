@@ -91,6 +91,33 @@ public class DashboardLayoutReferenceTests
         Assert.Equal(Strings(keyFigures.GetProperty("defaults")), DashboardKeyFigures.Defaults);
     }
 
+    /// <summary>
+    /// SMA-448, lot F5-a — the Gardens widget's settings exist on both sides
+    /// too: the counts, the sorts and the default sort are one vocabulary
+    /// (A-N4, the decision of 23/09), and which sorts a formula serves is its
+    /// row of the file (A-N3) — none, three, five.
+    /// </summary>
+    [Fact]
+    public void GardensSettings_AreTheReferenceOnes()
+    {
+        var settings = Reference.GetProperty("gardensSettings");
+
+        Assert.Equal(settings.GetProperty("counts").EnumerateArray().Select(count => count.GetInt32()), DashboardGardensSettings.Counts);
+        Assert.Equal(DashboardGardensSettings.CountAll, settings.GetProperty("countAll").GetString());
+        Assert.Equal(Strings(settings.GetProperty("sorts")), DashboardGardensSettings.Sorts.All);
+        Assert.Equal(DashboardGardensSettings.DefaultSort, settings.GetProperty("defaultSort").GetString());
+    }
+
+    [Theory]
+    [MemberData(nameof(Levels))]
+    public void GardenSorts_OfAFormula_AreTheReferenceRow_InItsOrder_EveryOneOfTheVocabulary(string level)
+    {
+        var expected = Strings(Reference.GetProperty("formulas").GetProperty(level).GetProperty("gardenSorts"));
+
+        Assert.Equal(expected, FormulaCatalog.For(level).GardenSorts);
+        Assert.All(expected, sort => Assert.True(DashboardGardensSettings.IsKnownSort(sort), sort));
+    }
+
     [Theory]
     [MemberData(nameof(Levels))]
     public void Preset_IsTheReferencePreset_BlockByBlock(string level)

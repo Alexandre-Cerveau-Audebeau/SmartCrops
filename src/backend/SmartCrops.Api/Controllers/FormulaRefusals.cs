@@ -23,6 +23,23 @@ public static class FormulaRefusals
     /// <summary>The garden would grow beyond the formula's largest size.</summary>
     public const string GardenSizeCode = "formula.gardenSize";
 
+    /// <summary>The formula has no custom order of its gardens (SMA-448, lot F5-a — A-N3: the Expert's alone).</summary>
+    public const string GardenOrderCode = "formula.gardenOrder";
+
+    /// <summary>
+    /// <c>{ code: "formula.gardenOrder", formula }</c>: the account's formula
+    /// does not serve the custom order of its gardens, so its write surface
+    /// (<c>PUT /api/gardens/order</c>) is refused — the right is checked here,
+    /// never only in the gear panel that does not draw it (R8).
+    /// </summary>
+    public static ObjectResult GardenOrder(FormulaDefinition formula)
+    {
+        var problem = Problem("The formula has no custom order of its gardens.");
+        problem.Extensions["code"] = GardenOrderCode;
+        problem.Extensions["formula"] = formula.Key;
+        return Forbidden(problem);
+    }
+
     /// <summary>
     /// <c>{ code: "formula.gardenLimit", formula, limit, current }</c>: the
     /// formula, how many gardens it allows, how many the account has — three

@@ -2,6 +2,7 @@ import {
   isDashboardBlockKey,
   isDashboardLevel,
   isDashboardSize,
+  isGardenSort,
   isWeatherMode,
   type DashboardBlock,
   type DashboardBlockKey,
@@ -9,6 +10,7 @@ import {
   type DashboardSizeList,
   type FormulaCapabilities,
   type FormulaRefusalReason,
+  type GardenSort,
   type GardensRefusalReason,
   type SizeRefusalReason,
 } from '../types/Dashboard';
@@ -97,6 +99,15 @@ export function normalizeCapabilities(raw: unknown): FormulaCapabilities {
   // whole, like an unknown widget, never guessed at.
   if (!isString(source.weather) || !isWeatherMode(source.weather)) fail('unknown weather mode');
   if (!isBoolean(source.compactBar)) fail('no compact bar');
+  // SMA-448, lot F5-a — the sorts of the Gardens widget are a capability the
+  // gear panel draws by, and the server refuses by (A-N3): a list of sorts
+  // this build knows, or the capabilities are refused whole, like an unknown
+  // widget — never a panel drawn on a guess.
+  const sortsRaw = source.gardenSorts;
+  if (!Array.isArray(sortsRaw)) fail('no garden sorts');
+  const gardenSorts: GardenSort[] = (sortsRaw as unknown[]).map((sort) =>
+    isString(sort) && isGardenSort(sort) ? sort : fail(`unknown garden sort ${String(sort)}`)
+  );
 
   return {
     key: key as DashboardLevel,
@@ -110,6 +121,7 @@ export function normalizeCapabilities(raw: unknown): FormulaCapabilities {
     preset,
     weather: source.weather,
     compactBar: source.compactBar as boolean,
+    gardenSorts,
   };
 }
 

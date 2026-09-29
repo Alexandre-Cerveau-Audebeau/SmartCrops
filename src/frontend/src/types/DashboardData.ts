@@ -27,6 +27,16 @@ export interface DashboardGardenData {
   /** Orientation, type, hemisphere, latitude band, indoor slots — the exposure inputs. */
   config: GardenConfig;
   updatedAt: string;
+  /**
+   * SMA-448, lot F5-a — the three data the Gardens widget sorts by (A-N3,
+   * A-N5, A-N6): when the garden was created; the planner's last opening,
+   * null until the first (« Derniers ouverts » then falls back on
+   * `updatedAt`); its place in the account's custom order, null until ranked
+   * — read as the HEAD, a garden created after the order was set.
+   */
+  createdAt: string;
+  lastOpenedAt: string | null;
+  sortOrder: number | null;
   placements: PlacementData[];
   placementCount: number;
   varietyCount: number;

@@ -24,6 +24,7 @@ public record GardenSizeDto(int Width, int Height);
 /// <param name="Preset">Its default layout, block by block — no options.</param>
 /// <param name="Weather">How it shows the weather: <c>gardenCards</c>, <c>singleCity</c> or <c>allCities</c>.</param>
 /// <param name="CompactBar">Whether the page draws the compact action bar.</param>
+/// <param name="GardenSorts">The sorts its Gardens widget offers, in the gear panel's order (SMA-448, lot F5-a): none, three, or the five of the Expert.</param>
 public record FormulaDto(
     string Key,
     int? GardenLimit,
@@ -32,7 +33,8 @@ public record FormulaDto(
     Dictionary<string, List<string>> Sizes,
     List<DashboardBlockDto> Preset,
     string Weather,
-    bool CompactBar);
+    bool CompactBar,
+    List<string> GardenSorts);
 
 /// <summary>
 /// SMA-448 — one reason a formula is too small for the caller's gardens: kind
@@ -91,7 +93,8 @@ public static class FormulaDtos
         formula.Widgets.ToDictionary(key => key, key => formula.SizesFor(key).ToList(), StringComparer.Ordinal),
         [.. formula.Preset.Select(block => new DashboardBlockDto(block.Key, block.Size, block.Hidden, null))],
         formula.Weather,
-        formula.CompactBar);
+        formula.CompactBar,
+        [.. formula.GardenSorts]);
 
     /// <summary>A shortfall as served.</summary>
     public static FormulaReasonDto From(FormulaShortfall shortfall) => new(
