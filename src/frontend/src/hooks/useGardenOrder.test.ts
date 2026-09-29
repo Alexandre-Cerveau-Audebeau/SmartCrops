@@ -13,7 +13,8 @@ import { saveGardenOrder } from '../services/gardenSettingsApi';
 
 // SMA-448, lot F5-a — the account's custom order (A-N5): applied at once,
 // written after the pause the layout takes, said in the panel's own region;
-// a failed write keeps the user's order and the next move retries.
+// a failed write keeps the user's order and the next move retries. ONE write
+// on the wire at a time, always the latest list (PR #299, fix round 1, C).
 
 const ranked = (id: string, sortOrder: number | null, createdAt: string) =>
   gardenFixture({ id, name: id, sortOrder, createdAt });
@@ -139,12 +140,18 @@ describe('useGardenOrder', () => {
     expect(saveGardenOrder).toHaveBeenCalledTimes(1);
   });
 
-  it('aborts a write a newer move supersedes, and reports the newer one', async () => {
-    const first = deferred<void>();
-    const signals: AbortSignal[] = [];
-    vi.mocked(saveGardenOrder).mockImplementation((_ids, signal) => {
-      signals.push(signal!);
-      return signals.length === 1 ? first.promise : Promise.resolve();
+  it('writes ONE list at a time, always the latest — the first response held back, the server still ends on the newest order (PR #299, fix round 1, C)', async () => {
+    // A server that applies a list when its response is RELEASED, whatever
+    // the client did with the request meanwhile: an abort stops a fetch, not
+    // a transaction the server already accepted.
+    let server: readonly string[] | null = null;
+    const responses: { ids: readonly string[]; release: () => void }[] = [];
+    vi.mocked(saveGardenOrder).mockImplementation((ids) => {
+      const write = deferred<void>();
+      responses.push({ ids, release: write.resolve });
+      return write.promise.then(() => {
+        server = ids;
+      });
     });
     const { result } = renderHook(() => useGardenOrder(GARDENS));
 
@@ -152,22 +159,114 @@ describe('useGardenOrder', () => {
     await act(async () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
     });
-    expect(signals[0]!.aborted).toBe(false);
+    expect(responses.map((r) => r.ids)).toEqual([['a', 'n', 'b']]);
 
     // A second move while the first write is still out.
     act(() => result.current.move(2, 0));
     await act(async () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
     });
+    const newest = ['b', 'a', 'n'];
+    expect(result.current.ids).toEqual(newest);
 
-    expect(signals[0]!.aborted).toBe(true);
+    // The response of the LAST write made so far is released first, then the
+    // first write's — held until now —, then whatever the hook sent since.
+    const released = new Set<number>();
+    const release = async (index: number) => {
+      if (released.has(index)) return;
+      released.add(index);
+      await act(async () => {
+        responses[index]!.release();
+      });
+      await flushWrite();
+    };
+    await release(responses.length - 1);
+    await release(0);
+    for (let index = 0; index < responses.length; index++) await release(index);
+
+    // One list after the other: the second went out after the first settled.
+    expect(responses.map((r) => r.ids)).toEqual([['a', 'n', 'b'], newest]);
+    expect(server).toEqual(newest);
+    expect(result.current.state).toBe('saved');
+  });
+
+  it('says « saved » for the write that finished LAST only: a list still waiting keeps the state pending, and goes next', async () => {
+    const first = deferred<void>();
+    const second = deferred<void>();
+    vi.mocked(saveGardenOrder).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useGardenOrder(GARDENS, onSaved));
+
+    act(() => result.current.move(0, 1));
+    await act(async () => {
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.move(2, 0));
+    await act(async () => {
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    });
+    // The first write still out: the second list waits its turn.
+    expect(saveGardenOrder).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('pending');
+
+    await act(async () => {
+      first.resolve();
+    });
+    await flushWrite();
+    // The first landed, but a newer list was waiting: not « saved » yet, and the newer list is on the wire now.
+    expect(result.current.state).toBe('pending');
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(saveGardenOrder).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(saveGardenOrder).mock.calls[1]![0]).toEqual(['b', 'a', 'n']);
+
+    await act(async () => {
+      second.resolve();
+    });
     await flushWrite();
     expect(result.current.state).toBe('saved');
-    // The first write's late failure — its abort — is not a failure of the order.
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failure stays said: superseded by a newer list, it lets that list speak — and the last write failing says error', async () => {
+    const first = deferred<void>();
+    const second = deferred<void>();
+    vi.mocked(saveGardenOrder).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useGardenOrder(GARDENS));
+
+    act(() => result.current.move(0, 1));
     await act(async () => {
-      first.reject(new Error('aborted'));
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.move(2, 0));
+    await act(async () => {
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    });
+
+    // The first write fails while a newer list waits: no « error » — the newer list goes, and its outcome speaks.
+    await act(async () => {
+      first.reject(new Error('503'));
       await first.promise.catch(() => undefined);
     });
+    await flushWrite();
+    expect(result.current.state).toBe('pending');
+    expect(saveGardenOrder).toHaveBeenCalledTimes(2);
+
+    // The last write fails, nothing newer waits: said.
+    await act(async () => {
+      second.reject(new Error('503'));
+      await second.promise.catch(() => undefined);
+    });
+    await flushWrite();
+    expect(result.current.state).toBe('error');
+    // The user's order is kept, and the next move retries it whole.
+    expect(result.current.ids).toEqual(['b', 'a', 'n']);
+    vi.mocked(saveGardenOrder).mockResolvedValueOnce(undefined);
+    act(() => result.current.move(2, 1));
+    await act(async () => {
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    });
+    await flushWrite();
     expect(result.current.state).toBe('saved');
+    expect(vi.mocked(saveGardenOrder).mock.calls[2]![0]).toEqual(['b', 'n', 'a']);
   });
 });

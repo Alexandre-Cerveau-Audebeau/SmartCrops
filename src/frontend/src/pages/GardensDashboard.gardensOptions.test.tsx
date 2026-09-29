@@ -285,6 +285,35 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 
+  it('says « Order saved. » once, for the write that finished last — a move made while a write is out waits its turn (PR #299, fix round 1, C)', async () => {
+    let releaseFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    vi.mocked(saveGardenOrder).mockReturnValueOnce(first).mockResolvedValueOnce(undefined);
+    const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+    const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Move “Carré aromatique” down' }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100)));
+    expect(saveGardenOrder).toHaveBeenCalledTimes(1);
+
+    // A second move while the first write is still out: it waits its turn — nothing on the wire beside the first, nothing said.
+    fireEvent.click(within(panel).getByRole('button', { name: 'Move “Carré aromatique” down' }));
+    expect(region.textContent).toBe('“Carré aromatique” moves to 3rd position.');
+    await act(() => new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100)));
+    expect(saveGardenOrder).toHaveBeenCalledTimes(1);
+    expect(region.textContent).toBe('“Carré aromatique” moves to 3rd position.');
+
+    // The first lands: the latest list goes now, and « saved » is said for it, once.
+    await act(async () => {
+      releaseFirst();
+    });
+    await waitFor(() => expect(saveGardenOrder).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(saveGardenOrder).mock.calls[1]![0]).toEqual(['g3', 'g1', 'g4', 'g2', 'g0']);
+    await waitFor(() => expect(region.textContent).toBe('Order saved.'));
+  });
+
   it('a write the server refuses — 403 formula.gardenOrder — keeps the order on screen and says it is not saved', async () => {
     vi.mocked(saveGardenOrder).mockRejectedValue(new Error('403'));
     const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });

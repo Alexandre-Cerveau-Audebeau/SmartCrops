@@ -37,8 +37,16 @@ export interface GardenOrder {
  * promise chain, never synchronously in an effect body; a write that failed —
  * a 403 from a formula without the order, a server before this lot, a network
  * that dropped — does not roll the local order back: the user keeps what they
- * arranged, the region says it, and the next move retries. A write a newer
- * move supersedes is aborted rather than raced.
+ * arranged, the region says it, and the next move retries.
+ *
+ * ONE write on the wire at a time, and always the LATEST list (PR #299, fix
+ * round 1, C): a move made while a write is out waits its turn and goes
+ * after it — never beside it. Aborting the older fetch, as before, stopped a
+ * request, not a transaction the server had already accepted: two writes on
+ * the wire could land in either order, and the older list could overwrite
+ * the newer. Written one after the other, the last list written is the last
+ * one moved; « saved » is said for the write that finished last, and a
+ * failure is said when no newer list is left to retry it.
  *
  * The local order is KEPT for the session once the user moved something: it
  * is the user's order, and reading the server's places back through
@@ -50,7 +58,7 @@ export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?
   const [state, setState] = useState<GardenOrderState>('idle');
   const pendingRef = useRef<string[] | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inFlightRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
   // The latest `onSaved`, for a write that lands after the page re-rendered:
   // written in an effect (a ref is never touched during the render).
   const onSavedRef = useRef(onSaved);
@@ -61,31 +69,36 @@ export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?
   const ids = useMemo(() => customOrderIds(gardens, order), [gardens, order]);
 
   const flush = useCallback(() => {
-    const pending = pendingRef.current;
-    pendingRef.current = null;
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (!pending) return;
-    // A write still on the wire carries an older order: superseded, aborted.
-    inFlightRef.current?.abort();
-    const controller = new AbortController();
-    inFlightRef.current = controller;
-    saveGardenOrder(pending, controller.signal)
-      .then(() => {
-        if (controller.signal.aborted) return;
-        setState('saved');
-        onSavedRef.current?.();
-      })
-      .catch(() => {
-        // Our own abort is a supersession, not a failure.
-        if (controller.signal.aborted) return;
-        setState('error');
-      })
-      .finally(() => {
-        if (inFlightRef.current === controller) inFlightRef.current = null;
-      });
+    // A write still on the wire: the pending list keeps its place and goes
+    // when that write settles (below) — one list on the wire at a time.
+    if (inFlightRef.current) return;
+    const send = (list: string[]): void => {
+      pendingRef.current = null;
+      inFlightRef.current = true;
+      saveGardenOrder(list)
+        .then(() => {
+          // A newer list waits its turn: its own write will speak.
+          if (pendingRef.current !== null) return;
+          setState('saved');
+          onSavedRef.current?.();
+        })
+        .catch(() => {
+          // A newer list waits its turn: it retries, and its outcome speaks.
+          if (pendingRef.current !== null) return;
+          setState('error');
+        })
+        .finally(() => {
+          inFlightRef.current = false;
+          const next = pendingRef.current;
+          if (next !== null) send(next);
+        });
+    };
+    const pending = pendingRef.current;
+    if (pending !== null) send(pending);
   }, []);
 
   const schedule = useCallback(
@@ -108,7 +121,8 @@ export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?
   );
 
   // A move still waiting its turn when the page goes: written now, best
-  // effort — never a keepalive, the layout's teardown keeps that channel.
+  // effort — or after the write on the wire, which sends it when it settles.
+  // Never a keepalive, the layout's teardown keeps that channel.
   useEffect(() => () => flush(), [flush]);
 
   return { ids, order, state, move };

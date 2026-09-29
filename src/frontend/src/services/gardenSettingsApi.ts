@@ -32,7 +32,9 @@ export async function openGarden(id: string): Promise<void> {
  * first to last, WITHOUT a ceiling. 204; 400 for an empty or a repeated id, or
  * an id that is not the caller's; 403 `formula.gardenOrder` for a formula
  * without the custom order (the server refuses what the panel does not draw —
- * R8). `signal` cancels a write a newer one has superseded.
+ * R8). `signal`, when a caller gives one, cancels the request on the wire —
+ * not a transaction the server already accepted: the order hook gives none
+ * and writes one list at a time (PR #299, fix round 1, C).
  */
 export async function saveGardenOrder(ids: readonly string[], signal?: AbortSignal): Promise<void> {
   return fetchJson<void>(`${API_BASE}/gardens/order`, {
