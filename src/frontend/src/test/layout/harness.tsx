@@ -151,6 +151,13 @@ export interface SceneMeasure extends CardMeasure {
     monthNameColumn: number;
     monthAxis: 'long' | 'short' | 'initial' | null;
   } | null;
+  /**
+   * PR #301, fix round 1, R3 — every row of This month in the Full width: the
+   * lanes its painted bars fill, and how far, in px, the vertical centre of
+   * those bars lies from the centre of the row's name — below it when
+   * positive. Empty on every other card.
+   */
+  monthBars: Array<{ plant: string; lanes: number; offset: number }>;
 }
 
 /**
@@ -639,6 +646,24 @@ function cardExtras(card: HTMLElement) {
     ),
     // The Full width of Statistics, Counts and This month (SMA-437, lot V3-08, S6).
     wideWidget: wideWidgetOf(card),
+    // Each row of This month in the Full width: its painted bars as one box,
+    // against its name (PR #301, fix round 1, R3).
+    monthBars: Array.from(card.querySelectorAll('[data-month-wide] [data-month-plant]')).flatMap((row) => {
+      const name = row.querySelector('[data-month-name]');
+      const bars = Array.from(row.querySelectorAll('[data-month-bar]'));
+      if (!name || bars.length === 0) return [];
+      const n = name.getBoundingClientRect();
+      const boxes = bars.map((bar) => bar.getBoundingClientRect());
+      const top = Math.min(...boxes.map((box) => box.top));
+      const bottom = Math.max(...boxes.map((box) => box.bottom));
+      return [
+        {
+          plant: row.getAttribute('data-month-plant') ?? '',
+          lanes: new Set(bars.map((bar) => bar.getAttribute('data-month-bar'))).size,
+          offset: Math.round(((top + bottom) / 2 - (n.top + n.bottom) / 2) * 10) / 10,
+        },
+      ];
+    }),
     keyFigureTiles: Array.from(card.querySelectorAll('[data-key-figure]')).map((tile) => {
       const value = tile.querySelector('[data-key-figure-value]');
       const box = tile.getBoundingClientRect();

@@ -253,7 +253,8 @@ const LANE_TOKEN: Record<CalendarLane, keyof DashboardTokens> = {
  * full from 1 200 px, 160 px and the short months from 900 (V3-08, § 3). Ten
  * rows at rest, then the same button unfolds the rest in place: the card
  * grows, nothing scrolls inside it (A-N10), and the axis, with no scrolling
- * zone to stick to, heads the grid.
+ * zone to stick to, heads the grid. Since PR #301's fix round 1 (R3), each
+ * row's bars stand centred on its name — the lanes it has, and those only.
  */
 export default function MonthBlock({
   size,
@@ -343,6 +344,7 @@ export default function MonthBlock({
   const lane = (entry: VarietyCalendar, key: CalendarLane) => (
     <Box
       key={key}
+      data-month-lane={key}
       sx={{
         // `.lanes` — twelve equal columns that may shrink to nothing.
         display: 'grid',
@@ -862,7 +864,17 @@ export default function MonthBlock({
                       them. Round 1, F1: it carries the ONE `aria-hidden` of the
                       row. Everything under it is decoration — a colour is not a
                       fact anyone can hear — and the row's sentence is spoken by
-                      the `cell` above, outside this container. */}
+                      the `cell` above, outside this container.
+
+                      PR #301, fix round 1, R3 — the Full width stacks only the
+                      lanes the variety HAS, stretched to the row's height and
+                      centred in it, so its bars stand on its name, one bar or
+                      four (Alexandre, 29/09: « Je suis ok avec ton point 3 »;
+                      P-S4-2 reversed). The four fixed slots of the Large put a
+                      lone pruning on the top one, nearer the name above than
+                      its own; the colour names the lane, as the legend says.
+                      The tinted column takes the row's whole height with it.
+                      The Large keeps its four lanes in their places. */}
                   <Box
                     aria-hidden
                     data-month-lanes
@@ -872,6 +884,7 @@ export default function MonthBlock({
                       display: 'flex',
                       flexDirection: 'column',
                       rowGap: '3px',
+                      ...(wide ? { alignSelf: 'stretch', justifyContent: 'center' } : {}),
                     }}
                   >
                     {/* `.nowcol` — ONE column behind the four lanes, not four marks. */}
@@ -888,7 +901,7 @@ export default function MonthBlock({
                         zIndex: 0,
                       }}
                     />
-                    {CALENDAR_LANES.map((key) => lane(entry, key))}
+                    {CALENDAR_LANES.filter((key) => !wide || entry.lanes[key].length > 0).map((key) => lane(entry, key))}
                   </Box>
                 </Box>
               ))}

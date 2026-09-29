@@ -639,6 +639,36 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     });
   });
 
+  // PR #301, fix round 1, R3 — THE BARS OF THIS MONTH IN THE FULL WIDTH,
+  // CENTRED IN THEIR ROW (Alexandre, 29/09: « Je suis ok avec ton point 3 »;
+  // P-S4-2 reversed). A plant with one bar saw it on its lane's own slot — a
+  // pruning on the top one —, nearer the name above than its own. Each row's
+  // bars now stand centred on its name, one bar or four, at every width of the
+  // Full width; the Large keeps its four lanes in their places.
+  describe('This month in the Full width — each row’s bars centred on its name (PR #301, fix round 1, R3)', () => {
+    const MONTH_WIDE = LAYOUT_SCENES.filter((scene) => scene.key === 'month' && scene.size === 'wide').map((scene) => scene.name);
+    /** A few pixels: the half pixels two centred boxes may round to — never the 10 px of a lane. */
+    const CENTRED_WITHIN_PX = 2;
+
+    it('measures one-bar rows and a four-bar row in every run — never a pass on nothing', () => {
+      for (const run of RUNS) {
+        const rows = MONTH_WIDE.flatMap((name) => sceneOf(run, name).monthBars);
+        expect(rows.filter((row) => row.lanes === 1).length, run.id).toBeGreaterThan(0);
+        expect(rows.filter((row) => row.lanes === 4).length, run.id).toBeGreaterThan(0);
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: every row’s bars are centred on its name, within 2 px — one bar or four', (id) => {
+      const run = runOf(id);
+      const faults = MONTH_WIDE.flatMap((name) =>
+        sceneOf(run, name)
+          .monthBars.filter((row) => Math.abs(row.offset) > CENTRED_WITHIN_PX)
+          .map((row) => `${name}: ${row.plant}, ${row.lanes} lane(s), ${row.offset} px from its name’s centre`)
+      );
+      expect(faults).toEqual([]);
+    });
+  });
+
   // SMA-437, lot V3-08, step S5 (A-15) — THE EXPERT PRESET WITHOUT A HOLE: in
   // every run, no cell of the preset's grid is left empty — between two cards
   // or after the last —, read in the engine, cell by cell (`gridCellsOf`). And

@@ -1075,3 +1075,54 @@ describe('MonthBlock in the Full width (SMA-437, lot V3-08, S4 — A-14)', () =>
     expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(16);
   });
 });
+
+// PR #301, fix round 1, R3 — THE BARS OF A ROW CENTRED ON ITS NAME, in the Full
+// width (Alexandre, 29/09: « Je suis ok avec ton point 3 »; P-S4-2 reversed): a
+// row's stack holds the lanes its variety HAS, stretched to the row's height
+// and centred in it, where the Large keeps its four lanes in their places. The
+// declarations are read here; the pixels are the layout harness's.
+describe('MonthBlock in the Full width — each row’s bars centred on its name (PR #301, fix round 1, R3)', () => {
+  /** The lane grids of a row: every child of its lanes container but the tinted column. */
+  const laneGrids = (card: HTMLElement, plant: string) =>
+    [...card.querySelector(`[data-month-plant="${plant}"] [data-month-lanes]`)!.children].filter(
+      (child) => !child.hasAttribute('data-month-now')
+    );
+
+  it('stacks only the lanes a variety has — the thyme’s pruning, the lettuce’s sowing and harvest —, stretched to the row and centred in it', () => {
+    const { card } = renderBlock({ size: 'wide' });
+    const lanes = card.querySelector('[data-month-plant="thyme"] [data-month-lanes]')!;
+
+    expect(laneGrids(card, 'thyme')).toHaveLength(1);
+    expect(laneGrids(card, 'thyme').map((grid) => grid.getAttribute('data-month-lane'))).toEqual(['prune']);
+    expect(laneGrids(card, 'lettuce').map((grid) => grid.getAttribute('data-month-lane'))).toEqual(['sow', 'harvest']);
+    expect(ruleText(lanes)).toContain('align-self:stretch');
+    expect(ruleText(lanes)).toContain('justify-content:center');
+    // The same bar as before, and the one tinted column behind the stack.
+    expect(lanes.querySelectorAll('[data-month-bar="prune"]')).toHaveLength(1);
+    expect(lanes.querySelectorAll('[data-month-now]')).toHaveLength(1);
+  });
+
+  it('…and a variety with the four lanes keeps the four, in the legend’s order', () => {
+    const fourLanes = varietyFixture({
+      plantId: 'four',
+      commonName: 'Tomato',
+      gardenIds: ['g1'],
+      pruningMonths: 'June,July,August',
+      sowingPeriod: 'march-may',
+      harvestPeriod: 'july-october',
+      floweringSeason: 'Summer',
+    });
+    const { card } = renderBlock({ size: 'wide', varieties: [fourLanes] });
+
+    expect(laneGrids(card, 'four').map((grid) => grid.getAttribute('data-month-lane'))).toEqual(['prune', 'sow', 'flower', 'harvest']);
+  });
+
+  it('leaves the Large as it was: the four lanes of every row in their places, the stack neither stretched nor centred', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const lanes = card.querySelector('[data-month-plant="thyme"] [data-month-lanes]')!;
+
+    expect(laneGrids(card, 'thyme')).toHaveLength(4);
+    expect(ruleText(lanes)).not.toContain('align-self:stretch');
+    expect(ruleText(lanes)).not.toContain('justify-content:center');
+  });
+});

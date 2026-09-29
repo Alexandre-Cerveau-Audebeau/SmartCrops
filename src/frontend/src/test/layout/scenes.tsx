@@ -75,7 +75,12 @@ const variety = (
 ) => varietyFixture({ plantId, commonName, scientificName, ...over });
 
 export const varieties: DashboardVarietyData[] = [
-  variety('tomato', 'tomate', 'Solanum lycopersicum', { count: 7, cells: 7, gardenIds: ['g1', 'g3'], wateringNeedLevel: 'High', minToleratedTempC: 5, sunlightHoursMin: 8, sunlightHoursMax: 12, harvestPeriod: NOW }),
+  // PR #301, fix round 1, R3 — the one variety of the scenes with its FOUR
+  // lanes, so This month draws a four-bar row as well as one-bar ones: the
+  // pruning, sowing and flowering of the repository's own four-lane tomato
+  // (`plantCalendar.test.ts`, `lanesOf`), none of them in the harness's
+  // September; its harvest stays « this month ».
+  variety('tomato', 'tomate', 'Solanum lycopersicum', { count: 7, cells: 7, gardenIds: ['g1', 'g3'], wateringNeedLevel: 'High', minToleratedTempC: 5, sunlightHoursMin: 8, sunlightHoursMax: 12, harvestPeriod: NOW, pruningMonths: 'June,July,August', sowingPeriod: 'march-may', floweringSeason: 'Summer' }),
   variety('basil', 'basilic', 'Ocimum basilicum', { count: 3, cells: 3, gardenIds: ['g1'], wateringNeedLevel: 'Frequent', minToleratedTempC: 8, sunlightHoursMin: 6, sunlightHoursMax: 8, sowingPeriod: OPPOSITE }),
   variety('hydrangea', 'hortensia', 'Hydrangea macrophylla', { count: 1, cells: 1, gardenIds: ['g1'], plantType: 'Ornamental', isEdible: false, wateringNeedLevel: 'Average', minToleratedTempC: null, sunlightHoursMin: 4, sunlightHoursMax: 6, pruningMonths: NOW }),
   variety('thyme', 'thym', 'Thymus vulgaris', { count: 4, cells: 4, gardenIds: ['g1'], wateringNeedLevel: 'Low', minToleratedTempC: null, sunlightHoursMin: 6, sunlightHoursMax: 8, pruningMonths: NOW }),
