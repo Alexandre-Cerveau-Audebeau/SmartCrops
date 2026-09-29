@@ -43,6 +43,8 @@
  * measured at 3-4 px on `5282852`) — counted apart, as contacts.
  */
 
+import { emptyCells, type GridCell, type GridPlacement } from '../../utils/dashboardLayoutGrid';
+
 export interface Box {
   left: number;
   top: number;
@@ -747,4 +749,83 @@ export function measureControls(card: HTMLElement): ControlMeasure[] {
     });
   }
   return controls;
+}
+
+/** The cells of a laid-out dashboard grid, read in the engine ({@link gridCellsOf}). */
+export interface GridCellsMeasure {
+  /** The column tracks the engine resolved. */
+  columns: number;
+  /** Each card's cells — `col,row cols×rows`, zero-based — by its `data-widget` key. */
+  placed: Record<string, string>;
+  /** The empty cells between two cards, each `col,row @x,y w×h` in px from the grid's corner. */
+  between: string[];
+  /** The empty cells after the last card, in the same form. */
+  trailing: string[];
+}
+
+/**
+ * SMA-437, lot V3-08, step S5 — THE EMPTY CELLS of a dashboard grid as the
+ * engine laid it out: each card's grid item placed on the tracks the engine
+ * RESOLVED (`grid-template-columns` and `grid-template-rows` in px, with the
+ * gutters), then sorted by the model's own rule (`emptyCells`,
+ * `dashboardLayoutGrid.ts`) — `between` two cards, where the sparse cursor
+ * walked past for good, or `trailing`, after the last. The model says where
+ * the cards should go; this reads where they went, so a hole on the page is
+ * seen whatever the model believes.
+ */
+export function gridCellsOf(cards: readonly HTMLElement[]): GridCellsMeasure {
+  // card → its wrapper → the grid item → the grid (`measureGrid` walks the same way).
+  const items = cards.map((card) => card.parentElement!.parentElement!);
+  const grid = items[0]?.parentElement;
+  if (!grid) return { columns: 0, placed: {}, between: [], trailing: [] };
+  const style = getComputedStyle(grid);
+  const tracks = (value: string) =>
+    value
+      .split(/\s+/)
+      .map(parseFloat)
+      .filter((size) => Number.isFinite(size));
+  const columns = tracks(style.gridTemplateColumns);
+  const rows = tracks(style.gridTemplateRows);
+  const startsOf = (sizes: number[], gap: number) => {
+    const starts: number[] = [];
+    let at = 0;
+    for (const size of sizes) {
+      starts.push(at);
+      at += size + gap;
+    }
+    return starts;
+  };
+  const columnStarts = startsOf(columns, parseFloat(style.columnGap) || 0);
+  const rowStarts = startsOf(rows, parseFloat(style.rowGap) || 0);
+  const frame = grid.getBoundingClientRect();
+  const originX = frame.left + (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.paddingLeft) || 0);
+  const originY = frame.top + (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.paddingTop) || 0);
+  /** The track that starts — or, with `end`, ends — within a pixel of `at`; -1 when none does. */
+  const trackAt = (starts: number[], sizes: number[], at: number, end: boolean) =>
+    starts.findIndex((start, index) => Math.abs((end ? start + sizes[index]! : start) - at) < 1);
+
+  const placements = new Map<string, GridPlacement>();
+  const placed: Record<string, string> = {};
+  items.forEach((item, index) => {
+    const key = cards[index]!.getAttribute('data-widget') ?? `#${index}`;
+    const box = item.getBoundingClientRect();
+    const x = box.left - originX;
+    const y = box.top - originY;
+    const col = trackAt(columnStarts, columns, x, false);
+    const row = trackAt(rowStarts, rows, y, false);
+    const lastCol = trackAt(columnStarts, columns, x + box.width, true);
+    const lastRow = trackAt(rowStarts, rows, y + box.height, true);
+    if (col < 0 || row < 0 || lastCol < col || lastRow < row) {
+      throw new Error(
+        `The card ${key} (${round(x)}, ${round(y)}, ${round(box.width)} × ${round(box.height)}) lies on no track of its grid.`
+      );
+    }
+    placements.set(key, { col, row, cols: lastCol - col + 1, rows: lastRow - row + 1 });
+    placed[key] = `${col},${row} ${lastCol - col + 1}×${lastRow - row + 1}`;
+  });
+
+  const describe = (cell: GridCell) =>
+    `${cell.col},${cell.row} @${round(columnStarts[cell.col]!)},${round(rowStarts[cell.row]!)} ${round(columns[cell.col]!)}×${round(rows[cell.row]!)}`;
+  const empty = emptyCells(placements, columns.length);
+  return { columns: columns.length, placed, between: empty.between.map(describe), trailing: empty.trailing.map(describe) };
 }

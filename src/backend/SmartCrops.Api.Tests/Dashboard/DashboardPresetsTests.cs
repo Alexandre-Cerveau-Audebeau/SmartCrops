@@ -92,25 +92,27 @@ public class DashboardPresetsTests
 
     /// <summary>
     /// « en tête du preset Expert » (contract § 3.3 [A], § 4.5): the band first,
-    /// in the Full width — its one size — then the eight widgets, in Large but
-    /// the Gardens: in the Full width since SMA-448, lot F5-b (PR #300, fix
-    /// round 1, P1 — Alexandre, 29/09: « personnellement je préfère que de
-    /// base, en Expert, le widget Jardins soit en large comme ça »). The seven
-    /// others keep their Large; their own default is lot V3-08's to decide.
+    /// in the Full width — its one size. Then the Gardens in the Full width
+    /// (SMA-448, lot F5-b — PR #300, fix round 1, P1, Alexandre, 29/09:
+    /// « personnellement je préfère que de base, en Expert, le widget Jardins
+    /// soit en large comme ça »), and, since SMA-437, lot V3-08, step S5 (A-15),
+    /// the Weather after them in the Full width and the six others in Large,
+    /// two by two: the preset leaves no cell empty at one, two or four columns,
+    /// where PR #300's Weather in Large before the Gardens left 566 × 566 px
+    /// empty right of it. Literals on purpose: this is the decision, written out.
     /// </summary>
     [Fact]
-    public void For_Expert_PutsTheKeyFiguresBandFirst_InFullWidth_ThenGardensInFullWidth_AndTheSevenOthersInLarge()
+    public void For_Expert_PutsTheBandFirst_ThenTheGardensAndTheWeatherInTheFullWidth_AndTheSixOthersInLarge()
     {
         var expert = DashboardPresets.For(DashboardLayout.Levels.Expert);
 
-        Assert.Equal(new DashboardPresetBlock("keyfigures", "wide", false), expert[0]);
-        Assert.Equal(
-            DashboardLayout.Blocks.All.Where(key => key != "keyfigures"),
-            expert.Skip(1).Select(b => b.Key));
-        Assert.Equal(new DashboardPresetBlock("gardens", "wide", false), expert.Single(b => b.Key == "gardens"));
-        Assert.All(
-            expert.Skip(1).Where(b => b.Key != "gardens"),
-            block => Assert.Equal(new DashboardPresetBlock(block.Key, "large", false), block));
+        (string Key, string Size, bool Hidden)[] expected =
+        [
+            ("keyfigures", "wide", false), ("gardens", "wide", false), ("weather", "wide", false),
+            ("tips", "large", false), ("month", "large", false), ("todo", "large", false),
+            ("counters", "large", false), ("stats", "large", false), ("harvest", "large", false),
+        ];
+        Assert.Equal(expected, expert.Select(b => (b.Key, b.Size, b.Hidden)));
     }
 
     [Theory]

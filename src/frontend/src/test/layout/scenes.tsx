@@ -358,8 +358,9 @@ const presetGrid = (level: DashboardLevel) =>
 
 /**
  * The Gardener preset (Weather M, Gardens L, four Mediums) and the Expert one
- * (the band, then the eight widgets in Large — the Gardens in the Full width
- * since PR #300, fix round 1, P1), at rest and in Edit mode.
+ * (the band, then the Gardens and the Weather in the Full width, the six
+ * others in Large — SMA-437, lot V3-08, S5: the preset without a hole), at
+ * rest and in Edit mode.
  */
 export const GRID_SCENES: GridScene[] = [
   ...(['gardener', 'expert'] as const).flatMap((level) => [
@@ -401,6 +402,28 @@ export const GRID_SCENES: GridScene[] = [
       { key: 'counters', size: 'medium' },
     ] satisfies GridScene['blocks'],
   })),
+  // SMA-437, lot V3-08, step S5 — THE PROBE of the hole measure (the rule of
+  // SMA-446: an instrument never shown a defect proves nothing): the Expert
+  // preset as PR #300 left it, written out — the Weather in Large, then the
+  // Gardens in the Full width, which cannot share the Weather's two rows. At
+  // four columns it leaves 566 × 566 px empty right of the Weather (SMA-448,
+  // 29/09); at two and one, nothing. At rest.
+  {
+    name: 'grid-expert-hole-probe',
+    level: 'expert',
+    editing: false,
+    blocks: [
+      { key: 'keyfigures', size: 'wide' },
+      { key: 'weather', size: 'large' },
+      { key: 'gardens', size: 'wide' },
+      { key: 'tips', size: 'large' },
+      { key: 'month', size: 'large' },
+      { key: 'todo', size: 'large' },
+      { key: 'counters', size: 'large' },
+      { key: 'stats', size: 'large' },
+      { key: 'harvest', size: 'large' },
+    ] satisfies GridScene['blocks'],
+  },
 ];
 
 /**

@@ -17,7 +17,8 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// Ce mois-ci Petit », « Jardinier : Météo Moyen, Jardins Grand, Conseils Moyen,
 /// Ce mois-ci Moyen, À faire Moyen, Compteurs Moyen », « Expert : les huit
 /// widgets en Grand » — the Expert's Gardens in the Full width since SMA-448,
-/// lot F5-b (see <see cref="ExpertPreset"/>). Since SMA-448 (lot F1) they are
+/// lot F5-b, and its Weather since SMA-437, lot V3-08, which leaves no hole
+/// (see <see cref="ExpertPreset"/>). Since SMA-448 (lot F1) they are
 /// also the WIDGETS each formula has, and <see cref="FormulaCatalog"/> serves
 /// them.
 ///
@@ -79,14 +80,23 @@ public static class DashboardPresets
     /// round 1, P1 — Alexandre, 29/09: « personnellement je préfère que de base,
     /// en Expert, le widget Jardins soit en large comme ça »). What an account
     /// arriving at the Expert formula without a layout of its own reads, and
-    /// what « Réinitialiser » brings back; a stored layout does not change. The
-    /// seven others keep their Large until lot V3-08 decides theirs.
+    /// what « Réinitialiser » brings back; a stored layout does not change.
+    ///
+    /// <para>SMA-437, lot V3-08, step S5 (A-15) — WITHOUT A HOLE. PR #300's
+    /// Weather in Large, placed before the Gardens, held two rows the Gardens
+    /// could not share: at four columns, 566 × 566 px stayed empty right of the
+    /// Weather (SMA-448, 29/09). The Gardens now follow the band, then the
+    /// Weather in the Full width — every city side by side, the Expert's —, and
+    /// the six others in Large, two by two: no cell empty at one, two or four
+    /// columns (`dashboardLayoutGrid.ts`, `emptyCells`). Which other widget
+    /// takes the Full width by default stays Alexandre's to decide at his
+    /// visual pass, one line per widget here.</para>
     /// </summary>
     private static readonly IReadOnlyList<DashboardPresetBlock> ExpertPreset =
     [
         new(DashboardLayout.Blocks.KeyFigures, W, false),
-        new(DashboardLayout.Blocks.Weather, L, false),
         new(DashboardLayout.Blocks.Gardens, W, false),
+        new(DashboardLayout.Blocks.Weather, W, false),
         new(DashboardLayout.Blocks.Tips, L, false),
         new(DashboardLayout.Blocks.Month, L, false),
         new(DashboardLayout.Blocks.Todo, L, false),

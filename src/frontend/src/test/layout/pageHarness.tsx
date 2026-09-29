@@ -32,7 +32,7 @@ import {
   type NoviceScene,
   type WeatherCityScene,
 } from './scenes';
-import { measureCard, wrappedTexts, type CardMeasure } from './measure';
+import { gridCellsOf, measureCard, wrappedTexts, type CardMeasure, type GridCellsMeasure } from './measure';
 
 /**
  * SMA-437, lot V39, PR B, step B9 — the BROWSER side of the page launcher
@@ -373,6 +373,18 @@ export interface GardensMeasure extends CardMeasure {
   actionsOutside: number;
   /** The weather warning under the grid, drawn or not (V1). */
   warning: boolean;
+}
+
+/**
+ * SMA-437, lot V3-08, step S5 — the dashboard grid as the app lays it out at
+ * the formula's preset: the cards in the order they are drawn, each card's
+ * cells, and the empty ones (`gridCellsOf`) — between two cards, a hole;
+ * after the last, the page's open end.
+ */
+export interface PageGridMeasure extends GridCellsMeasure {
+  viewport: number;
+  /** The widgets of the grid, in the order they are drawn. */
+  keys: string[];
 }
 
 /**
@@ -832,6 +844,16 @@ const page = {
         )
       ),
       warning: document.querySelector('[data-weather-disclaimer]') !== null,
+    };
+  },
+
+  /** SMA-437, lot V3-08, step S5 — the grid's cards, their cells and the empty ones, as laid out. */
+  measureGrid(): PageGridMeasure {
+    const cards = gridCards();
+    return {
+      ...gridCellsOf(cards),
+      viewport: innerWidth,
+      keys: cards.map((card) => card.getAttribute('data-widget') ?? ''),
     };
   },
 

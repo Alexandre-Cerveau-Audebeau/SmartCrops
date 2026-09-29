@@ -961,12 +961,13 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// soit en large comme ça »): the preset an Expert who never saved a layout
     /// reads puts the Gardens widget in the Full width — and the preset the
     /// capabilities carry, which « Réinitialiser » brings back, is the same.
-    /// Every other widget stays where it was: the band in the Full width, the
-    /// seven others in Large (their own default is lot V3-08's). Literals on
-    /// purpose: this is the decision, not a copy of the constant.
+    /// SMA-437, lot V3-08, step S5 (A-15): WITHOUT A HOLE — the band, the
+    /// Gardens and the Weather in the Full width, then the six others in Large,
+    /// two by two. Literals on purpose: this is the decision, not a copy of the
+    /// constant.
     /// </summary>
     [Fact]
-    public async Task GetPreferences_AnExpertWhoNeverSavedALayout_ReadsGardensInTheFullWidth_AsTheResetDoes()
+    public async Task GetPreferences_AnExpertWhoNeverSavedALayout_ReadsThePresetWithoutAHole_AsTheResetDoes()
     {
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
@@ -978,11 +979,43 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.True(body.IsPreset);
         (string Key, string Size)[] expected =
         [
-            ("keyfigures", "wide"), ("weather", "large"), ("gardens", "wide"), ("tips", "large"), ("month", "large"),
+            ("keyfigures", "wide"), ("gardens", "wide"), ("weather", "wide"), ("tips", "large"), ("month", "large"),
             ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large"),
         ];
         Assert.Equal(expected, body.Blocks.Select(b => (b.Key, b.Size)));
         Assert.Equal(expected, body.Capabilities.Preset.Select(b => (b.Key, b.Size)));
+    }
+
+    /// <summary>
+    /// SMA-437, lot V3-08, step S5 — and a layout an Expert STORED does not
+    /// change, as in lot F5-b: stored as PR #300's preset — the Weather in
+    /// Large, before the Gardens —, it reads back block for block, in its own
+    /// order and at its own sizes, although the preset moved. Literals on
+    /// purpose: the previous preset, written out.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_AnExpertLayoutStoredAsThePreviousPreset_ReadsBackBlockForBlock_ThePresetMovedWithoutIt()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+        (string Key, string Size)[] previous =
+        [
+            ("keyfigures", "wide"), ("weather", "large"), ("gardens", "wide"), ("tips", "large"), ("month", "large"),
+            ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large"),
+        ];
+        var stored = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. previous.Select(b => new SaveDashboardBlockRequest(b.Key, b.Size, false, null))]);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(Url, stored)).StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.False(body.IsPreset);
+        Assert.Equal(previous, body.Blocks.Select(b => (b.Key, b.Size)));
+        Assert.All(body.Blocks, block => Assert.False(block.Hidden));
+        Assert.NotEqual(previous, body.Capabilities.Preset.Select(b => (b.Key, b.Size)));
     }
 
     /// <summary>

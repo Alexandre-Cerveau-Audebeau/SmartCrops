@@ -366,14 +366,15 @@ describe('the MÉTÉO column of the Full width follows the page’s weather (SMA
 // arriving at the Expert formula with no layout of its own, and « Réinitialiser
 // au niveau Expert » — both read the preset the server serves (its catalogue,
 // `capabilities.preset`), whose contract is the reference file these fixtures
-// read. A layout the account STORED does not change. Every other widget keeps
-// its size: theirs is lot V3-08's to decide.
+// read. A layout the account STORED does not change. SMA-437, lot V3-08, step
+// S5 (A-15): the preset without a hole — the Weather after the Gardens, in the
+// Full width too, and the six others in Large, two by two.
 
 /** The Expert preset, widget by widget — the decision, written out. */
 const EXPERT_PRESET = [
   'keyfigures wide',
-  'weather large',
   'gardens wide',
+  'weather wide',
   'tips large',
   'month large',
   'todo large',

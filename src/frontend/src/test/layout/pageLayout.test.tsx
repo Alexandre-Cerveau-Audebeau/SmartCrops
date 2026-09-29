@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
+import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageGridMeasure, PageMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
 import { CHOICE_SCENES, GARDENS_LIST_KINDS, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, gardensSceneData, weatherCitySceneData, type GardensListKind, type WeatherCityScene } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
-import { capabilitiesFor } from '../fixtures/formulas';
+import { capabilitiesFor, presetFor } from '../fixtures/formulas';
 import { sizesFor } from '../../constants/dashboardCapabilities';
 import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 
@@ -1421,7 +1421,15 @@ async function runWeatherView(view: PageView): Promise<Map<string, WeatherMeasur
 /** The Gardens widget in the Full width, by viewport then by case — `<kind>/rest`, and `<kind>/unfolded` where the foot offered it (SMA-448, lot F5-b, W4). */
 const gardensCases = new Map<string, Map<string, GardensMeasure>>();
 
-/** Every Gardens case of one viewport, in one Chrome: each list at rest, then unfolded where « + N autres jardins » stands. */
+/** The page at the Expert preset, as served — its grid's cells, by viewport (SMA-437, lot V3-08, S5). */
+const presetGrids = new Map<string, PageGridMeasure>();
+
+/**
+ * Every Gardens case of one viewport, in one Chrome: each list at rest, then
+ * unfolded where « + N autres jardins » stands — and, in the same Chrome, the
+ * page at the Expert preset as served, its grid read cell by cell (SMA-437,
+ * lot V3-08, S5).
+ */
 async function runGardensView(view: PageView): Promise<Map<string, GardensMeasure>> {
   const session = await openPage(CHROME!, weatherOutDir, { label: `gardens-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
   try {
@@ -1433,6 +1441,8 @@ async function runGardensView(view: PageView): Promise<Map<string, GardensMeasur
         byCase.set(`${kind}/unfolded`, await session.evaluate<GardensMeasure>('window.__page.measureGardens()'));
       }
     }
+    await session.navigate('level=expert&theme=light&lang=fr');
+    presetGrids.set(view.id, await session.evaluate<PageGridMeasure>('window.__page.measureGrid()'));
     return byCase;
   } finally {
     await session.close();
@@ -1737,6 +1747,24 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
           expect(measured.warning, `${view.id} ${id}`).toBe(true);
         }
       }
+    });
+  });
+
+  // SMA-437, lot V3-08, step S5 (A-15) — THE PAGE AT THE EXPERT PRESET, as the
+  // app mounts it: no cell of its grid left empty, between two cards or after
+  // the last, at the five widths. PR #300's preset left 566 × 566 px empty
+  // right of the Weather at 1 280 px. Measured in the Gardens' Chrome, in this
+  // group's own hook — no bound of its own.
+  describe('the page at the Expert preset, without a hole (SMA-437, lot V3-08, S5 — A-15)', () => {
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the preset as served — its nine widgets in its order — leaves no cell empty, none between two cards, none after the last', (viewId) => {
+      const measured = presetGrids.get(viewId);
+      if (!measured) throw new Error(`No measurement of the page at the Expert preset at ${viewId}`);
+      expect(measured.viewport).toBe(WEATHER_VIEWS.find((view) => view.id === viewId)!.width);
+      expect(measured.keys).toEqual(presetFor('expert').filter((block) => !block.hidden).map((block) => block.key));
+      expect({ between: measured.between, trailing: measured.trailing }, JSON.stringify(measured.placed)).toEqual({
+        between: [],
+        trailing: [],
+      });
     });
   });
 });

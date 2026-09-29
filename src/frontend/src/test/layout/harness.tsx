@@ -35,7 +35,7 @@ import { ACTIONS_PROBES, PROBE_SCENES, probeWidget, type ProbeScene } from './pr
 import { measureFocus, type FocusMeasure } from './focusProbe';
 import { capabilitiesFor } from '../fixtures/formulas';
 import { encodeResults } from './encode';
-import { RESULTS_ID, measureCard, measureControls, wrappedTexts, type CardMeasure, type ControlMeasure } from './measure';
+import { RESULTS_ID, gridCellsOf, measureCard, measureControls, wrappedTexts, type CardMeasure, type ControlMeasure, type GridCellsMeasure } from './measure';
 
 /**
  * SMA-336 mobile lot, step 7 (pre-flight D7) — the BROWSER side of the layout
@@ -183,6 +183,12 @@ export interface GridMeasure {
   cardOverlaps: string[];
   /** In Edit mode, each card's controls; empty at rest. */
   controls: Array<{ key: string; controls: ControlMeasure[] }>;
+  /**
+   * SMA-437, lot V3-08, step S5 — the cells the engine gave each card, and
+   * the empty ones: between two cards (a hole), or after the last
+   * (`gridCellsOf`).
+   */
+  cells: GridCellsMeasure;
 }
 
 /** A box relative to an origin, to a tenth of a pixel. */
@@ -660,6 +666,7 @@ function measureGrid(grid: GridScene, host: HTMLElement): GridMeasure {
     controls: grid.editing
       ? cards.map((card) => ({ key: card.getAttribute('data-widget')!, controls: measureControls(card) }))
       : [],
+    cells: gridCellsOf(cards),
   };
 }
 

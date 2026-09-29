@@ -534,6 +534,41 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     });
   });
 
+  // SMA-437, lot V3-08, step S5 (A-15) — THE EXPERT PRESET WITHOUT A HOLE: in
+  // every run, no cell of the preset's grid is left empty — between two cards
+  // or after the last —, read in the engine, cell by cell (`gridCellsOf`). And
+  // the instrument is shown the hole it exists to see (SMA-446): the preset as
+  // PR #300 left it, 566 × 566 px empty right of the Weather at 1 280 px.
+  describe('the Expert preset without a hole (SMA-437, lot V3-08, S5 — A-15)', () => {
+    it.each(RUNS.map((run) => run.id))('%s: the Expert preset leaves no cell empty — none between two cards, none after the last — at rest and in Edit mode', (id) => {
+      const run = runOf(id);
+      for (const name of ['grid-expert', 'grid-expert-edit']) {
+        const { cells } = gridOf(run, name);
+        expect(Object.keys(cells.placed), `${id} ${name}`).toHaveLength(9);
+        expect({ between: cells.between, trailing: cells.trailing }, `${id} ${name}: ${JSON.stringify(cells.placed)}`).toEqual({
+          between: [],
+          trailing: [],
+        });
+      }
+    });
+
+    it('sees the hole it exists to see: the preset of PR #300 leaves four cells empty right of the Weather at 1 280 px — 566 × 566 px, between two cards — and none on two columns or one', () => {
+      for (const run of RUNS) {
+        const { cells } = gridOf(run, 'grid-expert-hole-probe');
+        if (run.vw < 1200) {
+          expect(cells.between, run.id).toEqual([]);
+          continue;
+        }
+        expect(cells.between.map((cell) => cell.split(' ')[0]), run.id).toEqual(['2,1', '3,1', '2,2', '3,2']);
+        const boxes = cells.between.map((cell) => /@([\d.]+),([\d.]+) ([\d.]+)×([\d.]+)/.exec(cell)!.slice(1).map(Number));
+        const width = Math.max(...boxes.map(([x, , w]) => x! + w!)) - Math.min(...boxes.map(([x]) => x!));
+        const height = Math.max(...boxes.map(([, y, , h]) => y! + h!)) - Math.min(...boxes.map(([, y]) => y!));
+        expect(width, run.id).toBeCloseTo(566, 0);
+        expect(height, run.id).toBeCloseTo(566, 0);
+      }
+    });
+  });
+
   describe.each(RUNS)('$id', (run) => {
     it.each(LAYOUT_SCENES.map((scene) => scene.name))('%s: no overlap, nothing clipped, nothing beyond the card', (name) => {
       const scene = sceneOf(run, name);

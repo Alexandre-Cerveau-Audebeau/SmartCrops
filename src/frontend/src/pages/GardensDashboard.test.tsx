@@ -171,8 +171,9 @@ afterEach(() => {
 });
 
 describe('GardensDashboard — grid from the stored preferences (SMA-336)', () => {
-  it('renders the nine widgets of the Expert preset: the Key figures band first, then the eight in the canonical order', async () => {
-    // SMA-437 lot 1, PR B, step B1 — « en tête du preset Expert ».
+  it('renders the nine widgets of the Expert preset: the Key figures band first, then the Gardens and the Weather, then the six others in the canonical order', async () => {
+    // SMA-437 lot 1, PR B, step B1 — « en tête du preset Expert »; lot V3-08,
+    // step S5 (A-15) — the Gardens, then the Weather, the preset without a hole.
     servePreferences('expert');
 
     renderPage();
@@ -180,7 +181,9 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
     await waitFor(() => expect(renderedKeys()).toHaveLength(9));
     expect(renderedKeys()).toEqual([
       'keyfigures',
-      ...DASHBOARD_BLOCK_KEYS.filter((key) => key !== 'keyfigures'),
+      'gardens',
+      'weather',
+      ...DASHBOARD_BLOCK_KEYS.filter((key) => !['keyfigures', 'gardens', 'weather'].includes(key)),
     ]);
   });
 
