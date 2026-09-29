@@ -674,6 +674,7 @@
         "freeCells_other": "{{count, number}} libres",
         "columns": {
           "garden": "Jardin",
+          "type": "Type",
           "plants": "Plantes",
           "occupancy": "Occupation",
           "exposure": "Exposition",
@@ -700,6 +701,8 @@
           "more_other": "+ {{count, number}} autres jardins",
           "less_one": "Réduire à {{count, number}} jardin",
           "less_other": "Réduire à {{count, number}} jardins",
+          "cut_one": "Au-delà du jardin affiché",
+          "cut_other": "Au-delà des {{count, number}} affichés",
           "sortedBy": {
             "lastOpened": "Triés par dernière ouverture",
             "name": "Triés par ordre alphabétique",
@@ -707,6 +710,14 @@
             "updated": "Triés par dernière modification",
             "custom": "Dans votre ordre"
           }
+        },
+        "wide": {
+          "modified": "modifié {{when}}",
+          "varieties_one": "{{count, number}} variété",
+          "varieties_other": "{{count, number}} variétés",
+          "occupancy_one": "{{percent}} · {{count, number}} case libre",
+          "occupancy_other": "{{percent}} · {{count, number}} cases libres",
+          "noType": "Type ?"
         },
         "options": {
           "countSection": "Jardins affichés",
