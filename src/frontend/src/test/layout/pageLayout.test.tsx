@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { ChoiceMeasure, DialogMeasure, NoviceMeasure, PageMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
-import { CHOICE_SCENES, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, weatherCitySceneData, type WeatherCityScene } from './scenes';
+import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
+import { CHOICE_SCENES, GARDENS_LIST_KINDS, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, gardensSceneData, weatherCitySceneData, type GardensListKind, type WeatherCityScene } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
 import { capabilitiesFor } from '../fixtures/formulas';
@@ -1418,6 +1418,33 @@ async function runWeatherView(view: PageView): Promise<Map<string, WeatherMeasur
   }
 }
 
+/** The Gardens widget in the Full width, by viewport then by case — `<kind>/rest`, and `<kind>/unfolded` where the foot offered it (SMA-448, lot F5-b, W4). */
+const gardensCases = new Map<string, Map<string, GardensMeasure>>();
+
+/** Every Gardens case of one viewport, in one Chrome: each list at rest, then unfolded where « + N autres jardins » stands. */
+async function runGardensView(view: PageView): Promise<Map<string, GardensMeasure>> {
+  const session = await openPage(CHROME!, weatherOutDir, { label: `gardens-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
+  try {
+    const byCase = new Map<string, GardensMeasure>();
+    for (const kind of GARDENS_LIST_KINDS) {
+      await session.navigate(`level=expert&theme=light&lang=fr&gsize=wide&gardens=${kind}`);
+      byCase.set(`${kind}/rest`, await session.evaluate<GardensMeasure>('window.__page.measureGardens()'));
+      if (await session.evaluate<boolean>('window.__page.unfoldGardens()')) {
+        byCase.set(`${kind}/unfolded`, await session.evaluate<GardensMeasure>('window.__page.measureGardens()'));
+      }
+    }
+    return byCase;
+  } finally {
+    await session.close();
+  }
+}
+
+const gardensOf = (viewId: string, caseId: string): GardensMeasure => {
+  const measured = gardensCases.get(viewId)?.get(caseId);
+  if (!measured) throw new Error(`No measurement for the Gardens case ${caseId} at ${viewId}`);
+  return measured;
+};
+
 const weatherOf = (viewId: string, caseId: string): WeatherMeasure => {
   const measured = weatherCases.get(viewId)?.get(caseId);
   if (!measured) throw new Error(`No measurement for the Weather case ${caseId} at ${viewId}`);
@@ -1452,6 +1479,14 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
       settled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') weatherCases.set(WEATHER_VIEWS[index]!.id, outcome.value);
         else weatherFailures.set(`weather-${WEATHER_VIEWS[index]!.id}`, outcome.reason);
+      });
+      // SMA-448, lot F5-b, W4 — the Gardens widget in the Full width, in this
+      // same hook: five more Chromes, one per viewport, once the Weather's
+      // have closed.
+      const gardensSettled = await Promise.allSettled(WEATHER_VIEWS.map((view) => runGardensView(view)));
+      gardensSettled.forEach((outcome, index) => {
+        if (outcome.status === 'fulfilled') gardensCases.set(WEATHER_VIEWS[index]!.id, outcome.value);
+        else weatherFailures.set(`gardens-${WEATHER_VIEWS[index]!.id}`, outcome.reason);
       });
     } finally {
       await terminateChildren();
@@ -1621,5 +1656,87 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
         expect(under, `${view.id} ${id}`).toEqual([]);
       }
     }
+  });
+
+  // SMA-448, lot F5-b, step W4 — THE GARDENS WIDGET IN THE FULL WIDTH, as the
+  // app mounts it (V3-03, V3-04): the Expert's stored layout with Gardens at
+  // `wide`; one, five, twelve, sixty and very-long-named gardens served, every
+  // one located; at the five viewports; at rest and, where the foot offers
+  // « + N autres jardins », unfolded in place. Measured in this group's own
+  // hook, once the Weather's Chromes have closed — no bound of its own.
+  describe('the Gardens widget in the Full width, as the app mounts it (SMA-448, lot F5-b, W4 — V3-03, V3-04)', () => {
+    const CASES = [...GARDENS_LIST_KINDS.map((kind) => `${kind}/rest`), 'twelve/unfolded', 'sixty/unfolded'];
+    const kindOf = (id: string) => id.split('/')[0] as GardensListKind;
+    /** The rows a list leaves at rest: every garden up to the count — eight on a desktop, five on a phone. */
+    const rowsAtRest = (kind: GardensListKind, phone: boolean) => Math.min(gardensSceneData(kind).gardens.length, phone ? 5 : 8);
+    const FR_HEADERS = ['Jardin', 'Type', 'Plantes', 'Occupation', 'Exposition', 'Météo', 'Actions'];
+
+    it('ran every viewport to its end: five lists at rest, the twelve and the sixty unfolded — seven cases —, in Inter, at the viewport it claims', () => {
+      expect([...weatherFailures.entries()].filter(([id]) => id.startsWith('gardens-')).map(([id, reason]) => `${id}: ${String(reason)}`)).toEqual([]);
+      for (const view of WEATHER_VIEWS) {
+        expect([...(gardensCases.get(view.id)?.keys() ?? [])].sort(), view.id).toEqual([...CASES].sort());
+        for (const id of CASES) {
+          const measured = gardensOf(view.id, id);
+          expect(measured.viewport, `${view.id} ${id}`).toBe(view.width);
+          expect(measured.fontLoaded, `${view.id} ${id}: Inter not loaded`).toBe(true);
+        }
+      }
+    });
+
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: every case is clean — no overlap, nothing cut for good, nothing spilled, nothing beyond the card — and the actions inside the card', (viewId) => {
+      for (const id of CASES) {
+        const measured = gardensOf(viewId, id);
+        expect(defects(measured), `${viewId} ${id}`).toEqual(clean);
+        expect(measured.hardClipped, `${viewId} ${id}`).toBe(0);
+        expect(measured.actionsOutside, `${viewId} ${id}`).toBe(0);
+      }
+    });
+
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the card takes the whole grid and the height of its content — no vertical scroll, and no sideways scroll at 1 280 px', (viewId) => {
+      const view = WEATHER_VIEWS.find((candidate) => candidate.id === viewId)!;
+      for (const id of CASES) {
+        const measured = gardensOf(viewId, id);
+        const label = `${viewId} ${id}`;
+        expect(measured.card.w, label).toBeCloseTo(widthOfSize(view.width, 'wide'), 0);
+        expect(measured.body.scrollH, label).toBeLessThanOrEqual(measured.body.h + 1);
+        expect(measured.scrollers.filter((scroller) => scroller.axis.includes('y')), label).toEqual([]);
+        if (view.width >= 1200) expect(measured.scrollers, label).toEqual([]);
+      }
+    });
+
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the seven columns from 600 px and the rows of the form on a phone; the rows the count leaves, « + N autres jardins » and the search while a garden is hidden, the rule once unfolded', (viewId) => {
+      const view = WEATHER_VIEWS.find((candidate) => candidate.id === viewId)!;
+      const phone = view.width < 600;
+      for (const id of CASES) {
+        const measured = gardensOf(viewId, id);
+        const label = `${viewId} ${id}`;
+        const kind = kindOf(id);
+        const served = gardensSceneData(kind).gardens.length;
+        expect(measured.table, label).toBe(!phone);
+        expect(measured.headers, label).toEqual(phone ? [] : FR_HEADERS);
+        if (id.endsWith('/rest')) {
+          const shown = rowsAtRest(kind, phone);
+          expect(measured.rows, label).toBe(shown);
+          expect(measured.cut, label).toBe(false);
+          expect(measured.fold !== null, label).toBe(served > shown);
+          expect(measured.search, label).toBe(served > shown);
+        } else {
+          expect(measured.rows, label).toBe(served);
+          expect(measured.cut, label).toBe(true);
+          expect(measured.fold, label).not.toBeNull();
+          expect(measured.search, label).toBe(true);
+        }
+      }
+    });
+
+    it('ellipsizes nothing but a garden’s description (V33) — the names and the sub-lines wrap (V5) — and draws the weather warning under every case', () => {
+      for (const view of WEATHER_VIEWS) {
+        for (const id of CASES) {
+          const measured = gardensOf(view.id, id);
+          expect(measured.ellipsized.filter((cut) => !cut.where.startsWith('garden-description')), `${view.id} ${id}`).toEqual([]);
+          expect(measured.warning, `${view.id} ${id}`).toBe(true);
+        }
+      }
+    });
   });
 });

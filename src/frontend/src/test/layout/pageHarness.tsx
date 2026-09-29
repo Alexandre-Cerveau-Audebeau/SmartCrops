@@ -16,16 +16,19 @@ import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
 import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 import {
   CHOICE_SCENES,
+  GARDENS_LIST_KINDS,
   NOVICE_SCENES,
   PLANNER_GARDEN,
   PLANNER_LAYOUT,
   SCENE_DATA,
   WEATHER_CITY_SCENES,
   choiceSceneCatalog,
+  gardensSceneData,
   noviceSceneData,
   weatherAll,
   weatherCitySceneData,
   type ChoiceScene,
+  type GardensListKind,
   type NoviceScene,
   type WeatherCityScene,
 } from './scenes';
@@ -108,6 +111,20 @@ const weatherSize = params.get('wsize') as DashboardSize | null;
 /** What `fetch` serves the page for the weather scene: its gardens and its aggregate — one place per city. */
 const weatherServed = weatherKind ? weatherCitySceneData(weatherKind) : null;
 
+// SMA-448, lot F5-b, step W4 — the Gardens widget in the Full width, as the
+// app mounts it: the gardens the aggregate serves (`gardens=one|five|twelve|
+// sixty|long`, every one located in Écully) and the size the stored layout
+// gives the widget (`gsize=small|medium|large|wide`), through the page's own
+// read of the layout, as `wsize` above.
+const gardensKindName = params.get('gardens');
+const gardensKind: GardensListKind | null = gardensKindName
+  ? ((GARDENS_LIST_KINDS as readonly string[]).includes(gardensKindName) ? (gardensKindName as GardensListKind) : null)
+  : null;
+if (gardensKindName && !gardensKind) throw new Error(`No gardens scene ${gardensKindName}`);
+const gardensSize = params.get('gsize') as DashboardSize | null;
+/** What `fetch` serves the page for the Gardens scene: its gardens and their weather. */
+const gardensServed = gardensKind ? gardensSceneData(gardensKind) : null;
+
 /** A JSON answer. */
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -131,7 +148,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const method = (init?.method ?? 'GET').toUpperCase();
   if (url.startsWith('/api/formulas')) {
     if (plannerPage && saveOutcome) return new Response(null, { status: 500 });
-    return json(choiceScene ? choiceSceneCatalog(choiceScene) : catalogFor(plannerPage ? 'novice' : pageLevel, { gardenCount: 3 }));
+    return json(choiceScene ? choiceSceneCatalog(choiceScene) : catalogFor(plannerPage ? 'novice' : pageLevel, { gardenCount: gardensServed ? gardensServed.gardens.length : 3 }));
   }
   if (url.startsWith('/api/gardens/g1/layout')) {
     if (method === 'PUT') {
@@ -180,20 +197,25 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       isPreset: true,
       // The choice screen opens by itself on an account that never chose (N18).
       formulaChosen: choiceScene ? choiceScene.chosen : true,
-      // A stored layout with the Weather widget at the asked size (lot F4, W5).
+      // A stored layout with the Weather widget at the asked size (lot F4, W5),
+      // the Gardens widget at its (lot F5-b, W4).
       blocks: presetFor(pageLevel).map((block) =>
-        weatherSize && block.key === 'weather' ? { ...block, size: weatherSize, hidden: false } : block
+        weatherSize && block.key === 'weather'
+          ? { ...block, size: weatherSize, hidden: false }
+          : gardensSize && block.key === 'gardens'
+            ? { ...block, size: gardensSize, hidden: false }
+            : block
       ),
       updatedAt: null,
       capabilities: capabilitiesFor(pageLevel),
     });
   }
   if (url.startsWith('/api/dashboard/weather')) {
-    return json(served ? served.weather : weatherServed ? weatherServed.weather : weatherAll());
+    return json(served ? served.weather : weatherServed ? weatherServed.weather : gardensServed ? gardensServed.weather : weatherAll());
   }
   if (url.startsWith('/api/dashboard')) {
     if (failGardens) return new Response(null, { status: 500 });
-    return json(served ? served.data : weatherServed ? weatherServed.data : SCENE_DATA);
+    return json(served ? served.data : weatherServed ? weatherServed.data : gardensServed ? gardensServed.data : SCENE_DATA);
   }
   // A visitor: the navbar of someone not signed in, as the pre-flight measured it.
   if (url.startsWith('/api/auth/')) return new Response(null, { status: 401 });
@@ -324,6 +346,33 @@ export interface WeatherMeasure extends CardMeasure {
   warning: boolean;
   /** The height and the content height of the card's parts, by their data tag — what a card that hides its own content says. */
   parts: Record<string, { h: number; scrollH: number }>;
+}
+
+/**
+ * SMA-448, lot F5-b, step W4 — the Gardens widget in the Full width, as the
+ * app mounts it: the card measured as the scenes' harness measures one, and
+ * the form it took — the seven-column table from 600 px, the rows of the A9
+ * form on a phone —, the rows the count leaves, the fold and the rule of the
+ * unfolding, the search, the actions against the card, the warning (V1).
+ */
+export interface GardensMeasure extends CardMeasure {
+  viewport: number;
+  /** A table (from 600 px), or the rows of the A9 form (a phone). */
+  table: boolean;
+  /** The column headers of the table, in order — the visually hidden « Actions » included; none on a phone. */
+  headers: string[];
+  /** The garden rows drawn — the table's, or the form's; never the rule's row. */
+  rows: number;
+  /** The rule « Au-delà des N affichés » under the unfolded list. */
+  cut: boolean;
+  /** The search bar — drawn while a garden is hidden by the count (A-N3). */
+  search: boolean;
+  /** The foot's « + N autres jardins » / « Afficher N jardins » button, its label — null when every garden is shown. */
+  fold: string | null;
+  /** How far, in px, the furthest actions cell runs past the card's padding box — 0 when all stay inside. */
+  actionsOutside: number;
+  /** The weather warning under the grid, drawn or not (V1). */
+  warning: boolean;
 }
 
 /**
@@ -750,6 +799,49 @@ const page = {
           .map(([tag, element]) => [tag, { h: round(element.getBoundingClientRect().height), scrollH: element.scrollHeight }])
       ),
     };
+  },
+
+  /**
+   * SMA-448, lot F5-b, step W4 — the Gardens widget as the app mounts it, at
+   * the size and with the gardens the query asked (`gsize`, `gardens`): the
+   * card as the scenes' harness measures one, and the form it took.
+   */
+  measureGardens(): GardensMeasure {
+    const card = document.querySelector<HTMLElement>('[data-widget="gardens"]');
+    if (!card) throw new Error('The page drew no Gardens widget to measure.');
+    const box = card.getBoundingClientRect();
+    const cardStyle = getComputedStyle(card);
+    const inner = { left: box.left + parseFloat(cardStyle.paddingLeft), right: box.right - parseFloat(cardStyle.paddingRight) };
+    const actions = [...card.querySelectorAll('tbody tr:not([data-gardens-cut]) > td:last-child, [data-garden-row] [data-row-actions]')];
+    return {
+      ...measureCard(card),
+      viewport: innerWidth,
+      table: card.querySelector('table') !== null,
+      headers: [...card.querySelectorAll('thead th')].map((th) => th.textContent ?? ''),
+      rows: card.querySelectorAll('tbody tr:not([data-gardens-cut]), [data-garden-row]').length,
+      cut: card.querySelector('[data-gardens-cut]') !== null,
+      search: card.querySelector('[data-gardens-search]') !== null,
+      fold: card.querySelector('[data-gardens-foot] button[aria-expanded]')?.textContent ?? null,
+      actionsOutside: round(
+        Math.max(
+          0,
+          ...actions.map((cell) => {
+            const r = cell.getBoundingClientRect();
+            return Math.max(r.right - inner.right, inner.left - r.left);
+          })
+        )
+      ),
+      warning: document.querySelector('[data-weather-disclaimer]') !== null,
+    };
+  },
+
+  /** Clicks « + N autres jardins » in the Gardens widget's foot and settles — true when there was one to click. */
+  async unfoldGardens(): Promise<boolean> {
+    const button = document.querySelector<HTMLElement>('[data-widget="gardens"] [data-gardens-foot] button[aria-expanded="false"]');
+    if (!button) return false;
+    button.click();
+    await page.settle();
+    return true;
   },
 
   /** A dialog's paper — or a toast — as one card, from any element inside it (SMA-448, lot F3, L7). */

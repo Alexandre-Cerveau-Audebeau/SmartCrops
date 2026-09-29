@@ -116,6 +116,17 @@ export interface SceneMeasure extends CardMeasure {
   gardensEmptySearch: boolean;
   gardensBeyond: number;
   gardensFootWrapped: string[];
+  /**
+   * SMA-448, lot F5-b — the Gardens widget in the Full width: whether a TABLE
+   * is drawn (the rows of the A9 form on a phone), whether the rule « Au-delà
+   * des N affichés » stands under the unfolded list, and how far, in px, the
+   * furthest actions cell runs past the card's padding box — 0 when all stay
+   * inside, under the frozen column while the table scrolls sideways.
+   * `gardenRows` counts the form's rows too, and never the rule's row.
+   */
+  gardensTable: boolean;
+  gardensCut: boolean;
+  gardenActionsOutside: number;
 }
 
 /**
@@ -524,8 +535,23 @@ function measurePanel(scene: PanelScene): PanelMeasure {
 function cardExtras(card: HTMLElement) {
   const origin = card.getBoundingClientRect();
   const foot = card.querySelector('[data-gardens-foot]');
+  const cardStyle = getComputedStyle(card);
+  const inner = { left: origin.left + parseFloat(cardStyle.paddingLeft), right: origin.right - parseFloat(cardStyle.paddingRight) };
+  // The actions of every row — the table's last cell, or the form's zone —
+  // against the card's padding box (SMA-448, lot F5-b).
+  const actionsOutside = Math.max(
+    0,
+    ...Array.from(card.querySelectorAll('tbody tr:not([data-gardens-cut]) > td:last-child, [data-garden-row] [data-row-actions]')).map((cell) => {
+      const r = cell.getBoundingClientRect();
+      return Math.round(Math.max(r.right - inner.right, inner.left - r.left) * 10) / 10;
+    })
+  );
   return {
-    gardenRows: card.querySelectorAll('tbody tr').length,
+    // The rows of the table — never the cut rule, a row of its own — or of the A9 form (SMA-448, lot F5-b).
+    gardenRows: card.querySelectorAll('tbody tr:not([data-gardens-cut]), [data-garden-row]').length,
+    gardensTable: card.querySelector('table') !== null,
+    gardensCut: card.querySelector('[data-gardens-cut]') !== null,
+    gardenActionsOutside: actionsOutside,
     gardensSearch: card.querySelector('[data-gardens-search]') !== null,
     gardensEmptySearch: card.querySelector('[data-gardens-search]') !== null && card.querySelector('[data-invite-panel]') !== null,
     gardensBeyond: card.querySelectorAll('[data-garden-beyond]').length,

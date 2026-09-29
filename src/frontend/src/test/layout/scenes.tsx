@@ -269,8 +269,17 @@ export interface LayoutScene {
    * the foot, the search bar), unfolded in place, a search on, a search
    * without a result, « Tous ».
    */
-  gardens?: { expanded?: boolean; query?: string; options?: Record<string, unknown> | null };
+  gardens?: { expanded?: boolean; query?: string; options?: Record<string, unknown> | null; list?: GardensListKind };
 }
+
+/**
+ * SMA-448, lot F5-b — the gardens a Gardens scene mounts: the page's Terrasse
+ * alone; the five of the page; the twelve of lot F5-a (the default); sixty —
+ * `panelGardens`, one in ten under a very long name —; the three under the
+ * very long names of the Novice scenes.
+ */
+export type GardensListKind = 'one' | 'five' | 'twelve' | 'sixty' | 'long';
+export const GARDENS_LIST_KINDS: readonly GardensListKind[] = ['one', 'five', 'twelve', 'sixty', 'long'];
 
 const SIZES: DashboardSize[] = ['small', 'medium', 'large'];
 const WIDGETS: DashboardBlockKey[] = ['gardens', 'counters', 'stats', 'weather', 'todo', 'month', 'tips'];
@@ -308,6 +317,22 @@ export const LAYOUT_SCENES: LayoutScene[] = (() => {
   scenes.push({ name: 'gardens-large-search-empty', key: 'gardens', size: 'large', weather: 'all', gardens: { query: 'verger nord' } });
   scenes.push({ name: 'gardens-large-all', key: 'gardens', size: 'large', weather: 'all', gardens: { options: { count: 'all' } } });
   scenes.push({ name: 'gardens-medium-twelve', key: 'gardens', size: 'medium', weather: 'all', gardens: {} });
+  // SMA-448, lot F5-b (V5) — the Gardens widget in the FULL WIDTH, the
+  // Expert's (V3-03, V3-04): one garden, five, twelve at rest (the cut, the
+  // foot, the search bar), unfolded in place under the rule « Au-delà des N
+  // affichés », a search on, a search without a result, « Tous », sixty at
+  // rest and unfolded, three very long names, and the twelve in Edit mode.
+  scenes.push({ name: 'gardens-wide-one', key: 'gardens', size: 'wide', weather: 'all', gardens: { list: 'one' } });
+  scenes.push({ name: 'gardens-wide-five', key: 'gardens', size: 'wide', weather: 'all', gardens: { list: 'five' } });
+  scenes.push({ name: 'gardens-wide-twelve', key: 'gardens', size: 'wide', weather: 'all', gardens: {} });
+  scenes.push({ name: 'gardens-wide-unfolded', key: 'gardens', size: 'wide', weather: 'all', gardens: { expanded: true } });
+  scenes.push({ name: 'gardens-wide-search', key: 'gardens', size: 'wide', weather: 'all', gardens: { query: 'verger' } });
+  scenes.push({ name: 'gardens-wide-search-empty', key: 'gardens', size: 'wide', weather: 'all', gardens: { query: 'verger nord' } });
+  scenes.push({ name: 'gardens-wide-all', key: 'gardens', size: 'wide', weather: 'all', gardens: { options: { count: 'all' } } });
+  scenes.push({ name: 'gardens-wide-sixty', key: 'gardens', size: 'wide', weather: 'all', gardens: { list: 'sixty' } });
+  scenes.push({ name: 'gardens-wide-sixty-unfolded', key: 'gardens', size: 'wide', weather: 'all', gardens: { list: 'sixty', expanded: true } });
+  scenes.push({ name: 'gardens-wide-long', key: 'gardens', size: 'wide', weather: 'all', gardens: { list: 'long' } });
+  scenes.push({ name: 'gardens-wide-edit', key: 'gardens', size: 'wide', weather: 'all', editing: true, gardens: {} });
   return scenes;
 })();
 
@@ -354,6 +379,23 @@ export const GRID_SCENES: GridScene[] = [
       { key: 'tips', size: 'small' },
       { key: 'month', size: 'small' },
       { key: 'keyfigures', size: 'wide' },
+      { key: 'todo', size: 'medium' },
+      { key: 'counters', size: 'medium' },
+    ] satisfies GridScene['blocks'],
+  })),
+  // SMA-448, lot F5-b — the Gardens widget in Full width BETWEEN two ordinary
+  // rows: Weather M, Tips S, This month S, then the Gardens, then To-do M and
+  // Counters M — pinned rows above and below a row as tall as its card
+  // (A-N10); at rest and in Edit mode.
+  ...[false, true].map((editing) => ({
+    name: `grid-expert-gardens-wide${editing ? '-edit' : ''}`,
+    level: 'expert' as const,
+    editing,
+    blocks: [
+      { key: 'weather', size: 'medium' },
+      { key: 'tips', size: 'small' },
+      { key: 'month', size: 'small' },
+      { key: 'gardens', size: 'wide' },
       { key: 'todo', size: 'medium' },
       { key: 'counters', size: 'medium' },
     ] satisfies GridScene['blocks'],
@@ -531,6 +573,44 @@ const gardensVeryLong: DashboardGardenData[] = [
   { ...balcon, name: NOVICE_LONG_NAMES[1] },
   { ...potager, name: NOVICE_LONG_NAMES[2] },
 ];
+
+/** The gardens of a Gardens scene, by kind (SMA-448, lot F5-b). */
+export function gardensListOf(kind: GardensListKind): DashboardGardenData[] {
+  switch (kind) {
+    case 'one':
+      return [terrasse];
+    case 'five':
+      return [...FIVE];
+    case 'twelve':
+      return gardensTwelve;
+    case 'sixty':
+      return panelGardens(60);
+    case 'long':
+      return gardensVeryLong;
+  }
+}
+
+/**
+ * SMA-448, lot F5-b, step W4 — what the page launcher's `fetch` serves the
+ * REAL page for a Gardens scene: the aggregate of the list, and a weather
+ * where every garden reads Écully — the MÉTÉO column filled on every row,
+ * the Weather widget bearing the warning (V1).
+ */
+export function gardensSceneData(kind: GardensListKind): {
+  gardens: DashboardGardenData[];
+  data: DashboardData;
+  weather: DashboardWeatherData;
+} {
+  const list = gardensListOf(kind);
+  return {
+    gardens: list,
+    data: dashboardFixture(list, { varieties }),
+    weather: weatherFixture(
+      [ecully],
+      list.map((garden) => linkFixture({ gardenId: garden.id, locationKey: ecully.key, source: 'profile' }))
+    ),
+  };
+}
 
 /** The weather of a Novice scene: every garden in Écully — but Balcon sud when partial. */
 const noviceWeather = (list: readonly DashboardGardenData[], partial: boolean): DashboardWeatherData =>
@@ -760,8 +840,9 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
       return <WeatherBlock {...common} weather={weather} cities="all" gardens={gs} onLocate={noop} onLocated={noop} />;
     case 'gardens': {
       // SMA-448, lot F5-a: twelve gardens under the widget's settings when the
-      // scene says so; the page's three otherwise.
-      const list = scene.gardens ? gardensTwelve : gs;
+      // scene says so — or the list the scene names (lot F5-b: one, five,
+      // sixty, very long names); the page's three otherwise.
+      const list = scene.gardens ? gardensListOf(scene.gardens.list ?? 'twelve') : gs;
       return (
         <GardensBlock
           {...common}
