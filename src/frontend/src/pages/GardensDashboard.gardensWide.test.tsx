@@ -359,3 +359,70 @@ describe('the MÉTÉO column of the Full width follows the page’s weather (SMA
     expect(widget().querySelector('[data-weather-column]')).toBeNull();
   });
 });
+
+// PR #300, fix round 1, P1 — THE EXPERT PRESET PUTS THE GARDENS WIDGET IN THE
+// FULL WIDTH (Alexandre, 29/09: « personnellement je préfère que de base, en
+// Expert, le widget Jardins soit en large comme ça »). Its reach: an account
+// arriving at the Expert formula with no layout of its own, and « Réinitialiser
+// au niveau Expert » — both read the preset the server serves (its catalogue,
+// `capabilities.preset`), whose contract is the reference file these fixtures
+// read. A layout the account STORED does not change. Every other widget keeps
+// its size: theirs is lot V3-08's to decide.
+
+/** The Expert preset, widget by widget — the decision, written out. */
+const EXPERT_PRESET = [
+  'keyfigures wide',
+  'weather large',
+  'gardens wide',
+  'tips large',
+  'month large',
+  'todo large',
+  'counters large',
+  'stats large',
+  'harvest large',
+];
+const keysAndSizes = (blocks: readonly DashboardBlock[]) => blocks.map((block) => `${block.key} ${block.size}`);
+
+describe('the Expert preset puts the Gardens widget in the Full width (PR #300, fix round 1, P1 — Alexandre, 29/09)', () => {
+  it('an account arriving at the Expert formula reads its preset: the Gardens widget in the Full width, its seven columns — every other widget in its size', async () => {
+    serve('expert', 'large');
+    // No layout of its own: the preset, as the server serves it.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'expert',
+      capabilities: capabilitiesFor('expert'),
+      isPreset: true,
+      formulaChosen: true,
+      blocks: presetFor('expert'),
+      updatedAt: null,
+    });
+    await renderPage();
+
+    expect(keysAndSizes(presetFor('expert'))).toEqual(EXPERT_PRESET);
+    expect(keysAndSizes(capabilitiesFor('expert').preset)).toEqual(EXPERT_PRESET);
+    expect(widget().querySelector('[data-gardens-wide]')).not.toBeNull();
+    expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
+  });
+
+  it('« Reset to the Expert level » brings the Gardens widget to the Full width: the layout written with « wide », the seven columns drawn', async () => {
+    serve('expert', 'large');
+    await renderPage();
+    expect(widget().querySelector('[data-gardens-wide]')).toBeNull();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset to the Expert level' }));
+
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
+    expect(keysAndSizes(lastSaved().blocks)).toEqual(EXPERT_PRESET);
+    expect(widget().querySelector('[data-gardens-wide]')).not.toBeNull();
+    expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
+  });
+
+  it('an Expert’s STORED layout with the Gardens widget in Large keeps it: the Large table is drawn, not the Full width', async () => {
+    serve('expert', 'large');
+    await renderPage();
+
+    expect(widget().querySelector('[data-gardens-wide]')).toBeNull();
+    expect(headers()).toEqual(['Garden', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Harvest', 'Actions']);
+  });
+});

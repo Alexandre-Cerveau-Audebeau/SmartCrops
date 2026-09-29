@@ -358,7 +358,8 @@ const presetGrid = (level: DashboardLevel) =>
 
 /**
  * The Gardener preset (Weather M, Gardens L, four Mediums) and the Expert one
- * (the eight widgets in Large), at rest and in Edit mode.
+ * (the band, then the eight widgets in Large — the Gardens in the Full width
+ * since PR #300, fix round 1, P1), at rest and in Edit mode.
  */
 export const GRID_SCENES: GridScene[] = [
   ...(['gardener', 'expert'] as const).flatMap((level) => [

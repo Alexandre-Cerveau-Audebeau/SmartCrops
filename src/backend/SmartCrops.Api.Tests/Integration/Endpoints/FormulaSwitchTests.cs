@@ -124,6 +124,41 @@ public class FormulaSwitchTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// SMA-448, lot F5-b — PR #300, fix round 1, P1 (Alexandre, 29/09): an
+    /// account that ARRIVES at the Expert formula with no Expert layout in the
+    /// archive — a Gardener who arranged its page, entering the Expert for the
+    /// first time — reads the Expert preset, the Gardens widget in the Full
+    /// width and every other widget where it was. The Gardener's arrangement
+    /// waits in the archive, untouched (V4).
+    /// </summary>
+    [Fact]
+    public async Task PutCurrent_AGardenerEnteringTheExpertFormulaForTheFirstTime_ReadsGardensInTheFullWidth()
+    {
+        var userId = await SeedUserAsync("gardener");
+        AuthAs(userId);
+        var gardenerLayout = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Gardener,
+            [.. DashboardPresets.For("gardener").Select(b => new SaveDashboardBlockRequest(b.Key, b.Key == "tips" ? "small" : b.Size, b.Hidden, null))]);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(PreferencesUrl, gardenerLayout)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await SwitchAsync("expert")).StatusCode);
+        var expert = await GetPreferencesAsync();
+
+        Assert.Equal("expert", expert.Level);
+        Assert.Equal(
+            [("keyfigures", "wide"), ("weather", "large"), ("gardens", "wide"), ("tips", "large"), ("month", "large"),
+             ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large")],
+            expert.Blocks.Select(b => (b.Key, b.Size)));
+
+        // The Gardener's own arrangement comes back from the archive, as it was.
+        Assert.Equal(HttpStatusCode.NoContent, (await SwitchAsync("gardener")).StatusCode);
+        var gardener = await GetPreferencesAsync();
+        Assert.Equal(
+            gardenerLayout.Blocks.Select(b => (b.Key, b.Size, b.Hidden)),
+            gardener.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
+    }
+
+    /// <summary>
     /// R8 and V4 together: a formula too small for the account's gardens is
     /// refused — 409, <c>application/problem+json</c>, the code and the
     /// reasons the choice screen will say — and nothing moves: not the

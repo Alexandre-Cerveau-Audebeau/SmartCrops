@@ -28,10 +28,14 @@ describe('the served presets (SMA-336, SMA-448)', () => {
     expect(presetFor('gardener').map((block) => block.key)).toEqual(EIGHT.filter((key) => key !== 'stats'));
   });
 
-  it('Expert: the Key figures band first, in Full width — its one size — then the eight widgets in Large, none hidden', () => {
+  // SMA-448, lot F5-b — PR #300, fix round 1, P1 (Alexandre, 29/09:
+  // « personnellement je préfère que de base, en Expert, le widget Jardins soit
+  // en large comme ça »): the Gardens widget in the Full width; the seven others
+  // keep their Large (theirs is lot V3-08's).
+  it('Expert: the Key figures band first, in Full width — its one size — then the eight widgets, the Gardens in Full width and the seven others in Large, none hidden', () => {
     expect(presetFor('expert')).toEqual([
       { key: 'keyfigures', size: 'wide', hidden: false },
-      ...EIGHT.map((key) => ({ key, size: 'large', hidden: false })),
+      ...EIGHT.map((key) => ({ key, size: key === 'gardens' ? 'wide' : 'large', hidden: false })),
     ]);
   });
 
