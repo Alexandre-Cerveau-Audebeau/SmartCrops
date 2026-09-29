@@ -17,8 +17,9 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// Ce mois-ci Petit », « Jardinier : Météo Moyen, Jardins Grand, Conseils Moyen,
 /// Ce mois-ci Moyen, À faire Moyen, Compteurs Moyen », « Expert : les huit
 /// widgets en Grand » — the Expert's Gardens in the Full width since SMA-448,
-/// lot F5-b, and its Weather since SMA-437, lot V3-08, which leaves no hole
-/// (see <see cref="ExpertPreset"/>). Since SMA-448 (lot F1) they are
+/// lot F5-b, its Weather since SMA-437, lot V3-08, which leaves no hole, and
+/// its This month, Counts and Statistics since that lot's fix round 1 (see
+/// <see cref="ExpertPreset"/>). Since SMA-448 (lot F1) they are
 /// also the WIDGETS each formula has, and <see cref="FormulaCatalog"/> serves
 /// them.
 ///
@@ -86,11 +87,16 @@ public static class DashboardPresets
     /// Weather in Large, placed before the Gardens, held two rows the Gardens
     /// could not share: at four columns, 566 × 566 px stayed empty right of the
     /// Weather (SMA-448, 29/09). The Gardens now follow the band, then the
-    /// Weather in the Full width — every city side by side, the Expert's —, and
-    /// the six others in Large, two by two: no cell empty at one, two or four
-    /// columns (`dashboardLayoutGrid.ts`, `emptyCells`). Which other widget
-    /// takes the Full width by default stays Alexandre's to decide at his
-    /// visual pass, one line per widget here.</para>
+    /// Weather in the Full width — every city side by side, the Expert's.</para>
+    ///
+    /// <para>PR #301, fix round 1, R1 — Alexandre's choice at his visual pass
+    /// (29/09), the alternative B: « Je pense que l'option B est la mieux, car
+    /// le user peut voir directement les avantages de son offre, et peut réduire
+    /// ce qu'il veut ». Tips in Large, To-do and Harvest in Medium one above
+    /// the other beside it, then This month, Counts and Statistics in the Full
+    /// width: every Full width the formula has, shown, and no cell empty at
+    /// one, two or four columns (`dashboardLayoutGrid.ts`, `emptyCells`). One
+    /// line per widget here; each stays the user's to shrink.</para>
     /// </summary>
     private static readonly IReadOnlyList<DashboardPresetBlock> ExpertPreset =
     [
@@ -98,11 +104,11 @@ public static class DashboardPresets
         new(DashboardLayout.Blocks.Gardens, W, false),
         new(DashboardLayout.Blocks.Weather, W, false),
         new(DashboardLayout.Blocks.Tips, L, false),
-        new(DashboardLayout.Blocks.Month, L, false),
-        new(DashboardLayout.Blocks.Todo, L, false),
-        new(DashboardLayout.Blocks.Counters, L, false),
-        new(DashboardLayout.Blocks.Stats, L, false),
-        new(DashboardLayout.Blocks.Harvest, L, false),
+        new(DashboardLayout.Blocks.Todo, M, false),
+        new(DashboardLayout.Blocks.Harvest, M, false),
+        new(DashboardLayout.Blocks.Month, W, false),
+        new(DashboardLayout.Blocks.Counters, W, false),
+        new(DashboardLayout.Blocks.Stats, W, false),
     ];
 
     /// <summary>

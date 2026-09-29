@@ -437,9 +437,10 @@ const presetGrid = (level: DashboardLevel) =>
 
 /**
  * The Gardener preset (Weather M, Gardens L, four Mediums) and the Expert one
- * (the band, then the Gardens and the Weather in the Full width, the six
- * others in Large — SMA-437, lot V3-08, S5: the preset without a hole), at
- * rest and in Edit mode.
+ * (the band, the Gardens and the Weather in the Full width, Tips in Large
+ * beside To-do and Harvest in Medium, then This month, Counts and Statistics
+ * in the Full width — SMA-437, lot V3-08: the preset without a hole, the
+ * alternative B since PR #301's fix round 1), at rest and in Edit mode.
  */
 export const GRID_SCENES: GridScene[] = [
   ...(['gardener', 'expert'] as const).flatMap((level) => [

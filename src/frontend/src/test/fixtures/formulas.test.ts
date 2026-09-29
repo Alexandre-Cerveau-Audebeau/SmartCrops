@@ -32,13 +32,20 @@ describe('the served presets (SMA-336, SMA-448)', () => {
   // « personnellement je préfère que de base, en Expert, le widget Jardins soit
   // en large comme ça »): the Gardens widget in the Full width. SMA-437, lot
   // V3-08, step S5 (A-15): the preset without a hole — the Weather after the
-  // Gardens, in the Full width too, then the six others in Large, two by two.
-  it('Expert: the Key figures band first, in Full width — its one size — then the Gardens and the Weather in Full width and the six others in Large, none hidden', () => {
+  // Gardens, in the Full width too. PR #301, fix round 1, R1 (Alexandre, 29/09
+  // — the alternative B): Tips in Large beside To-do and Harvest in Medium,
+  // then This month, Counts and Statistics in the Full width.
+  it('Expert: the Key figures band first, in Full width — its one size — then the Gardens and the Weather in Full width, Tips in Large beside To-do and Harvest in Medium, then This month, Counts and Statistics in Full width, none hidden', () => {
     expect(presetFor('expert')).toEqual([
       { key: 'keyfigures', size: 'wide', hidden: false },
       { key: 'gardens', size: 'wide', hidden: false },
       { key: 'weather', size: 'wide', hidden: false },
-      ...EIGHT.filter((key) => key !== 'gardens' && key !== 'weather').map((key) => ({ key, size: 'large', hidden: false })),
+      { key: 'tips', size: 'large', hidden: false },
+      { key: 'todo', size: 'medium', hidden: false },
+      { key: 'harvest', size: 'medium', hidden: false },
+      { key: 'month', size: 'wide', hidden: false },
+      { key: 'counters', size: 'wide', hidden: false },
+      { key: 'stats', size: 'wide', hidden: false },
     ]);
   });
 

@@ -95,22 +95,26 @@ public class DashboardPresetsTests
     /// in the Full width — its one size. Then the Gardens in the Full width
     /// (SMA-448, lot F5-b — PR #300, fix round 1, P1, Alexandre, 29/09:
     /// « personnellement je préfère que de base, en Expert, le widget Jardins
-    /// soit en large comme ça »), and, since SMA-437, lot V3-08, step S5 (A-15),
-    /// the Weather after them in the Full width and the six others in Large,
-    /// two by two: the preset leaves no cell empty at one, two or four columns,
-    /// where PR #300's Weather in Large before the Gardens left 566 × 566 px
-    /// empty right of it. Literals on purpose: this is the decision, written out.
+    /// soit en large comme ça »), and the Weather after them in the Full width
+    /// (SMA-437, lot V3-08, step S5 — A-15: no cell empty at one, two or four
+    /// columns). Since PR #301, fix round 1, R1 — Alexandre, 29/09: « Je pense
+    /// que l'option B est la mieux, car le user peut voir directement les
+    /// avantages de son offre, et peut réduire ce qu'il veut » —, Tips in Large
+    /// beside To-do and Harvest in Medium, one above the other, then This
+    /// month, Counts and Statistics in the Full width: every width the formula
+    /// has, shown, and still no cell empty. Literals on purpose: this is the
+    /// decision, written out.
     /// </summary>
     [Fact]
-    public void For_Expert_PutsTheBandFirst_ThenTheGardensAndTheWeatherInTheFullWidth_AndTheSixOthersInLarge()
+    public void For_Expert_PutsTheBandFirst_ThenTheGardensAndTheWeather_TipsBesideToDoAndHarvest_ThenThisMonthCountsAndStatisticsInTheFullWidth()
     {
         var expert = DashboardPresets.For(DashboardLayout.Levels.Expert);
 
         (string Key, string Size, bool Hidden)[] expected =
         [
             ("keyfigures", "wide", false), ("gardens", "wide", false), ("weather", "wide", false),
-            ("tips", "large", false), ("month", "large", false), ("todo", "large", false),
-            ("counters", "large", false), ("stats", "large", false), ("harvest", "large", false),
+            ("tips", "large", false), ("todo", "medium", false), ("harvest", "medium", false),
+            ("month", "wide", false), ("counters", "wide", false), ("stats", "wide", false),
         ];
         Assert.Equal(expected, expert.Select(b => (b.Key, b.Size, b.Hidden)));
     }

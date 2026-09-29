@@ -961,10 +961,11 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// soit en large comme ça »): the preset an Expert who never saved a layout
     /// reads puts the Gardens widget in the Full width — and the preset the
     /// capabilities carry, which « Réinitialiser » brings back, is the same.
-    /// SMA-437, lot V3-08, step S5 (A-15): WITHOUT A HOLE — the band, the
-    /// Gardens and the Weather in the Full width, then the six others in Large,
-    /// two by two. Literals on purpose: this is the decision, not a copy of the
-    /// constant.
+    /// SMA-437, lot V3-08, step S5 (A-15): WITHOUT A HOLE. PR #301, fix round
+    /// 1, R1 (Alexandre, 29/09 — the alternative B): the band, the Gardens and
+    /// the Weather in the Full width, Tips in Large beside To-do and Harvest in
+    /// Medium, then This month, Counts and Statistics in the Full width.
+    /// Literals on purpose: this is the decision, not a copy of the constant.
     /// </summary>
     [Fact]
     public async Task GetPreferences_AnExpertWhoNeverSavedALayout_ReadsThePresetWithoutAHole_AsTheResetDoes()
@@ -979,8 +980,8 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.True(body.IsPreset);
         (string Key, string Size)[] expected =
         [
-            ("keyfigures", "wide"), ("gardens", "wide"), ("weather", "wide"), ("tips", "large"), ("month", "large"),
-            ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large"),
+            ("keyfigures", "wide"), ("gardens", "wide"), ("weather", "wide"), ("tips", "large"), ("todo", "medium"),
+            ("harvest", "medium"), ("month", "wide"), ("counters", "wide"), ("stats", "wide"),
         ];
         Assert.Equal(expected, body.Blocks.Select(b => (b.Key, b.Size)));
         Assert.Equal(expected, body.Capabilities.Preset.Select(b => (b.Key, b.Size)));
@@ -988,22 +989,22 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
 
     /// <summary>
     /// SMA-437, lot V3-08, step S5 — and a layout an Expert STORED does not
-    /// change, as in lot F5-b: stored as PR #300's preset — the Weather in
-    /// Large, before the Gardens —, it reads back block for block, in its own
-    /// order and at its own sizes, although the preset moved. Literals on
-    /// purpose: the previous preset, written out.
+    /// change, as in lot F5-b: stored as a previous preset, it reads back block
+    /// for block, in its own order and at its own sizes, although the preset
+    /// moved. Two previous presets (PR #301, fix round 1, R1): PR #300's — the
+    /// Weather in Large, before the Gardens — and the one this PR carried until
+    /// its fix round 1 — the six in Large, two by two. Literals on purpose: the
+    /// previous presets, written out (<see cref="PreviousExpertPresets"/>).
     /// </summary>
-    [Fact]
-    public async Task GetPreferences_AnExpertLayoutStoredAsThePreviousPreset_ReadsBackBlockForBlock_ThePresetMovedWithoutIt()
+    [Theory]
+    [InlineData("PR #300")]
+    [InlineData("PR #301 before its fix round 1")]
+    public async Task GetPreferences_AnExpertLayoutStoredAsThePreviousPreset_ReadsBackBlockForBlock_ThePresetMovedWithoutIt(string previousPreset)
     {
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
-        (string Key, string Size)[] previous =
-        [
-            ("keyfigures", "wide"), ("weather", "large"), ("gardens", "wide"), ("tips", "large"), ("month", "large"),
-            ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large"),
-        ];
+        var previous = PreviousExpertPresets[previousPreset];
         var stored = new SaveDashboardPreferencesRequest(
             DashboardLayout.Levels.Expert,
             [.. previous.Select(b => new SaveDashboardBlockRequest(b.Key, b.Size, false, null))]);
@@ -1570,6 +1571,28 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// </summary>
     private static readonly string[] EightWidgets =
         ["weather", "gardens", "tips", "month", "todo", "counters", "stats", "harvest"];
+
+    /// <summary>
+    /// The Expert presets that came before today's, as an Expert may have
+    /// stored them: literals, not derived from today's preset, which is the
+    /// thing that moved. PR #300's put the Weather in Large before the Gardens
+    /// (the 566 × 566 px hole, SMA-448); the one this PR carried until its fix
+    /// round 1 (SMA-437, lot V3-08, step S5) put the six after the Weather in
+    /// Large, two by two.
+    /// </summary>
+    private static readonly Dictionary<string, (string Key, string Size)[]> PreviousExpertPresets = new()
+    {
+        ["PR #300"] =
+        [
+            ("keyfigures", "wide"), ("weather", "large"), ("gardens", "wide"), ("tips", "large"), ("month", "large"),
+            ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large"),
+        ],
+        ["PR #301 before its fix round 1"] =
+        [
+            ("keyfigures", "wide"), ("gardens", "wide"), ("weather", "wide"), ("tips", "large"), ("month", "large"),
+            ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large"),
+        ],
+    };
 
     /// <summary>An Expert layout as stored JSON, its blocks sized and hidden as given.</summary>
     private static string StoredExpertLayout(IEnumerable<(string Key, string Size, bool Hidden)> blocks) =>
