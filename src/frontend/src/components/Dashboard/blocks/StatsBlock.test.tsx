@@ -681,7 +681,12 @@ describe('StatsBlock in the Full width (SMA-437, lot V3-08 — A-14)', () => {
       }))
     );
 
+  // Unmounted BEFORE `matchMedia` is unstubbed (the trap of fix round 1, #3 —
+  // GitHub `4059024241`): this `afterEach` runs before Testing Library's own
+  // cleanup under vitest's stacked hooks, and a tree still mounted could read
+  // the global the stub installed.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 

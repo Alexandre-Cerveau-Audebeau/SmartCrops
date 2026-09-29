@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Avatar from '@mui/material/Avatar';
@@ -7,6 +7,8 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import DashboardBlock from '../DashboardBlock';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
@@ -26,12 +28,14 @@ import { PLANT_HERO_PLACEHOLDER } from '../../../utils/plantDetail';
 import {
   COUNTERS_GARDEN_ALL,
   COUNTERS_LIST,
+  COUNTERS_WIDE_LIST,
   countersOptions,
   resolveCountersFigures,
 } from './countersOptions';
 
-// What each size lists, and over how many columns, is `COUNTERS_LIST` in
-// `countersOptions.ts` — beside the density lock it has to satisfy (round 7,
+// What each size lists, and over how many columns, is `COUNTERS_LIST` — and
+// `COUNTERS_WIDE_LIST` for the Full width (SMA-437, lot V3-08) — in
+// `countersOptions.ts`, beside the density lock it has to satisfy (round 7,
 // S29 — Extension #7-10). Two owners of one contract, nothing forcing them to
 // agree, was the shape `resolveCountersGarden` was extracted to end.
 
@@ -75,6 +79,12 @@ interface Props {
    * selection nobody can change is a lie the styling tells.
    */
   onOptionsChange?: (options: Record<string, unknown>) => void;
+  /**
+   * The list unfolded at mount — the layout harness measures the unfolded
+   * Full width (SMA-437, lot V3-08). The page never passes it: the list opens
+   * folded, and the fold is the reader's.
+   */
+  defaultExpanded?: boolean;
 }
 
 /**
@@ -90,6 +100,13 @@ interface Props {
  * states and means both: a colour hash costs nothing and is always there, while
  * twenty photos are twenty requests to a third party for images served at their
  * original size, a quarter of which have no photo to serve.
+ *
+ * SMA-437, lot V3-08 (A-14, decided by Alexandre on 28/09) — THE FULL WIDTH,
+ * the Expert's: the Large's list — the filter chips, the edible varieties,
+ * « Ornement », the link to the Library — over FOUR columns from 1 200 px,
+ * three from 900 px, two below (V3-08, § 2). Ten lines at rest, as the Large
+ * (`COUNTERS_WIDE_LIST`), then the fold unfolds the rest in place: the card
+ * grows, nothing scrolls inside it (A-N10), nothing is written.
  */
 export default function CountersBlock({
   size,
@@ -103,9 +120,18 @@ export default function CountersBlock({
   refreshing = false,
   onRetry,
   onOptionsChange,
+  defaultExpanded = false,
 }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
+  const theme = useTheme();
+  // The Full width's columns (lot V3-08): four from 1 200 px and three from
+  // 900 px — the theme's `lg` and `md`, where the dashboard grid goes four
+  // across and the Key figures tiles four in a row —, two below.
+  const fourColumns = useMediaQuery(theme.breakpoints.up('lg'));
+  const threeColumns = useMediaQuery(theme.breakpoints.up('md'));
+  /** Ties the fold to the lists it opens, for `aria-controls`. */
+  const listId = useId();
   // The PARSED document, whole: a writer below spreads it so a key another
   // build stored survives this build's write (round 6, Extension #4-11).
   const parsed = countersOptions(options);
@@ -136,11 +162,14 @@ export default function CountersBlock({
   // an aggregate refresh replaces `varieties` under the same size and garden,
   // and the refreshed list stayed expanded past its cap. A new fetch builds
   // new arrays, so the reference is the data's identity.
+  const listIdentity = `${size}:${activeGarden}`;
   const [expandedFor, setExpandedFor] = useState<{
     identity: string;
     source: readonly DashboardVarietyData[];
-  } | null>(null);
-  const listIdentity = `${size}:${activeGarden}`;
+  } | null>(() =>
+    // Opened on the list it mounts with, when the harness asks (lot V3-08).
+    defaultExpanded ? { identity: listIdentity, source: varieties } : null
+  );
   const expanded =
     expandedFor !== null &&
     expandedFor.identity === listIdentity &&
@@ -267,22 +296,28 @@ export default function CountersBlock({
   // only ways back were a resize or a filter change, which worked by accident
   // because they change the identity. The inverse gesture takes the same
   // place the « +N » held.
-  const moreButton = (hidden: number) =>
-    hidden > 0 ? (
+  //
+  // ONE button since SMA-437, lot V3-08, whose label turns from « +N
+  // variétés » to « Voir moins » and back while `aria-expanded` says which —
+  // the fold of Ce mois-ci's rows and of the Statistics' Full width. Two
+  // buttons, the second replacing the first, sent the keyboard's focus back
+  // to the page at every press. `beyond` is what the cap hides: the same
+  // folded and unfolded.
+  const moreButton = (beyond: number, controls: string) =>
+    beyond > 0 ? (
       <Button
         size="small"
-        onClick={() => setExpandedFor({ identity: listIdentity, source: varieties })}
+        data-counters-fold
+        aria-expanded={expanded}
+        aria-controls={controls}
+        onClick={() =>
+          setExpandedFor(expanded ? null : { identity: listIdentity, source: varieties })
+        }
         sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
       >
-        {t('dashboard.blocks.counters.more', { count: hidden })}
-      </Button>
-    ) : expanded ? (
-      <Button
-        size="small"
-        onClick={() => setExpandedFor(null)}
-        sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
-      >
-        {t('dashboard.blocks.counters.less')}
+        {expanded
+          ? t('dashboard.blocks.counters.less')
+          : t('dashboard.blocks.counters.more', { count: beyond })}
       </Button>
     ) : null;
 
@@ -398,16 +433,16 @@ export default function CountersBlock({
     </Box>
   );
 
-  const listBody = (limit: number, columns: number, withFilter: boolean) => {
+  const listBody = (limit: number, columns: number, withFilter: boolean, wide = false) => {
     // EDIBLE FIRST, then the cut (round 1, E6). Slicing `filtered` — whose
     // order is the aggregate's, by placement count — let ornamental varieties
     // take the first `limit` slots: five ferns ahead of the basil on a Medium
     // card meant three edible rows and « +N » over the rest. The headings stayed
     // in the right order while the wrong rows survived, so the widget's own
     // stated rule (« a gardener counting what they will eat should not have to
-    // read past the ferns ») was contradicted by its arithmetic. `hidden` is
-    // unchanged: the same varieties are hidden, they are just not the same ones
-    // shown.
+    // read past the ferns ») was contradicted by its arithmetic. The count
+    // beyond the cap is unchanged: the same varieties are hidden, they are just
+    // not the same ones shown.
     //
     // ONE pass (round 7, S44 — Extension #8-4): the partition was computed
     // twice over the list and twice again over `shown`. It is known before the
@@ -418,25 +453,35 @@ export default function CountersBlock({
     const ordered = [...edible, ...ornamental];
 
     const shown = expanded ? ordered : ordered.slice(0, limit);
-    const hidden = ordered.length - shown.length;
+    const beyond = Math.max(0, ordered.length - limit);
     const shownEdible = shown.slice(0, Math.min(shown.length, edible.length));
     const shownOrnamental = shown.slice(shownEdible.length);
+    const edibleId = `${listId}-edible`;
+    const ornamentalId = `${listId}-ornamental`;
 
     return (
       <Box
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-        }}
+        data-counters-wide={wide ? columns : undefined}
+        sx={
+          wide
+            ? // THE FULL WIDTH (lot V3-08 — A-N10): as tall as its list,
+              // never a scrolling zone — the card grows as the fold opens.
+              { display: 'flex', flexDirection: 'column', gap: '8px' }
+            : {
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }
+        }
       >
         {withFilter && gardenFilter}
         {/* `column-gap: 24px` on both artboards' grids (round 6, N6-3); the
             widget had 16. */}
         <Box
+          id={edibleId}
           sx={{
             display: 'grid',
             gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
@@ -468,6 +513,7 @@ export default function CountersBlock({
               {t('dashboard.blocks.counters.ornamentalSection')}
             </Typography>
             <Box
+              id={ornamentalId}
               sx={{
                 display: 'grid',
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
@@ -478,7 +524,10 @@ export default function CountersBlock({
             </Box>
           </>
         )}
-        {moreButton(hidden)}
+        {moreButton(
+          beyond,
+          shownOrnamental.length > 0 ? `${edibleId} ${ornamentalId}` : edibleId
+        )}
         {/* « Ajouter depuis la Bibliothèque → » is a LARGE-card element in the
             frozen design (artboard A3); the Medium card carries the eight
             varieties and the « +N » and nothing else (Main.dc.html). Keeping it
@@ -545,6 +594,16 @@ export default function CountersBlock({
     if (size === 'small') return smallBody();
     if (size === 'medium')
       return listBody(COUNTERS_LIST.medium.varieties, COUNTERS_LIST.medium.columns, false);
+    if (size === 'wide') {
+      // The Full width (lot V3-08): its own columns, by the width of the
+      // page — never the Large stretched.
+      const list = fourColumns
+        ? COUNTERS_WIDE_LIST.lg
+        : threeColumns
+          ? COUNTERS_WIDE_LIST.md
+          : COUNTERS_WIDE_LIST.xs;
+      return listBody(list.varieties, list.columns, true, true);
+    }
     return listBody(COUNTERS_LIST.large.varieties, COUNTERS_LIST.large.columns, true);
   };
 

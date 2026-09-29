@@ -201,8 +201,11 @@ export function resolveCountersFigures(
  * Here rather than in `CountersBlock.tsx` so the widget file exports components
  * only (react-refresh), and so a test can assert the lock without importing the
  * component.
+ *
+ * SMA-437, lot V3-08 (A-14) — the Full width keeps the Large's ten lines AT
+ * REST, then unfolds in place: its card grows, nothing scrolls inside it.
  */
-export const COUNTERS_LINE_CAP = { medium: 6, large: 10 } as const;
+export const COUNTERS_LINE_CAP = { medium: 6, large: 10, wide: 10 } as const;
 
 /**
  * What each size LISTS before « +N », and over how many columns — beside the
@@ -224,6 +227,22 @@ export const COUNTERS_LIST = {
 } as const;
 
 /**
+ * SMA-437, lot V3-08 (A-14, decided by Alexandre on 28/09) — THE FULL WIDTH,
+ * by the width of the page: four columns from 1 200 px, three from 900 px,
+ * two below — the Large's (V3-08, § 2). What each lists at rest is the most
+ * varieties whose WORST split still holds in the ten lines of
+ * `COUNTERS_LINE_CAP.wide`: 37 over four columns, 28 over three, 19 over two.
+ * The mock-up's `ten × columns` — 40, 30, 20 — overflows as soon as each
+ * section rounds its last line up: one edible variety and thirty-nine
+ * ornamental ones over four columns take 1 + 10 = eleven lines.
+ */
+export const COUNTERS_WIDE_LIST = {
+  lg: { varieties: 37, columns: 4 },
+  md: { varieties: 28, columns: 3 },
+  xs: { varieties: 19, columns: 2 },
+} as const;
+
+/**
  * The most data lines `varieties` rows can take over `columns` when they are
  * split into two sections that each round their last row up.
  *
@@ -236,7 +255,8 @@ export const COUNTERS_LIST = {
  * promised the general case and did not keep it. The loop below is the
  * definition itself: a section of `first` rows and one of the rest, each
  * rounding its last line up, over every `first` from none to all. At most
- * twenty varieties, so the cost is nothing.
+ * thirty-seven varieties — the Full width's (SMA-437, lot V3-08) — so the
+ * cost is nothing.
  */
 export const worstCaseLines = (varieties: number, columns: number): number => {
   let lines = 0;

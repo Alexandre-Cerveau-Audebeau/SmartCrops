@@ -6,12 +6,12 @@ import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../types/DashboardWeather';
 import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
-import { dashboardFixture } from '../test/fixtures/dashboard';
+import { dashboardFixture, varietyFixture } from '../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
 import { gardens as sceneGardens, gardensTwelve } from '../test/layout/scenes';
 import { SAVE_DEBOUNCE_MS } from '../hooks/useDashboardPreferences';
 import type { DashboardBlock, DashboardBlockKey, DashboardLevel, DashboardSize } from '../types/Dashboard';
-import type { DashboardGardenData } from '../types/DashboardData';
+import type { DashboardGardenData, DashboardVarietyData } from '../types/DashboardData';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -63,10 +63,21 @@ const lyon = (gardens: readonly DashboardGardenData[]): DashboardWeatherData =>
 interface Served {
   gardens?: readonly DashboardGardenData[];
   weather?: DashboardWeatherData;
+  varieties?: readonly DashboardVarietyData[];
 }
 
-/** The server: the Expert's capabilities, a stored layout — the preset, `key` at `size` — its gardens and its weather. */
-function serve(key: DashboardBlockKey, size: DashboardSize, { gardens = sceneGardens, weather = EMPTY_WEATHER_DATA }: Served = {}, level: DashboardLevel = 'expert') {
+/** Forty-four varieties on Terrasse, every one edible: 37 at rest over four columns, seven behind the fold. */
+const fortyFour = Array.from({ length: 44 }, (_, index) =>
+  varietyFixture({ plantId: `p-${index}`, commonName: `Variety ${index}`, gardenIds: ['g1'] })
+);
+
+/** The server: the Expert's capabilities, a stored layout — the preset, `key` at `size` — its gardens, their varieties and its weather. */
+function serve(
+  key: DashboardBlockKey,
+  size: DashboardSize,
+  { gardens = sceneGardens, weather = EMPTY_WEATHER_DATA, varieties = [] }: Served = {},
+  level: DashboardLevel = 'expert'
+) {
   const blocks: DashboardBlock[] = presetFor(level).map((block) => (block.key === key ? { ...block, size, hidden: false } : block));
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
@@ -78,7 +89,13 @@ function serve(key: DashboardBlockKey, size: DashboardSize, { gardens = sceneGar
     updatedAt: null,
   });
   vi.mocked(fetchFormulas).mockResolvedValue(catalogFor(level, { gardenCount: gardens.length }));
-  vi.mocked(fetchDashboardData).mockResolvedValue(dashboardFixture([...gardens]));
+  const aggregate = dashboardFixture([...gardens]);
+  vi.mocked(fetchDashboardData).mockResolvedValue(
+    varieties.length > 0
+      ? // The DISTINCT count the server sends (D11): the length of the list it serves.
+        { ...aggregate, varieties: [...varieties], totals: { ...aggregate.totals, varietyCount: varieties.length } }
+      : aggregate
+  );
   vi.mocked(fetchDashboardWeather).mockResolvedValue(weather);
 }
 
@@ -109,20 +126,29 @@ const lastSaved = () => vi.mocked(saveDashboardPreferences).mock.calls.at(-1)![0
 /** A widget's card — the frozen design's own `data-widget` handle. */
 const card = (key: DashboardBlockKey) => document.querySelector(`[data-widget="${key}"]`) as HTMLElement;
 
-/** The page believes it is 900 px wide or more (`useMediaQuery(up('md'))`), under 1 200. */
-const stubWidth900 = () =>
+/**
+ * The page believes it is `width` px wide: each `useMediaQuery` answers by its
+ * bounds — at 1 024 px the Statistics hold one line per garden (900) and the
+ * grid two columns (600); at 1 280 px, Counts go four across and the grid too
+ * (1 200).
+ */
+const stubWidth = (width: number) =>
   vi.stubGlobal(
     'matchMedia',
-    vi.fn().mockImplementation((query: string) => ({
-      matches: query.includes('min-width:900px') || query.includes('min-width:600px'),
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }))
+    vi.fn().mockImplementation((query: string) => {
+      const min = /min-width:\s*([\d.]+)px/.exec(query);
+      const max = /max-width:\s*([\d.]+)px/.exec(query);
+      return {
+        matches: Boolean(min || max) && (!min || width >= Number(min[1])) && (!max || width <= Number(max[1])),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      };
+    })
   );
 
 beforeEach(() => {
@@ -154,7 +180,7 @@ afterEach(() => {
 
 describe('Statistics in the Full width, on the page (SMA-437, lot V3-08, S2 — A-14)', () => {
   it('the Expert’s corner handle on Statistics at Large steps to the Full width: one line per garden appears, and the layout is saved with « wide »', async () => {
-    stubWidth900();
+    stubWidth(1024);
     serve('stats', 'large');
     await renderPage('Terrasse');
     await enterEditMode();
@@ -168,7 +194,7 @@ describe('Statistics in the Full width, on the page (SMA-437, lot V3-08, S2 — 
   });
 
   it('twelve gardens: ten lines at rest, « Show the 2 other gardens » unfolds them in place, « Show less » folds them — and nothing is written', async () => {
-    stubWidth900();
+    stubWidth(1024);
     serve('stats', 'wide', { gardens: gardensTwelve });
     await renderPage('Terrasse');
     const lines = () => [...card('stats').querySelectorAll('[data-stat-row]')].map((row) => row.firstElementChild!.textContent);
@@ -192,7 +218,7 @@ describe('Statistics in the Full width, on the page (SMA-437, lot V3-08, S2 — 
   });
 
   it('never contradicts the page (A-4): its chip states the Key figures band’s occupancy, folded and unfolded, and draws no weather figure — the warning is the Weather widget’s (V1)', async () => {
-    stubWidth900();
+    stubWidth(1024);
     serve('stats', 'wide', { gardens: gardensTwelve, weather: lyon(gardensTwelve) });
     await renderPage('Terrasse');
     const occupancy = () => card('keyfigures').querySelector('[data-key-figure="occupancy"] [data-key-figure-value]')!.textContent;
@@ -204,6 +230,63 @@ describe('Statistics in the Full width, on the page (SMA-437, lot V3-08, S2 — 
 
     // No weather figure of its own — no node of the weather family in it.
     expect(card('stats').innerHTML).not.toMatch(/data-weather/);
+    await waitFor(() => expect(screen.getByRole('note')).toHaveAttribute('data-weather-disclaimer'));
+  });
+});
+
+// SMA-437, lot V3-08, step S3 — COUNTS IN THE FULL WIDTH, on the page: four
+// columns from 1 200 px (A-14), ten lines at rest — thirty-seven varieties —
+// then the fold, in place, writing nothing.
+describe('Counts in the Full width, on the page (SMA-437, lot V3-08, S3 — A-14)', () => {
+  const rows = () => card('counters').querySelectorAll('[data-variety-row]').length;
+
+  it('the Expert’s corner handle on Counts at Large steps to the Full width: four columns at 1 280 px, and the layout is saved with « wide »', async () => {
+    stubWidth(1280);
+    serve('counters', 'large', { varieties: fortyFour });
+    await renderPage('Terrasse');
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change the size of Counts by variety — currently Large' }));
+
+    expect(await screen.findByRole('button', { name: 'Change the size of Counts by variety — currently Full width' })).toBeInTheDocument();
+    expect(card('counters').querySelector('[data-counters-wide="4"]')).not.toBeNull();
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
+    expect(lastSaved().blocks.find((block) => block.key === 'counters')!.size).toBe('wide');
+  });
+
+  it('forty-four varieties: thirty-seven at rest, « +7 varieties » unfolds them in place, « Show fewer » folds them — and nothing is written', async () => {
+    stubWidth(1280);
+    serve('counters', 'wide', { varieties: fortyFour });
+    await renderPage('Terrasse');
+    expect(rows()).toBe(37);
+    // The debounce's time is ADVANCED, never waited: simulated from the
+    // gestures on, once the page has loaded on the real clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    fireEvent.click(within(card('counters')).getByRole('button', { name: '+7 varieties' }));
+    expect(rows()).toBe(44);
+
+    fireEvent.click(within(card('counters')).getByRole('button', { name: 'Show fewer' }));
+    expect(rows()).toBe(37);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 100);
+    });
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
+  });
+
+  it('never contradicts the page (A-4): its chip states the Key figures band’s varieties, folded and unfolded, and draws no weather figure — the warning is the Weather widget’s (V1)', async () => {
+    stubWidth(1280);
+    serve('counters', 'wide', { varieties: fortyFour, weather: lyon(sceneGardens) });
+    await renderPage('Terrasse');
+    const band = () => card('keyfigures').querySelector('[data-key-figure="varieties"] [data-key-figure-value]')!.textContent;
+
+    expect(band()).toBe('44');
+    expect(within(card('counters')).getByText(`${band()} varieties`)).toBeInTheDocument();
+    fireEvent.click(within(card('counters')).getByRole('button', { name: '+7 varieties' }));
+    expect(within(card('counters')).getByText(`${band()} varieties`)).toBeInTheDocument();
+
+    expect(card('counters').innerHTML).not.toMatch(/data-weather/);
     await waitFor(() => expect(screen.getByRole('note')).toHaveAttribute('data-weather-disclaimer'));
   });
 });

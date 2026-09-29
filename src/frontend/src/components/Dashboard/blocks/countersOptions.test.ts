@@ -9,6 +9,7 @@ import {
   COUNTERS_GARDEN_ALL,
   COUNTERS_LINE_CAP,
   COUNTERS_LIST,
+  COUNTERS_WIDE_LIST,
   countersOptions,
   worstCaseLines,
   resolveCountersFigures,
@@ -346,5 +347,31 @@ describe('COUNTERS_LIST — what each size lists fits the lines its card allows'
         );
       }
     }
+  });
+});
+
+// SMA-437, lot V3-08 (A-14) — the Full width's columns, and what each lists at
+// rest, held to the same ten lines as the Large.
+describe('COUNTERS_WIDE_LIST — the Full width lists ten lines at rest, at each of its column counts', () => {
+  it.each(Object.entries(COUNTERS_WIDE_LIST))(
+    '%s: its worst split holds in ten lines, and one variety more would not',
+    (_, { varieties, columns }) => {
+      expect(worstCaseLines(varieties, columns)).toBeLessThanOrEqual(COUNTERS_LINE_CAP.wide);
+      // The MOST that holds: one fewer would fold a variety the card has a
+      // line for.
+      expect(worstCaseLines(varieties + 1, columns)).toBeGreaterThan(COUNTERS_LINE_CAP.wide);
+    }
+  );
+
+  it('goes four across from 1 200 px, three from 900 px, and two below — the Large’s, varieties and all', () => {
+    expect(COUNTERS_WIDE_LIST.lg.columns).toBe(4);
+    expect(COUNTERS_WIDE_LIST.md.columns).toBe(3);
+    expect(COUNTERS_WIDE_LIST.xs).toEqual(COUNTERS_LIST.large);
+  });
+
+  it('keeps the Large’s ten lines (A-14) — where ten times the columns, the mock-up’s count, takes eleven once « Ornement » rounds its own line up', () => {
+    expect(COUNTERS_LINE_CAP.wide).toBe(COUNTERS_LINE_CAP.large);
+    expect(worstCaseLines(40, 4)).toBe(11);
+    expect(worstCaseLines(30, 3)).toBe(11);
   });
 });
