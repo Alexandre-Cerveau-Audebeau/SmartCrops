@@ -6,10 +6,11 @@ namespace SmartCrops.Api.Tests.Dashboard;
 /// The sizes a block may take, per level (<see cref="DashboardCapabilities.SizesFor"/>):
 /// the Key figures band takes the Full width alone at the Expert level; the
 /// Weather takes the three sizes and then the Full width there (SMA-448, lot
-/// F4); every other block, at every level, takes Small, Medium and Large, in
-/// that order, and never the Full width; every preset's size is one its block
-/// may take; an unknown block takes none; the Full width is the fourth known
-/// size. The client pins the same table
+/// F4), and so does the Gardens widget (SMA-448, lot F5-b); every other block,
+/// at every level, takes Small, Medium and Large, in that order, and never the
+/// Full width; every preset's size is one its block may take; an unknown block
+/// takes none; the Full width is the fourth known size. The client pins the
+/// same table
 /// (<c>constants/dashboardCapabilities.test.ts</c>), and
 /// <see cref="DashboardLayoutReferenceTests"/> checks it against the shared
 /// reference file.
@@ -27,13 +28,17 @@ public class DashboardCapabilitiesTests
     private static bool IsExpertWeather(string key, string level) =>
         key == DashboardLayout.Blocks.Weather && level == DashboardLayout.Levels.Expert;
 
-    /// <summary>Every (block, level) of the table but the band and the Weather at the Expert level.</summary>
+    /// <summary>The Gardens at the Expert level — the third row that is Small, Medium, Large AND the Full width (SMA-448, lot F5-b).</summary>
+    private static bool IsExpertGardens(string key, string level) =>
+        key == DashboardLayout.Blocks.Gardens && level == DashboardLayout.Levels.Expert;
+
+    /// <summary>Every (block, level) of the table but the band, the Weather and the Gardens at the Expert level.</summary>
     public static TheoryData<string, string> OtherBlocksAtEveryLevel()
     {
         var data = new TheoryData<string, string>();
         foreach (var level in DashboardLayout.Levels.All)
         {
-            foreach (var key in DashboardLayout.Blocks.All.Where(key => !IsExpertBand(key, level) && !IsExpertWeather(key, level))) data.Add(key, level);
+            foreach (var key in DashboardLayout.Blocks.All.Where(key => !IsExpertBand(key, level) && !IsExpertWeather(key, level) && !IsExpertGardens(key, level))) data.Add(key, level);
         }
 
         return data;
@@ -76,6 +81,24 @@ public class DashboardCapabilitiesTests
             [DashboardLayout.Sizes.Small, DashboardLayout.Sizes.Medium, DashboardLayout.Sizes.Large, DashboardLayout.Sizes.Wide],
             DashboardCapabilities.SizesFor(DashboardLayout.Blocks.Weather, DashboardLayout.Levels.Expert));
         Assert.Equal(ThreeSizes, DashboardCapabilities.SizesFor(DashboardLayout.Blocks.Weather, DashboardLayout.Levels.Gardener));
+    }
+
+    /// <summary>
+    /// SMA-448, lot F5-b (V3-03 § 1, V3-04 § 4; pre-flight F5 § C.4, retained
+    /// on 28/09; A-N11): the Expert's Gardens is drawn in Full width — the
+    /// seven-column table — so its row is the three sizes and then the Full
+    /// width, the order the corner handle steps through (P → M → G → PL → P).
+    /// The Gardener's and the Novice's rows stay the three sizes: the Full
+    /// width is the Expert's alone, and a Gardener's cycle never reaches it.
+    /// </summary>
+    [Fact]
+    public void SizesFor_TheGardensAtTheExpertLevel_IsTheThreeSizesThenTheFullWidth()
+    {
+        Assert.Equal(
+            [DashboardLayout.Sizes.Small, DashboardLayout.Sizes.Medium, DashboardLayout.Sizes.Large, DashboardLayout.Sizes.Wide],
+            DashboardCapabilities.SizesFor(DashboardLayout.Blocks.Gardens, DashboardLayout.Levels.Expert));
+        Assert.Equal(ThreeSizes, DashboardCapabilities.SizesFor(DashboardLayout.Blocks.Gardens, DashboardLayout.Levels.Gardener));
+        Assert.Equal(ThreeSizes, DashboardCapabilities.SizesFor(DashboardLayout.Blocks.Gardens, DashboardLayout.Levels.Novice));
     }
 
     [Theory]

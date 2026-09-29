@@ -508,13 +508,16 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// must not be able to show a widget's Large stretched over the page's
     /// width. Strict on write. Tips has no Full width at any formula; the
     /// Weather has one at the Expert's alone (SMA-448, lot F4), never at the
-    /// Gardener's. At the two formulas that have widgets — the Novice has
+    /// Gardener's — and so does the Gardens widget (SMA-448, lot F5-b): a
+    /// Gardener cannot store it in Full width, by the interface nor by the
+    /// server (R8). At the two formulas that have widgets — the Novice has
     /// none since SMA-448, lot F2, and refuses every document for that reason.
     /// </summary>
     [Theory]
     [InlineData(DashboardLayout.Levels.Expert, DashboardLayout.Blocks.Tips)]
     [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Tips)]
     [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Weather)]
+    [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Gardens)]
     public async Task PutPreferences_SizeTheFormulaDoesNotPermit_Returns400(string level, string block)
     {
         var userId = Guid.NewGuid().ToString();
@@ -563,6 +566,71 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.NotNull(body);
         Assert.False(body.IsPreset);
         Assert.Equal(DashboardLayout.Sizes.Wide, Block(body, DashboardLayout.Blocks.Weather).Size);
+    }
+
+    /// <summary>
+    /// SMA-448, lot F5-b (V3-03, V3-04; pre-flight F5 § C.4): the Expert's
+    /// Gardens in Full width — the seven-column table — is a size the server
+    /// permits, stores and reads back as written. The Gardener's PUT of the
+    /// same is refused (the Theory above), and a stored one comes back to
+    /// Large (below): the Full width is the Expert's alone (A-N11).
+    /// </summary>
+    [Fact]
+    public async Task PutThenGetPreferences_GardensInTheFullWidth_AtTheExpert_IsStoredAsWritten()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. DashboardPresets.For(DashboardLayout.Levels.Expert).Select(b => new SaveDashboardBlockRequest(
+                b.Key,
+                b.Key == DashboardLayout.Blocks.Gardens ? DashboardLayout.Sizes.Wide : b.Size,
+                b.Hidden,
+                null))]);
+
+        var put = await Client.PutAsJsonAsync(Url, request);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.False(body.IsPreset);
+        Assert.Equal(DashboardLayout.Sizes.Wide, Block(body, DashboardLayout.Blocks.Gardens).Size);
+    }
+
+    /// <summary>
+    /// A Gardener's stored layout with the Gardens widget in Full width — the
+    /// Expert's document relayed by the archive at a change of formula, or a
+    /// row written by hand — is read back at the Gardener preset's size, Large,
+    /// in place: forgiving on read, where R8 refuses on write.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_StoredGardensInTheFullWidth_AtTheGardener_FallsBackToLarge()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            """
+            {"schemaVersion":1,"level":"gardener","blocks":[
+              {"key":"gardens","size":"wide","hidden":false,"options":null},
+              {"key":"weather","size":"small","hidden":false,"options":null}]}
+            """);
+
+        var response = await Client.GetAsync(Url);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
+
+        Assert.NotNull(body);
+        Assert.Equal(DashboardLayout.Blocks.Gardens, body.Blocks[0].Key);
+        // The Gardener preset's Gardens size.
+        Assert.Equal(DashboardLayout.Sizes.Large, body.Blocks[0].Size);
+        Assert.Equal(DashboardLayout.Sizes.Small, Block(body, DashboardLayout.Blocks.Weather).Size);
     }
 
     /// <summary>
