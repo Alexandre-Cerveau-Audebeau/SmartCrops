@@ -323,11 +323,13 @@ describe('emptyCells — a hole between two cards, or the page’s open end (SMA
     });
   });
 
-  it('tells the page’s open end from a hole: the Gardener preset’s half row at four columns is trailing', () => {
+  it('tells the page’s open end from a hole: half a row after the last card’s corner is trailing — the Gardener preset as it stood until PR #301’s fix round 1, written out', () => {
     // Weather M (columns 0-1, row 0), Gardens L (2-3, rows 0-1), Tips M (0-1,
     // row 1), This month M (0-1, row 2) — columns 2-3 of row 1 are the
     // Gardens' —, To-do M (2-3, row 2), Counters M (0-1, row 3): columns 2-3
-    // of row 3 come after the last corner.
+    // of row 3 come after the last corner. No preset leaves one any more (the
+    // test below), so the rule's other branch keeps this probe, as the hole
+    // above keeps PR #300's Expert preset.
     const items = [medium('weather'), large('gardens'), medium('tips'), medium('month'), medium('todo'), medium('counters')];
     expect(emptyCells(packGrid(items, 4), 4)).toEqual({
       between: [],
@@ -336,6 +338,16 @@ describe('emptyCells — a hole between two cards, or the page’s open end (SMA
         { col: 3, row: 3 },
       ],
     });
+  });
+
+  // PR #301, fix round 1, R2 — the Gardener preset AS SERVED, read from the
+  // reference file rather than copied: To-do in Large grows down into the half
+  // row the preset used to leave at four columns, and no other card moves.
+  it.each([4, 2, 1])('the Gardener preset leaves no empty cell at %i column(s) — no half row at the end of the page', (columns) => {
+    const items = presetFor('gardener')
+      .filter((block) => !block.hidden)
+      .map((block) => ({ key: block.key, ...spanFor(block.size, columns) }));
+    expect(emptyCells(packGrid(items, columns), columns)).toEqual({ between: [], trailing: [] });
   });
 
   it('finds nothing in a full grid, and nothing in an empty one', () => {

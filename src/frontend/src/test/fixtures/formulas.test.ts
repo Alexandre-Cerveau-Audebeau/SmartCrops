@@ -49,13 +49,15 @@ describe('the served presets (SMA-336, SMA-448)', () => {
     ]);
   });
 
-  it('Gardener shows six widgets, Gardens in Large, and hides Harvest — Statistics is not its own (SMA-448, R1)', () => {
+  // PR #301, fix round 1, R2: To-do in Large, into the half row four columns
+  // used to leave empty at the end of the page — no other card moves.
+  it('Gardener shows six widgets, Gardens and To-do in Large, and hides Harvest — Statistics is not its own (SMA-448, R1)', () => {
     expect(presetFor('gardener')).toEqual([
       { key: 'weather', size: 'medium', hidden: false },
       { key: 'gardens', size: 'large', hidden: false },
       { key: 'tips', size: 'medium', hidden: false },
       { key: 'month', size: 'medium', hidden: false },
-      { key: 'todo', size: 'medium', hidden: false },
+      { key: 'todo', size: 'large', hidden: false },
       { key: 'counters', size: 'medium', hidden: false },
       { key: 'harvest', size: 'large', hidden: true },
     ]);

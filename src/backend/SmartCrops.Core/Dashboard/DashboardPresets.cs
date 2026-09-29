@@ -62,6 +62,14 @@ public static class DashboardPresets
     /// preset lists the blocks its formula HAS, so the Gardener cannot bring
     /// Statistics back from its gallery, nor save it. Récolte stays, hidden, as
     /// before (Alexandre, 26/09, question 3).
+    ///
+    /// <para>PR #301, fix round 1, R2 — To-do in Large, where the frozen design
+    /// has it in Medium (retained for want of an objection, 29/09). The six
+    /// visible widgets filled fourteen cells, and four columns left half a row
+    /// empty at the end of the page, under Counts (SMA-437, lot V3-08: the
+    /// hole measure saw it). To-do grows down into that half row and no other
+    /// card moves: no cell empty at one, two or four columns
+    /// (`dashboardLayoutGrid.ts`, `emptyCells`).</para>
     /// </summary>
     private static readonly IReadOnlyList<DashboardPresetBlock> GardenerPreset =
     [
@@ -69,7 +77,7 @@ public static class DashboardPresets
         new(DashboardLayout.Blocks.Gardens, L, false),
         new(DashboardLayout.Blocks.Tips, M, false),
         new(DashboardLayout.Blocks.Month, M, false),
-        new(DashboardLayout.Blocks.Todo, M, false),
+        new(DashboardLayout.Blocks.Todo, L, false),
         new(DashboardLayout.Blocks.Counters, M, false),
         new(DashboardLayout.Blocks.Harvest, L, true),
     ];

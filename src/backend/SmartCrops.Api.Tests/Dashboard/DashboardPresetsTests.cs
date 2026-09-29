@@ -119,6 +119,29 @@ public class DashboardPresetsTests
         Assert.Equal(expected, expert.Select(b => (b.Key, b.Size, b.Hidden)));
     }
 
+    /// <summary>
+    /// The frozen design's Gardener (<c>_spec.md</c> § 8) — Weather Medium,
+    /// Gardens Large, Tips, This month, To-do and Counts Medium, Harvest
+    /// hidden — but To-do in Large since PR #301, fix round 1, R2 (retained
+    /// for want of an objection, 29/09): the six visible widgets filled
+    /// fourteen cells, and four columns left half a row empty at the end of
+    /// the page. To-do grows down into it, and no other card moves. Literals
+    /// on purpose: this is the decision, written out.
+    /// </summary>
+    [Fact]
+    public void For_Gardener_IsTheFrozenDesignsSix_ToDoInLarge_HarvestHidden()
+    {
+        var gardener = DashboardPresets.For(DashboardLayout.Levels.Gardener);
+
+        (string Key, string Size, bool Hidden)[] expected =
+        [
+            ("weather", "medium", false), ("gardens", "large", false), ("tips", "medium", false),
+            ("month", "medium", false), ("todo", "large", false), ("counters", "medium", false),
+            ("harvest", "large", true),
+        ];
+        Assert.Equal(expected, gardener.Select(b => (b.Key, b.Size, b.Hidden)));
+    }
+
     [Theory]
     [MemberData(nameof(Levels))]
     public void For_EveryLevel_UsesOnlyKnownSizes(string level)

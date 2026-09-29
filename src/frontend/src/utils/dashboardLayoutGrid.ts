@@ -199,7 +199,8 @@ export interface EmptyCells {
  *
  * `trailing`: an empty cell after that corner — beside or under the last
  * cards, on the rows they reach: where the page ends before the grid does,
- * as the Gardener preset's half row at four columns.
+ * as the Gardener preset's half row at four columns did until PR #301's fix
+ * round 1 (R2: To-do in Large grows down into it).
  *
  * Pure, over any placement — the model's, from {@link packGrid}, or the one
  * a harness reads back from the boxes an engine laid out — so the rule that

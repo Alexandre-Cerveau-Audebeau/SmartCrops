@@ -3,6 +3,7 @@ import { rectSortingStrategy } from '@dnd-kit/sortable';
 import { describe, expect, it } from 'vitest';
 import { createDashboardSortingStrategy } from './dashboardSortingStrategy';
 import { moveItem, packGrid, spanFor, translationFor, type GridItem } from '../../utils/dashboardLayoutGrid';
+import { presetFor } from '../../test/fixtures/formulas';
 
 // SMA-336 round 3 (V6). The render test in GardensDashboard.edit.test.tsx says
 // the drop preview never sits on a widget; this file says WHY it used to, by
@@ -236,11 +237,12 @@ describe('the dashboard sorting strategy — a Full-width row of its own height 
   it.each([4, 2])(
     'without a Full width, translates exactly as the model of round 3 did — the 30 couples of the Gardener preset at %i columns',
     (columns) => {
-      // The preset's six visible widgets: Weather M, Gardens L, Tips M,
-      // This month M, To-do M, Counters M.
-      const sizes = ['medium', 'large', 'medium', 'medium', 'medium', 'medium'] as const;
-      const keys = ['weather', 'gardens', 'tips', 'month', 'todo', 'counters'];
-      const gardener: GridItem[] = keys.map((key, i) => ({ key, ...spanFor(sizes[i]!, columns) }));
+      // The preset's six visible widgets, as served — read, no longer copied
+      // (PR #301, fix round 1, R2): Weather M, Gardens L, Tips M, This month
+      // M, To-do L, Counters M.
+      const gardener: GridItem[] = presetFor('gardener')
+        .filter((block) => !block.hidden)
+        .map((block) => ({ key: block.key, ...spanFor(block.size, columns) }));
       const placed = packGrid(gardener, columns);
       const rects = gardener.map((item) => {
         const cell = placed.get(item.key)!;

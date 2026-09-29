@@ -672,6 +672,21 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         expect(height, run.id).toBeCloseTo(566, 0);
       }
     });
+
+    // PR #301, fix round 1, R2 — the Gardener preset too, since To-do takes
+    // the Large: the half row four columns left at the end of its page is
+    // gone, read in the engine as the Expert's grid is.
+    it.each(RUNS.map((run) => run.id))('%s: the Gardener preset leaves no cell empty either — no half row at the end of the page — at rest and in Edit mode (PR #301, fix round 1, R2)', (id) => {
+      const run = runOf(id);
+      for (const name of ['grid-gardener', 'grid-gardener-edit']) {
+        const { cells } = gridOf(run, name);
+        expect(Object.keys(cells.placed), `${id} ${name}`).toHaveLength(6);
+        expect({ between: cells.between, trailing: cells.trailing }, `${id} ${name}: ${JSON.stringify(cells.placed)}`).toEqual({
+          between: [],
+          trailing: [],
+        });
+      }
+    });
   });
 
   describe.each(RUNS)('$id', (run) => {
