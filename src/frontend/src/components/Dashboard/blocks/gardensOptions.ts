@@ -124,17 +124,17 @@ const byName =
  * moving, not yet or just written), the same rule reads the ids: absent from
  * the list first, then in the list's order — so a garden created while the
  * panel is open takes the head too, and a deleted id is simply not found.
+ *
+ * The local order is read through an INDEX (id → rank) built once per sort,
+ * never scanned in the comparator (PR #299, fix round 1, A): the Expert has
+ * no ceiling on gardens, and `indexOf` in a comparator made a sort of N
+ * gardens cost O(N² log N).
  */
-const byCustom =
-  (order: readonly string[] | null) =>
-  (a: DashboardGardenData, b: DashboardGardenData): number => {
-    const place = (garden: DashboardGardenData): number | null => {
-      if (order !== null) {
-        const index = order.indexOf(garden.id);
-        return index < 0 ? null : index;
-      }
-      return garden.sortOrder;
-    };
+const byCustom = (order: readonly string[] | null) => {
+  const rank = order === null ? null : new Map(order.map((id, index) => [id, index]));
+  const place = (garden: DashboardGardenData): number | null =>
+    rank === null ? garden.sortOrder : (rank.get(garden.id) ?? null);
+  return (a: DashboardGardenData, b: DashboardGardenData): number => {
     const pa = place(a);
     const pb = place(b);
     if (pa === null && pb === null) return byCreated(a, b);
@@ -142,6 +142,7 @@ const byCustom =
     if (pb === null) return 1;
     return pa - pb || byCreated(a, b);
   };
+};
 
 /**
  * The gardens in the order the widget shows them — a FRESH array, the one given

@@ -151,6 +151,37 @@ describe('sortGardens — « Ordre personnalisé » (A-N5)', () => {
     const twin = garden('t', 'Jumeau', { sortOrder: 2, createdAt: '2026-05-01T00:00:00Z' });
     expect(sortGardens([ranked2, twin], 'custom', 'fr').map((g) => g.id)).toEqual(['t', 'r2']);
   });
+
+  it('never scans the local order inside the comparator: an index built once per sort (PR #299, fix round 1, A)', () => {
+    // An order whose `indexOf` throws: a comparator that scanned it would
+    // throw; the index reads it once, through `map`, before any comparison.
+    const order = Object.assign(['r7', 'r0', 'r2'], {
+      indexOf: (): number => {
+        throw new Error('the comparator scanned the order');
+      },
+    });
+    expect(sortGardens([ranked0, ranked2, ranked7, fresh], 'custom', 'fr', order).map((g) => g.id)).toEqual(['n1', 'r7', 'r0', 'r2']);
+  });
+
+  it('pins the order of a thousand gardens — by the server’s places, and by a local order — as it was before the index', () => {
+    // 1 000 gardens in a scrambled input: 900 ranked at the places 0…899
+    // (a permutation), 100 never ranked, all created one minute apart.
+    const many = Array.from({ length: 1000 }, (_, i) =>
+      garden(`g${i}`, `Jardin ${i}`, {
+        sortOrder: i < 900 ? (i * 7) % 900 : null,
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
+      })
+    );
+    const scrambled = [...many].reverse();
+    const byPlaces = sortGardens(scrambled, 'custom', 'fr').map((g) => g.id);
+    // The 100 unranked first, newest first (g999 … g900), then the 900 ranked by place 0 … 899.
+    expect(byPlaces.slice(0, 100)).toEqual(Array.from({ length: 100 }, (_, i) => `g${999 - i}`));
+    const ranked = many.filter((g) => g.sortOrder !== null).sort((a, b) => a.sortOrder! - b.sortOrder!);
+    expect(byPlaces.slice(100)).toEqual(ranked.map((g) => g.id));
+    // A local order of the thousand, scrambled by a fixed stride: read back exactly.
+    const local = Array.from({ length: 1000 }, (_, i) => `g${(i * 383) % 1000}`);
+    expect(sortGardens(scrambled, 'custom', 'fr', local).map((g) => g.id)).toEqual(local);
+  });
 });
 
 describe('searchGardens — by the name, blind to case and accents, the hidden ones included', () => {
