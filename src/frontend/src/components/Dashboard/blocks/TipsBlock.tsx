@@ -823,6 +823,9 @@ export default function TipsBlock({
    * sentence it holds is not written again) —, the effect stays what says
    * WHEN. The hook empties the region 5 s after the sentence (the contract of
    * the mockups' report), a removal no one hears; the note on the card stays.
+   * An INVISIBLE region (`visible: false`): the one kind the hook still
+   * empties since Alexandre's decision of 30/09 (PR #303, fix round 1, R1) —
+   * off screen, emptying it moves nothing.
    */
   const announced = loading
     ? ''
@@ -836,7 +839,7 @@ export default function TipsBlock({
   // weather note the weather's — so a refresh of the OTHER aggregate neither
   // empties nor re-announces it; `refreshing`, the union, keeps the buttons.
   const announcedRefreshing = loadError ? gardensRefreshing : weatherRefreshing;
-  const { announce, regionProps } = useLiveRegion<HTMLElement>();
+  const { announce, regionProps } = useLiveRegion<HTMLElement>({ visible: false });
   useEffect(() => {
     announce(announcedRefreshing ? '' : announced);
   }, [announce, announced, announcedRefreshing]);

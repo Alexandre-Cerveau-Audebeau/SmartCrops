@@ -5,11 +5,13 @@ import { LIVE_REGION_CLEAR_MS, useLiveRegion } from './useLiveRegion';
 
 // SMA-437, lot V3-07, P3 (contract v3 A-6, A-20) — the live region the
 // dashboard's surfaces share: mounted once, born empty, written by its ref;
-// `announce(text)` replaces, empties after 5 s, and writes nothing twice.
+// `announce(text)` replaces and writes nothing twice. PR #303, fix round 1,
+// R1 (Alexandre, 30/09 — the [P] n° 14): a note ON SCREEN keeps its
+// sentence; a region only assistive technology hears is emptied after 5 s.
 
-/** A surface with its region, and a button that says `text`. */
-function Surface({ text, tick = 0 }: { text: string; tick?: number }) {
-  const { announce, regionProps } = useLiveRegion();
+/** A surface with its region — a note on screen unless `visible` says otherwise —, and a button that says `text`. */
+function Surface({ text, tick = 0, visible = true }: { text: string; tick?: number; visible?: boolean }) {
+  const { announce, regionProps } = useLiveRegion({ visible });
   return (
     <div data-tick={tick}>
       <button type="button" onClick={() => announce(text)}>
@@ -20,9 +22,9 @@ function Surface({ text, tick = 0 }: { text: string; tick?: number }) {
   );
 }
 
-/** A card whose EFFECT says its state — the Tips and To-do cards' use. */
+/** A card whose EFFECT says its state — the Tips and To-do cards' use: an invisible region. */
 function Card({ state }: { state: string }) {
-  const { announce, regionProps } = useLiveRegion();
+  const { announce, regionProps } = useLiveRegion({ visible: false });
   useEffect(() => {
     announce(state);
   }, [announce, state]);
@@ -100,15 +102,15 @@ describe('useLiveRegion — one region, born empty, polite (A-6)', () => {
   });
 });
 
-describe('useLiveRegion — emptied after five seconds (the mockups’ report, § 3.1)', () => {
+describe('useLiveRegion — an INVISIBLE region, emptied after five seconds (the mockups’ report, § 3.1; A-20)', () => {
   it('empties the region 5 s after the last sentence — a new sentence restarts the delay', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const { rerender } = render(<Surface text="“Tips” hidden." />);
+    const { rerender } = render(<Surface text="“Tips” hidden." visible={false} />);
     say();
     act(() => {
       vi.advanceTimersByTime(3000);
     });
-    rerender(<Surface text="“Tips” shown." />);
+    rerender(<Surface text="“Tips” shown." visible={false} />);
     say();
     act(() => {
       vi.advanceTimersByTime(LIVE_REGION_CLEAR_MS - 1);
@@ -123,9 +125,9 @@ describe('useLiveRegion — emptied after five seconds (the mockups’ report, �
 
   it('`announce("")` empties it at once, and nothing is left to run', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const { rerender } = render(<Surface text="“Tips” hidden." />);
+    const { rerender } = render(<Surface text="“Tips” hidden." visible={false} />);
     say();
-    rerender(<Surface text="" />);
+    rerender(<Surface text="" visible={false} />);
     say();
     expect(region().childNodes).toHaveLength(0);
     expect(vi.getTimerCount()).toBe(0);
@@ -133,11 +135,54 @@ describe('useLiveRegion — emptied after five seconds (the mockups’ report, �
 
   it('never outlives its region: unmounted, the pending emptying is cancelled', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const { unmount } = render(<Surface text="“Tips” hidden." />);
+    const { unmount } = render(<Surface text="“Tips” hidden." visible={false} />);
     say();
     expect(vi.getTimerCount()).toBe(1);
 
     unmount();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+// PR #303, fix round 1, R1 — Alexandre, 30/09, on the [P] n° 14 (« ok »):
+// emptied 5 s after its sentence, a note ON SCREEN folded, and the button
+// under it moved up without a gesture — « un bouton ne change jamais de
+// place sous le doigt » —; a confirmation that stays shown follows his
+// decision on « Enregistré ». It stays until the next sentence replaces it,
+// or until its panel closes and takes the region with it.
+describe('useLiveRegion — a VISIBLE note stays until the next sentence (PR #303, fix round 1, R1)', () => {
+  it('keeps its sentence: six seconds on, the note still says it — no emptying is even set', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    render(<Surface text="“Tips” hidden." visible />);
+    const writes = watch(region());
+    say();
+    expect(vi.getTimerCount()).toBe(0);
+
+    act(() => {
+      vi.advanceTimersByTime(LIVE_REGION_CLEAR_MS + 1000);
+    });
+    expect(region().textContent).toBe('“Tips” hidden.');
+    expect(writes()).toBe(1);
+  });
+
+  it('the next sentence REPLACES the note in one write — the old one taken out, the new one put in, never the old said again', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { rerender } = render(<Surface text="“Tips” hidden." visible />);
+    say();
+    act(() => {
+      vi.advanceTimersByTime(LIVE_REGION_CLEAR_MS + 1000);
+    });
+
+    const observer = new MutationObserver(() => {});
+    observer.observe(region(), { childList: true, characterData: true, subtree: true });
+    rerender(<Surface text="“Tips” shown." visible />);
+    say();
+    const records = observer.takeRecords();
+    observer.disconnect();
+
+    expect(region().textContent).toBe('“Tips” shown.');
+    expect(records).toHaveLength(1);
+    expect([...records[0]!.removedNodes].map((node) => node.textContent)).toEqual(['“Tips” hidden.']);
+    expect([...records[0]!.addedNodes].map((node) => node.textContent)).toEqual(['“Tips” shown.']);
   });
 });

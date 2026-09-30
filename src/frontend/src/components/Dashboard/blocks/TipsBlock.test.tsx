@@ -12,6 +12,7 @@ import { dayFixture, linkFixture, locationFixture, weekFixture, weatherFixture }
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import { gardenViewOf, type GardenView } from '../../../utils/gardenStats';
+import { LIVE_REGION_CLEAR_MS } from '../../../hooks/useLiveRegion';
 import TipsBlock from './TipsBlock';
 import { gardenAdvice } from './gardenAdvice';
 
@@ -158,7 +159,10 @@ function liveRegion(card: HTMLElement) {
 }
 
 afterEach(() => {
+  // Unmount first, on the clock the test ran on; then the real clock — this
+  // hook the one owner of the timer mode, whether a test faked it or not.
   cleanup();
+  vi.useRealTimers();
   localStorage.clear();
 });
 
@@ -753,6 +757,34 @@ describe('TipsBlock — each announced sentence follows the flag of ITS aggregat
   it('the fatal sentence, a refresh of the GARDENS: emptied, then said again once — its own flag', () => {
     const { region, rerender } = fatalShown();
     saidAgainOnce(region, rerender, fatalState, flags(true, false), FATAL);
+  });
+});
+
+// SMA-437, PR #303, fix round 1, R1 (Alexandre, 30/09 — the [P] n° 14): the
+// visible notes are no longer emptied; the 5 s emptying is kept for the
+// regions no one sees — this card's is off screen (`visuallyHidden`), so
+// emptying it moves nothing, and the note drawn on the card stays. Green
+// before that change and after it: this pins that the change leaves this
+// region's emptying where it was.
+describe('TipsBlock — an invisible region, still emptied 5 s after its sentence (PR #303, fix round 1, R1)', () => {
+  const NOTE = 'Weather unavailable — the watering tips can’t be checked for now.';
+
+  it('says the weather note, then empties 5 s after it — the note drawn on the card stays', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { card, rerender } = renderBlock({ gardens: [terrasse] });
+    const { region } = liveRegion(card);
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherError: true });
+    expect(region.textContent).toBe(NOTE);
+
+    act(() => {
+      vi.advanceTimersByTime(LIVE_REGION_CLEAR_MS - 1);
+    });
+    expect(region.textContent).toBe(NOTE);
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(region).toBeEmptyDOMElement();
+    expect(card.querySelector('[data-tips-weather-note]')).toHaveTextContent(NOTE);
   });
 });
 

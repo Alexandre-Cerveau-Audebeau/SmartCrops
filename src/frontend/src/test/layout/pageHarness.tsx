@@ -2,6 +2,7 @@
 // the moment the modules below evaluate.
 import './freeze';
 import './pageSetup';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import '../../i18n/i18n';
@@ -69,6 +70,11 @@ import { gridCellsOf, measureCard, ownText, visible, wrappedTexts, type CardMeas
  * size pill, `panelFocus()` says where the focus stands, and
  * `watchPanelRegion()` / `panelRegionWrites()` count the sentences its region
  * is handed.
+ *
+ * SMA-437, PR #303, fix round 1, R1: THE PAGE'S TIMERS, SIMULATED on demand
+ * — `fakeTimers()` once the page is loaded, `advanceTimers(ms)` to move them
+ * on —, so the suite can read the drawer six seconds after a gesture without
+ * waiting six seconds.
  */
 
 const params = new URLSearchParams(location.search);
@@ -835,6 +841,20 @@ function textContrasts(root: Element): PanelText[] {
 let regionRecords: MutationRecord[] = [];
 let regionObserver: MutationObserver | null = null;
 
+/**
+ * A timer set while the page's timers are simulated: the instant it is due
+ * on the simulated clock, the order it was set in — two due at the same
+ * instant run in that order, as the engine runs them —, and what it runs.
+ */
+interface SimulatedTimer {
+  at: number;
+  order: number;
+  run: () => void;
+}
+
+/** The simulated clock once `fakeTimers()` has installed it: its instant, and the timers it holds, by id. */
+let simulated: { now: number; order: number; nextId: number; timers: Map<number, SimulatedTimer> } | null = null;
+
 const page = {
   /**
    * The page has drawn what the scenario needs: the fonts in, the grid laid
@@ -1254,6 +1274,66 @@ const page = {
     const writes = regionRecords.filter((record) => record.type === 'characterData' || record.addedNodes.length > 0).length;
     regionRecords = [];
     return writes;
+  },
+
+  /**
+   * SMA-437, PR #303, fix round 1, R1 — from now on the page's `setTimeout`
+   * and `clearTimeout` are SIMULATED, those two alone, as the unit tests
+   * fake them: a timer set runs only when `advanceTimers` reaches it.
+   * Installed once the page is loaded and the drawer open, so nothing the
+   * page needed to be drawn waits on it; what took the engine's own
+   * functions before — React's scheduler — keeps them, and every wait of the
+   * launcher is on a frame, never on a timer. The next `navigate` loads a
+   * new page, on the engine's timers again.
+   */
+  fakeTimers(): true {
+    if (simulated) return true;
+    const clock = { now: 0, order: 0, nextId: 1, timers: new Map<number, SimulatedTimer>() };
+    const setSimulated = (handler: TimerHandler, delay?: number, ...args: unknown[]): number => {
+      if (typeof handler !== 'function') throw new Error('A simulated timer runs a function, not a string.');
+      const id = clock.nextId++;
+      const run = () => (handler as (...values: unknown[]) => void)(...args);
+      clock.timers.set(id, { at: clock.now + Math.max(0, Number(delay) || 0), order: clock.order++, run });
+      return id;
+    };
+    const clearSimulated = (id?: number) => {
+      if (id !== undefined) clock.timers.delete(id);
+    };
+    window.setTimeout = setSimulated as unknown as typeof window.setTimeout;
+    window.clearTimeout = clearSimulated as unknown as typeof window.clearTimeout;
+    simulated = clock;
+    return true;
+  },
+
+  /**
+   * Moves the simulated clock `ms` on: every timer due by then runs, in the
+   * order it falls due — those it sets too, when they fall due in time —,
+   * inside `flushSync`, so what they change is committed before this
+   * returns. `flushSync` stands for `act` here: this bundle is the app's,
+   * built in production mode, and React exports `act` from its development
+   * build alone. What the page then does on its own — a request answered —
+   * is left to `settle()`. Answers how many timers still wait.
+   */
+  advanceTimers(ms: number): number {
+    const clock = simulated;
+    if (!clock) throw new Error('The page’s timers are not simulated: call fakeTimers() first.');
+    const target = clock.now + ms;
+    flushSync(() => {
+      for (;;) {
+        let due: [number, SimulatedTimer] | null = null;
+        for (const entry of clock.timers) {
+          const timer = entry[1];
+          if (timer.at > target) continue;
+          if (!due || timer.at < due[1].at || (timer.at === due[1].at && timer.order < due[1].order)) due = entry;
+        }
+        if (!due) break;
+        clock.timers.delete(due[0]);
+        clock.now = due[1].at;
+        due[1].run();
+      }
+    });
+    clock.now = target;
+    return clock.timers.size;
   },
 
   /** Types `value` into the `n`-th element `selector` finds, as React reads it: the native setter, then an input event. False when there is none. */

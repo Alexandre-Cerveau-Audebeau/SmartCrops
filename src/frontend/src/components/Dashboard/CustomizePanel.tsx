@@ -108,9 +108,12 @@ export default function CustomizePanel({
   // The one live region of the panel — `useLiveRegion()` (SMA-437, lot V3-07,
   // P3; contract A-6, A-20), the rule of #278 and S2 of PR #288: mounted with
   // the panel, born empty, its text written by its ref, the same sentence
-  // never written twice, emptied 5 s after it is said. What the list says of
-  // a move comes here too (`onAnnounce`).
-  const { announce, regionProps } = useLiveRegion();
+  // never written twice. A note ON SCREEN (PR #303, fix round 1, R1 —
+  // Alexandre, 30/09): it keeps its sentence until the next one replaces it
+  // or the drawer closes with it — emptied after 5 s, it folded, and
+  // « Réinitialiser » under it moved up without a gesture. What the list
+  // says of a move comes here too (`onAnnounce`).
+  const { announce, regionProps } = useLiveRegion({ visible: true });
 
   // A row picked up at the keyboard: Escape then CANCELS the drag and must
   // not close the drawer under it (the options panel's rule, pre-flight C.9).

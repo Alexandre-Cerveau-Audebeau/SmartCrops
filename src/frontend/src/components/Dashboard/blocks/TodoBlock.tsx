@@ -522,6 +522,9 @@ export default function TodoBlock({
    * sentence it holds is not written again) —, the effect stays what says
    * WHEN. The hook empties the region 5 s after the sentence (the contract of
    * the mockups' report), a removal no one hears; the note on the card stays.
+   * An INVISIBLE region (`visible: false`): the one kind the hook still
+   * empties since Alexandre's decision of 30/09 (PR #303, fix round 1, R1) —
+   * off screen, emptying it moves nothing.
    */
   const announced =
     !loading && !loadError && weatherUnavailable && size !== 'small'
@@ -530,7 +533,7 @@ export default function TodoBlock({
   // Round 5, S-8 (GitHub `4055087124`): the note follows the ONE flag of its
   // own aggregate, the weather's — a refresh of the gardens alone neither
   // empties nor re-announces it; `refreshing`, the union, keeps the button.
-  const { announce, regionProps } = useLiveRegion<HTMLElement>();
+  const { announce, regionProps } = useLiveRegion<HTMLElement>({ visible: false });
   useEffect(() => {
     announce(weatherRefreshing ? '' : announced);
   }, [announce, announced, weatherRefreshing]);

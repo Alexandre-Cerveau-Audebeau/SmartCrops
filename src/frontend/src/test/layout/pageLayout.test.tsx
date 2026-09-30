@@ -7,6 +7,7 @@ import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
 import { capabilitiesFor, presetFor } from '../fixtures/formulas';
 import { permitsBlock, sizesFor } from '../../constants/dashboardCapabilities';
+import { LIVE_REGION_CLEAR_MS } from '../../hooks/useLiveRegion';
 import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 
 /**
@@ -35,7 +36,10 @@ import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
  * SMA-437, lot V3-07, P5: THE CUSTOMIZE DRAWER too, opened from the header —
  * forty cases at the five widths, measured as one card, every text's contrast
  * read on what is painted behind it, the keyboard driven for real — in the
- * Weather group's hook (the second describe).
+ * Weather group's hook (the second describe). PR #303, fix round 1, R1: its
+ * note and « Réinitialiser » under it, read just after a switch and six
+ * seconds later on the page's simulated timers — the button never moves by
+ * itself.
  *
  * Chrome as the scenes' suite finds it: without it the suite is SKIPPED on a
  * workstation and FAILS on CI.
@@ -1526,9 +1530,23 @@ interface PanelKeyboard {
   sized: PanelStep & { pressed: number };
 }
 
-/** The drawer, by viewport then by case; its keyboard's scenario, by viewport; its probes, at 360 px. */
+/**
+ * PR #303, fix round 1, R1 — the drawer just after a switch, and six seconds
+ * later on the page's simulated timers: what its note says, where
+ * « Réinitialiser » stands in the window, and the layouts the page had
+ * written — the save the switch set off leaves within those six seconds,
+ * which shows the simulated clock drove the page.
+ */
+interface PanelStay {
+  said: [string, string];
+  reset: [number, number];
+  saves: [number, number];
+}
+
+/** The drawer, by viewport then by case; its keyboard's scenario and its note six seconds on, by viewport; its probes, at 360 px. */
 const panelCases = new Map<string, Map<string, PanelRun>>();
 const panelKeyboards = new Map<string, PanelKeyboard>();
+const panelStays = new Map<string, PanelStay>();
 const panelProbes = new Map<string, PanelMeasure>();
 const panelFailures = new Map<string, unknown>();
 
@@ -1537,6 +1555,8 @@ const PANEL_OPEN =
   "(() => { const paper = document.querySelector('[data-panel-widgets]')?.closest('.MuiDrawer-paper'); return !!paper && getComputedStyle(paper).transform === 'none'; })()";
 /** What the drawer's one region says. */
 const PANEL_SAID = "(document.querySelector('[data-customize-said]')?.textContent ?? '')";
+/** « Réinitialiser la disposition X »: the one button of the list's column — the others are in the rows. */
+const PANEL_RESET = '[data-panel-widgets] > button';
 
 /** « Personnaliser » in the header, and the drawer open. */
 async function openPanel(session: PageSession) {
@@ -1593,6 +1613,33 @@ async function runPanelKeyboard(session: PageSession): Promise<PanelKeyboard> {
 }
 
 /**
+ * PR #303, fix round 1, R1 — the Gardener's drawer, in French: the page's
+ * timers simulated once it is open, « Compteurs par variété » hidden by its
+ * switch; the note and « Réinitialiser » read once the region has said it,
+ * then six seconds later — past the five after which the note used to be
+ * emptied —, the simulated clock moved on and the page settled.
+ */
+async function runPanelStay(session: PageSession): Promise<PanelStay> {
+  await session.navigate('level=gardener&theme=light&lang=fr');
+  await openPanel(session);
+  await call(session, 'fakeTimers()');
+  await call(session, 'clickPanel("counters", "switch")');
+  await session.waitFor(`${PANEL_SAID} !== ''`, 'the switch said');
+  await settle(session);
+  const reset = JSON.stringify(PANEL_RESET);
+  const said = await session.evaluate<string>(PANEL_SAID);
+  const top = await session.evaluate<number>(`window.__page.top(${reset})`);
+  const saves = await session.evaluate<number>('window.__page.saves()');
+  await call(session, `advanceTimers(${LIVE_REGION_CLEAR_MS + 1000})`);
+  await settle(session);
+  return {
+    said: [said, await session.evaluate<string>(PANEL_SAID)],
+    reset: [top, await session.evaluate<number>(`window.__page.top(${reset})`)],
+    saves: [saves, await session.evaluate<number>('window.__page.saves()')],
+  };
+}
+
+/**
  * Every case of one viewport, in one Chrome: the drawer as it opens, then
  * « Compteurs par variété » — the longest name — hidden by its switch; the
  * keyboard's scenario; and, at 360 px, the probes.
@@ -1611,6 +1658,7 @@ async function runPanelView(view: PageView): Promise<Map<string, PanelRun>> {
       byCase.set(panelCase.id, { rest, said: await session.evaluate<PanelMeasure>('window.__page.measurePanel()') });
     }
     panelKeyboards.set(view.id, await runPanelKeyboard(session));
+    panelStays.set(view.id, await runPanelStay(session));
     if (view.width === 360) {
       const probes = [
         ['panel-veil', 'level=expert&theme=dark&lang=fr'],
@@ -2082,6 +2130,23 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
         open: true,
       });
       expect(keyboard.sized.pressed, 'sized: the pill pressed').toBe(2);
+    });
+
+    // PR #303, fix round 1, R1 — Alexandre, 30/09, on the [P] n° 14 (« ok »):
+    // « un bouton ne change jamais de place sous le doigt ». Emptied 5 s after
+    // its sentence, the note folded, and « Réinitialiser » under it moved up
+    // with no gesture. The note now stays until the next sentence or until
+    // the drawer closes; the button stays with it.
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: « Réinitialiser » never moves by itself — just after a switch and six seconds later, the note still says it and the button stands where it stood (PR #303, fix round 1, R1)', (viewId) => {
+      const stay = panelStays.get(viewId);
+      if (!stay) throw new Error(`No note-stays scenario at ${viewId}: ${String(panelFailures.get(`panel-${viewId}`) ?? 'not run')}`);
+      const [top] = stay.reset;
+      expect({ said: stay.said.map(plain), reset: stay.reset }).toEqual({
+        said: ['« Compteurs par variété » masqué.', '« Compteurs par variété » masqué.'],
+        reset: [top, top],
+      });
+      // The simulated clock drove the page: the save the switch set off left within the six seconds.
+      expect(stay.saves[1], `saves ${JSON.stringify(stay.saves)}`).toBeGreaterThan(stay.saves[0]);
     });
 
     describe('the probes — the same checks see a drawer broken on purpose (SMA-446)', () => {

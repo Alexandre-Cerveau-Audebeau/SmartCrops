@@ -7,6 +7,7 @@ import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
+import { LIVE_REGION_CLEAR_MS } from '../hooks/useLiveRegion';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -138,8 +139,11 @@ afterEach(() => {
   // Testing Library's automatic cleanup (vitest's `sequence.hooks = 'stack'`),
   // and the page sends its pending layout save as it unmounts — cleared first,
   // the mocks would record that write for the next test. The real
-  // `scrollIntoView` comes back once nothing mounted can call it.
+  // `scrollIntoView` comes back once nothing mounted can call it, and the
+  // real clock with it — this hook the one owner of the timer mode, whether
+  // a test faked it or not.
   cleanup();
+  vi.useRealTimers();
   Element.prototype.scrollIntoView = originalScrollIntoView;
   vi.clearAllMocks();
 });
@@ -325,6 +329,42 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
 
     expect(screen.getByText('Expert view')).toBeInTheDocument();
     expect(screen.queryByText('Expert view · adjusted')).toBeNull();
+  });
+
+  // SMA-437, PR #303, fix round 1, R1 — Alexandre, 30/09, on the [P] n° 14
+  // (« ok »): the band's note is on screen too, so it stays until the next
+  // sentence replaces it or the panel closes with it — never emptied 5 s
+  // after it was said.
+  it('keeps the note on screen: six seconds after ▲, it still says the new place (PR #303, fix round 1, R1)', async () => {
+    const panel = await openPanel();
+    // The page loaded and the panel open, its values in: from here, the
+    // timers the region would be emptied by are simulated.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Move “Varieties” up' }));
+    expect(said(panel)).toHaveTextContent('“Varieties” moves to 2nd place.');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LIVE_REGION_CLEAR_MS + 1000);
+    });
+    expect(said(panel)).toHaveTextContent('“Varieties” moves to 2nd place.');
+  });
+
+  it('takes the note away with the panel: « Done » closes it; opened again, its region is born empty (PR #303, fix round 1, R1)', async () => {
+    const panel = await openPanel();
+    const region = said(panel);
+    fireEvent.click(within(panel).getByRole('button', { name: 'Move “Varieties” up' }));
+    expect(region).toHaveTextContent('“Varieties” moves to 2nd place.');
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Done' }));
+    // The proof that the panel is gone: its region out of the document. MUI
+    // hides a closing Popover from the accessibility tree at once
+    // (`ModalManager.remove`), but unmounts it only once its exit transition
+    // has run — a gear clicked in between opens the SAME panel again.
+    await waitFor(() => expect(region.isConnected).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Key figures options' }));
+    const again = await screen.findByRole('dialog');
+    expect(said(again)).not.toBe(region);
+    expect(said(again).childNodes).toHaveLength(0);
   });
 
   it('writes the French ordinals — « 1ʳᵉ place », « 2ᵉ place »', async () => {

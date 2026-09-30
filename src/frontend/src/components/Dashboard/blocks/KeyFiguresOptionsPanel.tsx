@@ -91,8 +91,10 @@ export default function KeyFiguresOptionsPanel({ options, input, onChange }: Pro
   // ONCE, outside the two views, born empty, and stays mounted; its text is
   // written into it by its ref — never rendered by React, never set in an
   // effect. SMA-437, lot V3-07, P3 (contract A-6, A-20): the region and its
-  // write are `useLiveRegion()`'s, which also empties it 5 s after a sentence.
-  const { announce, regionProps } = useLiveRegion();
+  // write are `useLiveRegion()`'s. A note ON SCREEN (PR #303, fix round 1,
+  // R1 — Alexandre, 30/09): it keeps its sentence until the next one
+  // replaces it or the panel closes with it, never emptied after 5 s.
+  const { announce, regionProps } = useLiveRegion({ visible: true });
   // What a replacement or a swap says: written once the four emplacements are
   // drawn again — by the ref callback of their view, which MOUNTS as the
   // catalogue closes (the two views are keyed apart, below: R2-1 of PR #288;

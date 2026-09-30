@@ -9,6 +9,7 @@ import { isAdjusted } from '../../constants/dashboardCapabilities';
 import { capabilitiesFor, presetFor } from '../../test/fixtures/formulas';
 import { contrast, hex, over, type Rgb } from '../../test/contrast';
 import { rulesFor } from '../../test/dashboardDom';
+import { LIVE_REGION_CLEAR_MS } from '../../hooks/useLiveRegion';
 import CustomizePanel from './CustomizePanel';
 import type { DashboardBlock, DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
 
@@ -22,6 +23,8 @@ import type { DashboardBlock, DashboardBlockKey, DashboardLevel, DashboardSize }
 interface PanelProps {
   level: DashboardLevel;
   initial: DashboardBlock[];
+  /** The drawer open — the default — or closed. */
+  open?: boolean;
   mode?: 'light' | 'dark';
   switching?: boolean;
   onClose?: () => void;
@@ -36,7 +39,7 @@ interface PanelProps {
  * `patchBlock` do — its reset brings the preset's layout back, and
  * « adjusted » is the page's own `isAdjusted`.
  */
-function Panel({ level, initial, mode = 'light', switching = false, onClose = () => {}, onReset, onReorder, onVisibilityChange, onSizeChange }: PanelProps) {
+function Panel({ level, initial, open = true, mode = 'light', switching = false, onClose = () => {}, onReset, onReorder, onVisibilityChange, onSizeChange }: PanelProps) {
   const [blocks, setBlocks] = useState(initial);
   const patch = (key: DashboardBlockKey, change: Partial<DashboardBlock>) =>
     setBlocks((current) => current.map((block) => (block.key === key ? { ...block, ...change } : block)));
@@ -44,7 +47,7 @@ function Panel({ level, initial, mode = 'light', switching = false, onClose = ()
     <ThemeProvider theme={createAppTheme(mode)}>
       <LanguageProvider>
         <CustomizePanel
-          open
+          open={open}
           level={level}
           capabilities={capabilitiesFor(level)}
           blocks={blocks}
@@ -91,8 +94,10 @@ beforeEach(() => {
 afterEach(() => {
   // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
   // automatic cleanup; what it puts back stays until the tree that reads it
-  // is gone.
+  // is gone — the clock a test ran on included: the real one comes back here,
+  // the one owner of the timer mode, whether a test faked it or not.
   cleanup();
+  vi.useRealTimers();
   Element.prototype.scrollIntoView = originalScrollIntoView;
   vi.restoreAllMocks();
 });
@@ -317,5 +322,73 @@ describe('CustomizePanel — the drawer at night (A-18)', () => {
     expect(contrast(secondary, paintedBehindText(paper))).toBeGreaterThanOrEqual(4.5);
     // The veil MUI still writes inline, painted, would hold it under 4.5.
     expect(contrast(secondary, over(nightVeil(paper), hex(theme.palette.background.paper)))).toBeLessThan(4.5);
+  });
+});
+
+// SMA-437, PR #303, fix round 1, R1 — Alexandre, 30/09, on the [P] n° 14
+// (« ok »): the panel's note is ON SCREEN, so it stays until the next
+// sentence replaces it or the drawer closes with it. Emptied 5 s after its
+// sentence, it folded, and « Réinitialiser » under it moved up with no
+// gesture — « un bouton ne change jamais de place sous le doigt ». Where the
+// button stands is measured in Chrome (`pageLayout.test.tsx`); here, what
+// the region holds.
+describe('CustomizePanel — the note stays until the next sentence (PR #303, fix round 1, R1)', () => {
+  /** Six seconds: past the five after which the note used to be emptied. */
+  const LATER = LIVE_REGION_CLEAR_MS + 1000;
+
+  it('keeps the switch’s sentence on screen: six seconds on, the note still says it', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    render(<Panel level="gardener" initial={presetFor('gardener')} />);
+    fireEvent.click(within(rowOf('tips')).getByRole('switch', { name: 'Show — Tips' }));
+    expect(said().textContent).toBe('“Tips” hidden.');
+
+    act(() => {
+      vi.advanceTimersByTime(LATER);
+    });
+    expect(said().textContent).toBe('“Tips” hidden.');
+  });
+
+  it('the next gesture’s sentence replaces the note in ONE write — the old one taken out, the new one put in, the old never said again', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    render(<Panel level="gardener" initial={presetFor('gardener')} />);
+    fireEvent.click(within(rowOf('tips')).getByRole('switch', { name: 'Show — Tips' }));
+    act(() => {
+      vi.advanceTimersByTime(LATER);
+    });
+
+    const region = said();
+    const observer = new MutationObserver(() => {});
+    observer.observe(region, { childList: true, characterData: true, subtree: true });
+    fireEvent.click(within(rowOf('tips')).getByRole('switch', { name: 'Show — Tips' }));
+    const records = observer.takeRecords();
+    observer.disconnect();
+
+    expect(region.textContent).toBe('“Tips” shown.');
+    expect(records).toHaveLength(1);
+    expect([...records[0]!.removedNodes].map((node) => node.textContent)).toEqual(['“Tips” hidden.']);
+    expect([...records[0]!.addedNodes].map((node) => node.textContent)).toEqual(['“Tips” shown.']);
+  });
+
+  it('goes with the drawer: closed, the note is gone with its region; opened again, the region is born empty', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const initial = presetFor('gardener');
+    const { rerender } = render(<Panel level="gardener" initial={initial} />);
+    const region = said();
+    fireEvent.click(within(rowOf('tips')).getByRole('switch', { name: 'Show — Tips' }));
+    expect(region.textContent).toBe('“Tips” hidden.');
+
+    rerender(<Panel level="gardener" initial={initial} open={false} />);
+    // The drawer's slide out, which MUI's transition ends on a timer; the
+    // proof it is gone is its region out of the document — MUI hides a
+    // closing drawer from the accessibility tree at once, and unmounts it
+    // only once the slide has run.
+    act(() => {
+      vi.advanceTimersByTime(LATER);
+    });
+    expect(region.isConnected).toBe(false);
+
+    rerender(<Panel level="gardener" initial={initial} />);
+    expect(said()).not.toBe(region);
+    expect(said().childNodes).toHaveLength(0);
   });
 });
