@@ -3032,11 +3032,11 @@ describe('GardenPlanner garden templates (SMA-18 lot 2)', () => {
 
   async function applyFromDialog(index: number) {
     const dialog = await openTemplates();
-    fireEvent.click(
-      within(dialog).getAllByRole('button', { name: 'Use this template' })[
-        index
-      ]!
-    );
+    // The catalogue first (SMA-452 § 12): « Use this template » is the name
+    // the buttons take once the catalogue is ready — « Loading the library… »
+    // before — and `renderReady` waits for it only on a plan with plants.
+    const use = await within(dialog).findAllByRole('button', { name: 'Use this template' });
+    fireEvent.click(use[index]!);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   }
 
@@ -3243,11 +3243,9 @@ describe('GardenPlanner garden templates (SMA-18 lot 2)', () => {
     it('a template applied here replaces the dimensions just typed, as a draft; Undo brings the typed grid back', async () => {
       const templates = await confirmFirstSetup();
 
-      fireEvent.click(
-        within(templates).getAllByRole('button', {
-          name: 'Use this template',
-        })[1]!
-      );
+      // The catalogue first — as in `applyFromDialog` above.
+      const use = await within(templates).findAllByRole('button', { name: 'Use this template' });
+      fireEvent.click(use[1]!);
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       const grid = screen.getByRole('grid');
       expect(grid).toHaveAttribute('aria-colcount', '10');

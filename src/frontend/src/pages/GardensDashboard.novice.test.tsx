@@ -443,6 +443,9 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    // The catalogue first (SMA-452 § 12): the dialog opens before it, and
+    // while it loads « Loading the formulas… » is a second status.
+    await within(dialog).findByRole('button', { name: 'Keep Novice' });
 
     const region = within(dialog).getByRole('status');
     expect(region).toHaveTextContent('');
@@ -600,6 +603,10 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
 
     fireEvent.click(screen.getByRole('button', { name: 'Novice view — change formula' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    // The catalogue first (SMA-452 § 12): while it loads, « Loading the
+    // formulas… » is a second status — this read lost that race in the merge
+    // CI of `e640de7` and of `7e5069d`.
+    await within(dialog).findByRole('button', { name: 'Keep Novice' });
     expect(within(dialog).getByRole('status')).toHaveTextContent('');
     expect(document.querySelector('[aria-live="assertive"]')).toBeNull();
   });

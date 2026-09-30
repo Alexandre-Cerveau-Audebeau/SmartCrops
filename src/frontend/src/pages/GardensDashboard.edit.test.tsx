@@ -687,7 +687,11 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     servePreferences('gardener');
     renderPage();
 
-    await screen.findByRole('button', { name: 'Edit' });
+    // The grid first (SMA-452 § 12): « Edit » is drawn, disabled, before it,
+    // and an absence read then holds on a page with no widget at all.
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).toBeEnabled());
+    expect(document.querySelector('[data-widget="weather"]')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Move Weather' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Hide Weather' })).toBeNull();
   });

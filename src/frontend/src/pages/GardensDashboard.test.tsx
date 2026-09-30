@@ -233,7 +233,11 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
     servePreferences('expert', blocks);
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
+    // « Customize » is drawn, DISABLED, while the layout loads: a click then is
+    // lost — C28's trap, and `openPanel`'s (SMA-452 § 12).
+    const customize = await screen.findByRole('button', { name: 'Customize' });
+    await waitFor(() => expect(customize).toBeEnabled());
+    fireEvent.click(customize);
 
     const panel = await screen.findByRole('dialog', { name: 'Customize' });
     const add = within(panel).getByRole('button', { name: 'Add Key figures' });

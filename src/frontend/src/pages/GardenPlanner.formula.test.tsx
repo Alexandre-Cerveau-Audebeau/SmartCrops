@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { catalogFor } from '../test/fixtures/formulas';
+import { deferred } from '../test/responses';
 import type { GardenLayoutData } from '../services/gardenLayoutApi';
-import type { DashboardLevel } from '../types/Dashboard';
+import type { DashboardLevel, FormulasCatalog } from '../types/Dashboard';
 import type { Garden } from '../types/Garden';
 
 vi.mock('../services/plantApi', () => ({ fetchPlants: vi.fn() }));
@@ -108,8 +109,16 @@ describe('the planner bounded by the formula (SMA-448, lot F3, L3)', () => {
 
   it('a Novice plan at 10 × 8: the add buttons are live, and nothing is said', async () => {
     serve('novice', 10, 8);
+    // The catalogue HELD, then landed inside `act` (SMA-452 § 12): until it
+    // lands the planner has no bound at all, and draws live buttons and no
+    // note then too — `enterShapeMode` only waits for the request to leave.
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValue(catalogue.promise);
     renderPlanner();
     await enterShapeMode();
+    await act(async () =>
+      catalogue.resolve(catalogFor('novice', { gardenCount: 1, largestGardenSize: { width: 10, height: 8 } }))
+    );
 
     for (const name of ADD) expect(screen.getByRole('button', { name })).toBeEnabled();
     expect(document.querySelector('[data-planner-limit]')).toBeNull();
@@ -163,9 +172,13 @@ describe('the planner bounded by the formula (SMA-448, lot F3, L3)', () => {
 
   it('the catalogue could not be read: the buttons stay live and nothing is said — the server remains the judge', async () => {
     serve('novice', 20, 20);
-    vi.mocked(fetchFormulas).mockRejectedValue(new Error('down'));
+    // Held, then failed inside `act` (SMA-452 § 12): a catalogue still on its
+    // way draws the same live buttons, so the failure must have landed first.
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValue(catalogue.promise);
     renderPlanner();
     await enterShapeMode();
+    await act(async () => catalogue.reject(new Error('down')));
 
     for (const name of ADD) expect(screen.getByRole('button', { name })).toBeEnabled();
     expect(document.querySelector('[data-planner-limit]')).toBeNull();

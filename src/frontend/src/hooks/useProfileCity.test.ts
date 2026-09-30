@@ -1,7 +1,8 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProfileCity } from './useProfileCity';
 import { fetchProfile, type UserProfile } from '../services/profileApi';
+import { deferred } from '../test/responses';
 
 vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
 
@@ -37,20 +38,27 @@ describe('useProfileCity (SMA-336 PR 3b/5, Q2)', () => {
   });
 
   it('answers null for a blank city, so the link is not drawn', async () => {
-    vi.mocked(fetchProfile).mockResolvedValue(profile('   '));
+    // The profile HELD, then landed inside `act` (SMA-452 § 12): null is also
+    // the hook's first answer, so a read before the landing proves nothing.
+    const read = deferred<UserProfile>();
+    vi.mocked(fetchProfile).mockReturnValue(read.promise);
 
     const { result } = renderHook(() => useProfileCity(true));
 
     await waitFor(() => expect(fetchProfile).toHaveBeenCalled());
+    await act(async () => read.resolve(profile('   ')));
     expect(result.current).toBeNull();
   });
 
   it('answers null when the read fails, without throwing', async () => {
-    vi.mocked(fetchProfile).mockRejectedValue(new Error('boom'));
+    // Held, then failed inside `act` — for the same reason as above.
+    const read = deferred<UserProfile>();
+    vi.mocked(fetchProfile).mockReturnValue(read.promise);
 
     const { result } = renderHook(() => useProfileCity(true));
 
     await waitFor(() => expect(fetchProfile).toHaveBeenCalled());
+    await act(async () => read.reject(new Error('boom')));
     expect(result.current).toBeNull();
   });
 

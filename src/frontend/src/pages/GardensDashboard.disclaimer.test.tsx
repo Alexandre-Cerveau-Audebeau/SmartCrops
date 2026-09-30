@@ -120,10 +120,16 @@ async function renderPage(language: Language = 'fr', mode: 'light' | 'dark' = 'l
   return { theme };
 }
 
-/** The aggregate has landed: the Weather widget left its skeleton. */
+/**
+ * The aggregate has landed IN the Weather widget: the widget is on the page and
+ * left its skeleton. « No skeleton » alone is also true before the grid exists
+ * (SMA-452 § 12): the widget's presence is what makes it a proof — the
+ * `weatherWidget()` of the weather-by-formula suite.
+ */
 const weatherLanded = () =>
   waitFor(() => {
     expect(fetchDashboardWeather).toHaveBeenCalled();
+    expect(document.querySelector('[data-widget="weather"]')).not.toBeNull();
     expect(document.querySelector('[data-weather-skeleton]')).toBeNull();
   });
 

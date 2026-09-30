@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../../contexts/UnitSystemContext';
-import { fetchProfile } from '../../../services/profileApi';
+import { fetchProfile, type UserProfile } from '../../../services/profileApi';
 import { saveProfileLocation, searchLocations } from '../../../services/weatherApi';
 import { gardenFixture } from '../../../test/fixtures/dashboard';
 import {
@@ -16,6 +16,7 @@ import {
   weatherFixture,
 } from '../../../test/fixtures/weather';
 import { declaredAtBreakpoint, rulesFor } from '../../../test/dashboardDom';
+import { deferred } from '../../../test/responses';
 import type { DashboardSize } from '../../../types/Dashboard';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
 import { LOCATION_SEARCH_DEBOUNCE_MS } from '../locationTools';
@@ -577,9 +578,23 @@ describe('WeatherBlock — the invitations (F.4)', () => {
   });
 
   it('hides the profile link when the profile city is blank', async () => {
+    // The profile HELD, then landed inside `act` (SMA-452 § 12): the link is
+    // also absent before the profile arrives, so a read then proves nothing.
+    const read = deferred<UserProfile>();
+    vi.mocked(fetchProfile).mockReturnValue(read.promise);
     const { widget } = renderBlock({ size: 'medium', weather: unlocated() });
 
     await waitFor(() => expect(fetchProfile).toHaveBeenCalled());
+    await act(async () =>
+      read.resolve({
+        email: 'a@example.test',
+        displayName: null,
+        firstName: null,
+        lastName: null,
+        city: null,
+        hasPassword: true,
+      })
+    );
     expect(widget.queryByRole('button', { name: 'Use my profile city' })).toBeNull();
   });
 
