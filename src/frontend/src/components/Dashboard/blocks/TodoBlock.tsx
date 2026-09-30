@@ -17,6 +17,7 @@ import { TASK_ICONS } from './todoIcons';
 import { todoSentence } from './todoSentence';
 import { gardensWithoutWeather, todoTasks, type TodoTask } from './todoTasks';
 import { nameList } from './weatherFormat';
+import { useLiveRegion } from '../../../hooks/useLiveRegion';
 import { useUnitSystem } from '../../../hooks/useUnitSystem';
 import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
@@ -514,8 +515,13 @@ export default function TodoBlock({
    * where React renders the text: the same through a local state —
    * `setState` in the effect, the form G-3 proposed — is an ERROR under this
    * project's `react-hooks/set-state-in-effect`, and writing the DOM is the
-   * use that rule names as the effect's own. No timer, no promise: one
-   * effect, two dependencies.
+   * use that rule names as the effect's own. One effect, two dependencies.
+   *
+   * SMA-437, lot V3-07, P3 (contract A-6, A-20): the region and its write are
+   * `useLiveRegion()`'s — born empty, written by its ref, the same guard (the
+   * sentence it holds is not written again) —, the effect stays what says
+   * WHEN. The hook empties the region 5 s after the sentence (the contract of
+   * the mockups' report), a removal no one hears; the note on the card stays.
    */
   const announced =
     !loading && !loadError && weatherUnavailable && size !== 'small'
@@ -524,12 +530,10 @@ export default function TodoBlock({
   // Round 5, S-8 (GitHub `4055087124`): the note follows the ONE flag of its
   // own aggregate, the weather's — a refresh of the gardens alone neither
   // empties nor re-announces it; `refreshing`, the union, keeps the button.
-  const statusRef = useRef<HTMLElement>(null);
+  const { announce, regionProps } = useLiveRegion<HTMLElement>();
   useEffect(() => {
-    const node = statusRef.current;
-    const next = weatherRefreshing ? '' : announced;
-    if (node && node.textContent !== next) node.textContent = next;
-  }, [announced, weatherRefreshing]);
+    announce(weatherRefreshing ? '' : announced);
+  }, [announce, announced, weatherRefreshing]);
 
   return (
     <DashboardBlock
@@ -539,8 +543,8 @@ export default function TodoBlock({
       editing={editing}
       chip={chip || undefined}
     >
-      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. No child: its text is the effect's, above. */}
-      <Typography ref={statusRef} role="status" aria-live="polite" data-todo-status sx={visuallyHidden} />
+      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. No child: its text is `announce`'s, above. */}
+      <Typography {...regionProps} data-todo-status sx={visuallyHidden} />
       {body()}
     </DashboardBlock>
   );

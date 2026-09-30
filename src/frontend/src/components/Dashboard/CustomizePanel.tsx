@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { arrayMove } from '@dnd-kit/sortable';
 import Box from '@mui/material/Box';
@@ -15,6 +15,7 @@ import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import ReorderableList from './ReorderableList';
 import { BLOCK_ICONS } from './blockIcons';
 import { permitsBlock, sizesFor } from '../../constants/dashboardCapabilities';
+import { useLiveRegion } from '../../hooks/useLiveRegion';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../theme/useDashboardTokens';
 import {
@@ -104,15 +105,12 @@ export default function CustomizePanel({
   // is never offered, whatever the layout carries; none before they are read.
   const listed = blocks.filter((block) => capabilities !== null && permitsBlock(capabilities, block.key));
 
-  // The one live region of the panel — the rule of #278 and S2 of PR #288: a
-  // region is announced when text CHANGES inside it, not when it is inserted
-  // already filled. So it is mounted with the panel, born empty, and its text
-  // is written into it by its ref — never rendered by React, never set in an
-  // effect. What the list says of a move comes here too (`onAnnounce`).
-  const regionRef = useRef<HTMLDivElement | null>(null);
-  const say = useCallback((text: string) => {
-    if (regionRef.current) regionRef.current.textContent = text;
-  }, []);
+  // The one live region of the panel — `useLiveRegion()` (SMA-437, lot V3-07,
+  // P3; contract A-6, A-20), the rule of #278 and S2 of PR #288: mounted with
+  // the panel, born empty, its text written by its ref, the same sentence
+  // never written twice, emptied 5 s after it is said. What the list says of
+  // a move comes here too (`onAnnounce`).
+  const { announce, regionProps } = useLiveRegion();
 
   // A row picked up at the keyboard: Escape then CANCELS the drag and must
   // not close the drawer under it (the options panel's rule, pre-flight C.9).
@@ -133,13 +131,13 @@ export default function CustomizePanel({
 
   const setShown = (block: DashboardBlock, shown: boolean) => {
     onVisibilityChange(block.key, !shown);
-    say(t(shown ? 'dashboard.panel.shownSaid' : 'dashboard.panel.hiddenSaid', { widget: nameOf(block.key) }));
+    announce(t(shown ? 'dashboard.panel.shownSaid' : 'dashboard.panel.hiddenSaid', { widget: nameOf(block.key) }));
   };
 
   const setSize = (block: DashboardBlock, size: DashboardSize) => {
     if (size === block.size) return;
     onSizeChange(block.key, size);
-    say(t('dashboard.panel.sizedSaid', { widget: nameOf(block.key), size: t(`dashboard.sizes.${size}`) }));
+    announce(t('dashboard.panel.sizedSaid', { widget: nameOf(block.key), size: t(`dashboard.sizes.${size}`) }));
   };
 
   const levelName = t(`dashboard.levels.${level}.name`);
@@ -153,7 +151,7 @@ export default function CustomizePanel({
   const reset = () => {
     if (!adjusted) return;
     onReset();
-    say(t('dashboard.panel.resetSaid', { level: levelName }));
+    announce(t('dashboard.panel.resetSaid', { level: levelName }));
   };
 
   const sectionTitleSx = {
@@ -383,19 +381,17 @@ export default function CustomizePanel({
             placeOf={placeOf}
             label={t('dashboard.panel.widgetsSection')}
             onMove={move}
-            onAnnounce={say}
+            onAnnounce={announce}
             onDraggingChange={setDragging}
             disabled={switching}
             renderRow={renderRow}
             renderBelow={renderSizes}
           />
           {/* No children: React never renders its text, so a re-render never
-              rewrites what `say` wrote. The note's tint once it says
+              rewrites what `announce` wrote. The note's tint once it says
               something (`.live:not(:empty)`), nothing while it is empty. */}
           <Box
-            ref={regionRef}
-            role="status"
-            aria-live="polite"
+            {...regionProps}
             data-customize-said
             sx={{
               ...noteSx,
