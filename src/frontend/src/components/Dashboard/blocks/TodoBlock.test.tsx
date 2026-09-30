@@ -15,6 +15,7 @@ import {
 } from '../../../test/fixtures/weather';
 import { rulesFor } from '../../../test/dashboardDom';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
+import { LIVE_REGION_CLEAR_MS } from '../../../hooks/useLiveRegion';
 import TodoBlock from './TodoBlock';
 import { todoTasks } from './todoTasks';
 
@@ -794,6 +795,38 @@ describe('TodoBlock — the note’s announcement follows the WEATHER flag alone
     expect(region.textContent).toBe(NOTE);
     expect(filled).toHaveLength(1);
     expect(filled[0]!.addedNodes).toHaveLength(1);
+  });
+});
+
+// SMA-437, PR #303, fix round 1, R1 (Alexandre, 30/09 — the [P] n° 14): the
+// visible notes are no longer emptied; the 5 s emptying is kept for the
+// regions no one sees — this card's is off screen (`visuallyHidden`), so
+// emptying it moves nothing, and the note drawn on the card stays. Green
+// before that change and after it: this pins that the change leaves this
+// region's emptying where it was.
+describe('TodoBlock — an invisible region, still emptied 5 s after its sentence (PR #303, fix round 1, R1)', () => {
+  const NOTE = 'Weather unavailable — watering is not planned for now.';
+
+  it('says the weather note, then empties 5 s after it — the note drawn on the card stays', () => {
+    // This file fakes `Date` alone; the region's delay needs `setTimeout`
+    // too — installed again with it, on the same instant.
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(FROZEN_NOW);
+    const { card, rerender } = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: unlocated() });
+    const { region } = liveRegion(card);
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherUnavailable: true });
+    expect(region.textContent).toBe(NOTE);
+
+    act(() => {
+      vi.advanceTimersByTime(LIVE_REGION_CLEAR_MS - 1);
+    });
+    expect(region.textContent).toBe(NOTE);
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(region).toBeEmptyDOMElement();
+    expect(card.querySelector('[data-todo-weather-note]')).toHaveTextContent(NOTE);
   });
 });
 

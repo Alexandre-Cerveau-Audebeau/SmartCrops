@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageGridMeasure, PageMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
+import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageGridMeasure, PageMeasure, PanelFocus, PanelMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
 import { CHOICE_SCENES, GARDENS_LIST_KINDS, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, gardensSceneData, weatherCitySceneData, type GardensListKind, type WeatherCityScene } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
 import { capabilitiesFor, presetFor } from '../fixtures/formulas';
-import { sizesFor } from '../../constants/dashboardCapabilities';
+import { permitsBlock, sizesFor } from '../../constants/dashboardCapabilities';
+import { LIVE_REGION_CLEAR_MS } from '../../hooks/useLiveRegion';
 import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 
 /**
@@ -31,6 +32,14 @@ import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
  * And the PROBES (the rule of SMA-446): the page broken on purpose — the bar
  * over the navbar, a label wider than its half, a save region born filled, a
  * toggle unmounted at the key — each of which the SAME checks must report.
+ *
+ * SMA-437, lot V3-07, P5: THE CUSTOMIZE DRAWER too, opened from the header —
+ * forty cases at the five widths, measured as one card, every text's contrast
+ * read on what is painted behind it, the keyboard driven for real — in the
+ * Weather group's hook (the second describe). PR #303, fix round 1, R1: its
+ * note and « Réinitialiser » under it, read just after a switch and six
+ * seconds later on the page's simulated timers — the button never moves by
+ * itself.
  *
  * Chrome as the scenes' suite finds it: without it the suite is SKIPPED on a
  * workstation and FAILS on CI.
@@ -1478,6 +1487,197 @@ const widthOfSize = (vw: number, size: DashboardSize) => {
 /** The pinned height of a size from 600 px up (A-N10): 273 px a row, 566 on two; none for the Full width. */
 const WEATHER_PINNED: Partial<Record<DashboardSize, number>> = { small: 273, medium: 273, large: 566 };
 
+// ── The Customize drawer, on the real page (SMA-437, lot V3-07, P5) ─────────
+
+interface PanelCase {
+  id: string;
+  level: 'gardener' | 'expert';
+  theme: 'light' | 'dark';
+  lang: 'fr' | 'en';
+}
+
+/**
+ * The combinations of V3-07's own audit (the mockups' report, § 3.2): the
+ * two formulas, by day and by night, in French and in English — eight at
+ * each of the five widths, forty.
+ */
+const PANEL_CASES: PanelCase[] = (['gardener', 'expert'] as const).flatMap((level) =>
+  (['light', 'dark'] as const).flatMap((theme) =>
+    (['fr', 'en'] as const).map((lang) => ({ id: `${level}/${theme}/${lang}`, level, theme, lang }))
+  )
+);
+
+/** One case: the drawer as it opens, and once its region has said a switch — the widget of the longest name, hidden. */
+interface PanelRun {
+  rest: PanelMeasure;
+  said: PanelMeasure;
+}
+
+/** One key of the keyboard's scenario: what the region says, how many sentences it was handed, where the focus stands, the drawer still open, the page's order. */
+interface PanelStep {
+  said: string;
+  writes: number;
+  focus: PanelFocus;
+  open: boolean;
+  grid: string[];
+}
+
+interface PanelKeyboard {
+  pickedUp: PanelStep;
+  cancelled: PanelStep;
+  moved: PanelStep;
+  hidden: PanelStep;
+  sized: PanelStep & { pressed: number };
+}
+
+/**
+ * PR #303, fix round 1, R1 — the drawer just after a switch, and six seconds
+ * later on the page's simulated timers: what its note says, where
+ * « Réinitialiser » stands in the window, and the layouts the page had
+ * written — the save the switch set off leaves within those six seconds,
+ * which shows the simulated clock drove the page.
+ */
+interface PanelStay {
+  said: [string, string];
+  reset: [number, number];
+  saves: [number, number];
+}
+
+/** The drawer, by viewport then by case; its keyboard's scenario and its note six seconds on, by viewport; its probes, at 360 px. */
+const panelCases = new Map<string, Map<string, PanelRun>>();
+const panelKeyboards = new Map<string, PanelKeyboard>();
+const panelStays = new Map<string, PanelStay>();
+const panelProbes = new Map<string, PanelMeasure>();
+const panelFailures = new Map<string, unknown>();
+
+/** The drawer open, its slide over: its paper no longer moves. */
+const PANEL_OPEN =
+  "(() => { const paper = document.querySelector('[data-panel-widgets]')?.closest('.MuiDrawer-paper'); return !!paper && getComputedStyle(paper).transform === 'none'; })()";
+/** What the drawer's one region says. */
+const PANEL_SAID = "(document.querySelector('[data-customize-said]')?.textContent ?? '')";
+/** « Réinitialiser la disposition X »: the one button of the list's column — the others are in the rows. */
+const PANEL_RESET = '[data-panel-widgets] > button';
+
+/** « Personnaliser » in the header, and the drawer open. */
+async function openPanel(session: PageSession) {
+  await call(session, `click(${JSON.stringify('[data-dashboard-header] [data-page-action="customize"]')})`);
+  await session.waitFor(PANEL_OPEN, 'the Customize drawer open');
+  await settle(session);
+}
+
+/**
+ * One key of the keyboard's scenario, pressed on a control of a widget's row
+ * — focused first, but for Escape, which goes where the focus already is —;
+ * the region's sentence waited for, then what the step left.
+ */
+async function panelStep(
+  session: PageSession,
+  key: string,
+  control: string,
+  press: 'Space' | 'Enter' | 'Escape',
+  said: string,
+  what: string
+): Promise<PanelStep> {
+  if (press !== 'Escape' && !(await session.evaluate<boolean>(`window.__page.focusPanel(${JSON.stringify(key)}, ${JSON.stringify(control)})`))) {
+    throw new Error(`The ${control} of ${key} did not take the focus.`);
+  }
+  await session.press(press);
+  await session.waitFor(`${PANEL_SAID}.includes(${JSON.stringify(said)})`, what);
+  await settle(session);
+  return {
+    said: await session.evaluate<string>(PANEL_SAID),
+    writes: await session.evaluate<number>('window.__page.panelRegionWrites()'),
+    focus: await session.evaluate<PanelFocus>('window.__page.panelFocus()'),
+    open: await session.evaluate<boolean>(PANEL_OPEN),
+    grid: (await session.evaluate<PageGridMeasure>('window.__page.measureGrid()')).keys,
+  };
+}
+
+/**
+ * The keyboard in a real engine, at the Gardener, in French: the handle of
+ * « Conseils » picks the row up — where it would land said from the real
+ * geometry, which jsdom does not have — and Escape cancels; its ▲ moves it;
+ * its switch hides it; the Weather's « Grand » pill sizes it.
+ */
+async function runPanelKeyboard(session: PageSession): Promise<PanelKeyboard> {
+  await session.navigate('level=gardener&theme=light&lang=fr');
+  await openPanel(session);
+  await call(session, 'watchPanelRegion()');
+  const pickedUp = await panelStep(session, 'tips', 'handle', 'Space', 'en cours de déplacement', 'the row picked up, said');
+  const cancelled = await panelStep(session, 'tips', 'handle', 'Escape', 'annulé', 'the drag cancelled, said');
+  const moved = await panelStep(session, 'tips', 'up', 'Enter', 'passe en', 'the move said');
+  const hidden = await panelStep(session, 'tips', 'switch', 'Space', 'masqué', 'the switch said');
+  const sized = await panelStep(session, 'weather', 'pill:2', 'Enter', 'en Grand', 'the size said');
+  const weather = (await session.evaluate<PanelMeasure>('window.__page.measurePanel()')).rows.find((row) => row.key === 'weather');
+  return { pickedUp, cancelled, moved, hidden, sized: { ...sized, pressed: weather?.pressed ?? -1 } };
+}
+
+/**
+ * PR #303, fix round 1, R1 — the Gardener's drawer, in French: the page's
+ * timers simulated once it is open, « Compteurs par variété » hidden by its
+ * switch; the note and « Réinitialiser » read once the region has said it,
+ * then six seconds later — past the five after which the note used to be
+ * emptied —, the simulated clock moved on and the page settled.
+ */
+async function runPanelStay(session: PageSession): Promise<PanelStay> {
+  await session.navigate('level=gardener&theme=light&lang=fr');
+  await openPanel(session);
+  await call(session, 'fakeTimers()');
+  await call(session, 'clickPanel("counters", "switch")');
+  await session.waitFor(`${PANEL_SAID} !== ''`, 'the switch said');
+  await settle(session);
+  const reset = JSON.stringify(PANEL_RESET);
+  const said = await session.evaluate<string>(PANEL_SAID);
+  const top = await session.evaluate<number>(`window.__page.top(${reset})`);
+  const saves = await session.evaluate<number>('window.__page.saves()');
+  await call(session, `advanceTimers(${LIVE_REGION_CLEAR_MS + 1000})`);
+  await settle(session);
+  return {
+    said: [said, await session.evaluate<string>(PANEL_SAID)],
+    reset: [top, await session.evaluate<number>(`window.__page.top(${reset})`)],
+    saves: [saves, await session.evaluate<number>('window.__page.saves()')],
+  };
+}
+
+/**
+ * Every case of one viewport, in one Chrome: the drawer as it opens, then
+ * « Compteurs par variété » — the longest name — hidden by its switch; the
+ * keyboard's scenario; and, at 360 px, the probes.
+ */
+async function runPanelView(view: PageView): Promise<Map<string, PanelRun>> {
+  const session = await openPage(CHROME!, weatherOutDir, { label: `panel-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
+  try {
+    const byCase = new Map<string, PanelRun>();
+    for (const panelCase of PANEL_CASES) {
+      await session.navigate(`level=${panelCase.level}&theme=${panelCase.theme}&lang=${panelCase.lang}`);
+      await openPanel(session);
+      const rest = await session.evaluate<PanelMeasure>('window.__page.measurePanel()');
+      await call(session, 'clickPanel("counters", "switch")');
+      await session.waitFor(`${PANEL_SAID} !== ''`, 'the switch said');
+      await settle(session);
+      byCase.set(panelCase.id, { rest, said: await session.evaluate<PanelMeasure>('window.__page.measurePanel()') });
+    }
+    panelKeyboards.set(view.id, await runPanelKeyboard(session));
+    panelStays.set(view.id, await runPanelStay(session));
+    if (view.width === 360) {
+      const probes = [
+        ['panel-veil', 'level=expert&theme=dark&lang=fr'],
+        ['panel-long-word', 'level=expert&theme=light&lang=fr'],
+      ] as const;
+      for (const [probe, query] of probes) {
+        await session.navigate(query);
+        await openPanel(session);
+        if (!(await session.evaluate<boolean>(`window.__page.probe(${JSON.stringify(probe)})`))) throw new Error(`The probe ${probe} found nothing to break.`);
+        await settle(session);
+        panelProbes.set(probe, await session.evaluate<PanelMeasure>('window.__page.measurePanel()'));
+      }
+    }
+    return byCase;
+  } finally {
+    await session.close();
+  }
+}
+
 describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (SMA-448, lot F4, W5 — V3-02)', () => {
   beforeAll(async () => {
     weatherOutDir = makeOutDir();
@@ -1497,6 +1697,13 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
       gardensSettled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') gardensCases.set(WEATHER_VIEWS[index]!.id, outcome.value);
         else weatherFailures.set(`gardens-${WEATHER_VIEWS[index]!.id}`, outcome.reason);
+      });
+      // SMA-437, lot V3-07, P5 — the Customize drawer, in this same hook:
+      // five more Chromes, one per viewport, once the Gardens' have closed.
+      const panelSettled = await Promise.allSettled(WEATHER_VIEWS.map((view) => runPanelView(view)));
+      panelSettled.forEach((outcome, index) => {
+        if (outcome.status === 'fulfilled') panelCases.set(WEATHER_VIEWS[index]!.id, outcome.value);
+        else panelFailures.set(`panel-${WEATHER_VIEWS[index]!.id}`, outcome.reason);
       });
     } finally {
       await terminateChildren();
@@ -1764,6 +1971,201 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
       expect({ between: measured.between, trailing: measured.trailing }, JSON.stringify(measured.placed)).toEqual({
         between: [],
         trailing: [],
+      });
+    });
+  });
+
+  // SMA-437, lot V3-07, step P5 (A-16, A-18, A-19; V3-07 § 7) — THE
+  // CUSTOMIZE DRAWER as the app opens it from the header: its forty cases —
+  // the Gardener's seven widgets and the Expert's nine, by day and by night,
+  // in French and in English, at the five widths —, as it opens and once its
+  // region has said a switch. The longest names (« Compteurs par variété »,
+  // « À faire aujourd’hui ») wrap, never cut. Every text's contrast is read
+  // on what is painted behind it; the keyboard is driven for real. Measured
+  // in this group's own hook, once the Gardens' Chromes have closed — no
+  // bound of its own.
+  describe('the Customize drawer, as the app opens it (SMA-437, lot V3-07, P5 — A-16, A-18, A-19)', () => {
+    const CASE_IDS = PANEL_CASES.map((panelCase) => panelCase.id);
+    const caseOf = (id: string) => PANEL_CASES.find((candidate) => candidate.id === id)!;
+    const panelOf = (viewId: string, caseId: string): PanelRun => {
+      const measured = panelCases.get(viewId)?.get(caseId);
+      if (!measured) throw new Error(`No measurement of the Customize drawer ${caseId} at ${viewId}: ${String(panelFailures.get(`panel-${viewId}`) ?? 'not run')}`);
+      return measured;
+    };
+    const statesOf = (run: PanelRun) => [['rest', run.rest], ['said', run.said]] as const;
+    /** The texts read under their floor — 4.5:1, or 3:1 for large text (WCAG 1.4.3) —, or on a ground that could not be read. */
+    const contrastFaults = (measured: PanelMeasure) =>
+      measured.texts
+        .filter((text) => text.background === 'unreadable' || text.ratio < (text.large ? 3 : 4.5))
+        .map((text) => `${text.label} ${text.color} on ${text.background}: ${text.ratio}:1`);
+    /** Every run of white space as one space — the French no-break spaces included. */
+    const plain = (text: string) => text.replace(/\s+/g, ' ');
+
+    it('ran every viewport to its end: eight cases each — two formulas, by day and by night, in French and in English —, forty in all, as the drawer opens and once it speaks; in Inter, at the viewport it claims', () => {
+      expect([...panelFailures.entries()].map(([id, reason]) => `${id}: ${String(reason)}`)).toEqual([]);
+      expect(PANEL_CASES).toHaveLength(8);
+      for (const view of WEATHER_VIEWS) {
+        expect([...(panelCases.get(view.id)?.keys() ?? [])], view.id).toEqual(CASE_IDS);
+        for (const id of CASE_IDS) {
+          for (const [state, measured] of statesOf(panelOf(view.id, id))) {
+            expect(measured.viewport, `${view.id} ${id} ${state}`).toBe(view.width);
+            expect(measured.fontLoaded, `${view.id} ${id} ${state}: Inter not loaded`).toBe(true);
+          }
+        }
+      }
+    });
+
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: every case is clean, as it opens and once it speaks — no overlap, nothing clipped, nothing spilled, nothing beyond, no ellipsis; every text at 14 px or more, the size pills alone at 13 (V11)', (viewId) => {
+      for (const id of CASE_IDS) {
+        for (const [state, measured] of statesOf(panelOf(viewId, id))) {
+          const label = `${viewId} ${id} ${state}`;
+          expect(defects(measured), label).toEqual(clean);
+          expect(measured.hardClipped, label).toBe(0);
+          expect(measured.ellipsized, label).toEqual([]);
+          expect(measured.smallFonts.filter((font) => font.px < (font.chip ? 13 : 14)), label).toEqual([]);
+        }
+      }
+    });
+
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the drawer takes the whole window under 600 px and 380 px from 600; nothing in it scrolls sideways', (viewId) => {
+      const view = WEATHER_VIEWS.find((candidate) => candidate.id === viewId)!;
+      for (const id of CASE_IDS) {
+        for (const [state, measured] of statesOf(panelOf(viewId, id))) {
+          const label = `${viewId} ${id} ${state}`;
+          expect(measured.paper.rect.w, label).toBe(view.width < 600 ? view.width : 380);
+          expect(measured.paper.overflowX, label).toBe(0);
+          expect(measured.scrollers, label).toEqual([]);
+        }
+      }
+    });
+
+    it('lists every widget of the formula in the page’s order — seven at the Gardener, nine at the Expert —, the lock on Gardens and a switch on every other, the sizes the formula serves each, its own pressed (A-16)', () => {
+      for (const view of WEATHER_VIEWS) {
+        for (const id of CASE_IDS) {
+          const { level } = caseOf(id);
+          const capabilities = capabilitiesFor(level);
+          const blocks = presetFor(level).filter((block) => permitsBlock(capabilities, block.key));
+          const { rest } = panelOf(view.id, id);
+          const label = `${view.id} ${id}`;
+          expect(rest.rows.map((row) => row.key), label).toEqual(blocks.map((block) => block.key));
+          expect(rest.rows, label).toHaveLength(level === 'expert' ? 9 : 7);
+          rest.rows.forEach((row, index) => {
+            const block = blocks[index]!;
+            const sizes: readonly DashboardSize[] = sizesFor(block.key, capabilities) ?? [];
+            expect(
+              { control: row.control, shown: row.shown, pills: row.pills, pressed: row.pressed },
+              `${label} ${row.key}`
+            ).toEqual({
+              control: block.key === 'gardens' ? 'lock' : 'switch',
+              shown: !block.hidden,
+              pills: sizes.length > 1 ? sizes.length : 0,
+              pressed: sizes.length > 1 ? sizes.indexOf(block.size) : -1,
+            });
+          });
+        }
+      }
+    });
+
+    it('says the switch in its one region, on the note’s tint — « Compteurs par variété » masqué. / “Counts by variety” hidden. —, empty until then; the row stays where it was, switched off (A-19)', () => {
+      for (const view of WEATHER_VIEWS) {
+        for (const id of CASE_IDS) {
+          const { lang } = caseOf(id);
+          const { rest, said } = panelOf(view.id, id);
+          const label = `${view.id} ${id}`;
+          expect(rest.said, label).toBe('');
+          expect(plain(said.said), label).toBe(lang === 'fr' ? '« Compteurs par variété » masqué.' : '“Counts by variety” hidden.');
+          expect(said.rows.map((row) => row.key), label).toEqual(rest.rows.map((row) => row.key));
+          expect(said.rows.find((row) => row.key === 'counters')?.shown, label).toBe(false);
+        }
+      }
+    });
+
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: every text reads at 4.5:1 or more on what is painted behind it — 3:1 for large text —, by day and by night: the night drawer paints no veil (A-18, V14)', (viewId) => {
+      for (const id of CASE_IDS) {
+        const run = panelOf(viewId, id);
+        for (const [state, measured] of statesOf(run)) {
+          const label = `${viewId} ${id} ${state}`;
+          expect(contrastFaults(measured), label).toEqual([]);
+          // Never a pass on nothing: the drawer's secondary texts were read.
+          expect(measured.texts.filter((text) => text.secondary).length, label).toBeGreaterThan(0);
+        }
+        expect(run.rest.paper.backgroundImage, `${viewId} ${id}`).toBe('none');
+      }
+    });
+
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the keyboard, in a real engine — Space on a handle picks the row up and says where it would land; Escape cancels and leaves the drawer open; ▲ moves the widget on the page too; Space on a switch hides it, Enter on a pill sizes it — each said ONCE, the focus kept on the control', (viewId) => {
+      const keyboard = panelKeyboards.get(viewId);
+      if (!keyboard) throw new Error(`No keyboard scenario at ${viewId}: ${String(panelFailures.get(`panel-${viewId}`) ?? 'not run')}`);
+      const step = ({ said, writes, focus, open }: PanelStep) => ({ said: plain(said), writes, focus, open });
+      expect(step(keyboard.pickedUp), 'picked up').toEqual({
+        said: '« Conseils » en cours de déplacement — relâchez pour le placer en 3ᵉ place, après « Jardins ».',
+        writes: 1,
+        focus: { key: 'tips', control: 'handle' },
+        open: true,
+      });
+      expect(step(keyboard.cancelled), 'cancelled').toEqual({
+        said: 'Déplacement de « Conseils » annulé.',
+        writes: 1,
+        focus: { key: 'tips', control: 'handle' },
+        open: true,
+      });
+      expect(step(keyboard.moved), 'moved').toEqual({
+        said: '« Conseils » passe en 2ᵉ place.',
+        writes: 1,
+        focus: { key: 'tips', control: 'up' },
+        open: true,
+      });
+      expect(keyboard.moved.grid, 'moved: the page').toEqual(['weather', 'tips', 'gardens', 'month', 'todo', 'counters']);
+      expect(step(keyboard.hidden), 'hidden').toEqual({
+        said: '« Conseils » masqué.',
+        writes: 1,
+        focus: { key: 'tips', control: 'switch' },
+        open: true,
+      });
+      expect(keyboard.hidden.grid, 'hidden: the page').toEqual(['weather', 'gardens', 'month', 'todo', 'counters']);
+      expect(step(keyboard.sized), 'sized').toEqual({
+        said: '« Météo » en Grand.',
+        writes: 1,
+        focus: { key: 'weather', control: 'pill:2' },
+        open: true,
+      });
+      expect(keyboard.sized.pressed, 'sized: the pill pressed').toBe(2);
+    });
+
+    // PR #303, fix round 1, R1 — Alexandre, 30/09, on the [P] n° 14 (« ok »):
+    // « un bouton ne change jamais de place sous le doigt ». Emptied 5 s after
+    // its sentence, the note folded, and « Réinitialiser » under it moved up
+    // with no gesture. The note now stays until the next sentence or until
+    // the drawer closes; the button stays with it.
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: « Réinitialiser » never moves by itself — just after a switch and six seconds later, the note still says it and the button stands where it stood (PR #303, fix round 1, R1)', (viewId) => {
+      const stay = panelStays.get(viewId);
+      if (!stay) throw new Error(`No note-stays scenario at ${viewId}: ${String(panelFailures.get(`panel-${viewId}`) ?? 'not run')}`);
+      const [top] = stay.reset;
+      expect({ said: stay.said.map(plain), reset: stay.reset }).toEqual({
+        said: ['« Compteurs par variété » masqué.', '« Compteurs par variété » masqué.'],
+        reset: [top, top],
+      });
+      // The simulated clock drove the page: the save the switch set off left within the six seconds.
+      expect(stay.saves[1], `saves ${JSON.stringify(stay.saves)}`).toBeGreaterThan(stay.saves[0]);
+    });
+
+    describe('the probes — the same checks see a drawer broken on purpose (SMA-446)', () => {
+      const probe = (name: string) => {
+        const measured = panelProbes.get(name);
+        if (!measured) throw new Error(`No measurement for the probe ${name}: ${String(panelFailures.get('panel-360x780') ?? 'not run')}`);
+        return measured;
+      };
+
+      it('the elevation veil put back on the night drawer: its secondary texts fall under 4.5:1 — reported', () => {
+        const veiled = probe('panel-veil');
+        expect(veiled.paper.backgroundImage).toContain('linear-gradient');
+        expect(contrastFaults(veiled)).not.toEqual([]);
+        expect(veiled.texts.filter((text) => text.secondary && text.ratio < 4.5).length).toBeGreaterThan(0);
+      });
+
+      it('a name no row can hold: reported — spilled, overlapping or clipped', () => {
+        const found = defects(probe('panel-long-word'));
+        expect([...found.overlaps, ...found.clipped, ...found.spills]).not.toEqual([]);
       });
     });
   });

@@ -74,22 +74,6 @@ export interface DashboardBlock {
 }
 
 /**
- * What a Customize-gallery thumbnail can honestly show of a hidden widget
- * (round 4, A8) — a formatted headline `value` and, optionally, a few
- * occupancy `bars` as percentages. Supplied by the page, which is the only
- * place that holds the figures; a widget the aggregate cannot feed yet answers
- * `null` and the panel says « soon » instead (rule 4 of the design contract).
- *
- * Here beside `DashboardBlock` and not in `CustomizePanel.tsx` (round 6,
- * Extension #4-4): it is a data contract the page and the panel both read, and
- * neither should import the other's module for a shape.
- */
-export interface GalleryPreview {
-  value: string;
-  bars?: number[];
-}
-
-/**
  * SMA-448, lot F4 — how a formula shows the weather, as `FormulaCatalog.
  * WeatherModes` serves it (V3-02, decided by Alexandre on 22/09 18:52 and its
  * complement): `gardenCards` — no widget, the weather of each garden's own

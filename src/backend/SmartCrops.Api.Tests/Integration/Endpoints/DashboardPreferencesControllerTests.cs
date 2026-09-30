@@ -1458,6 +1458,88 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal("custom", options["sort"].GetString());
     }
 
+    // ── « Réinitialiser » keeps the widgets' settings (SMA-437, lot V3-07) ───
+    // PR #303, fix round 1, R2. Alexandre, on « Réinitialiser » (30/09): « Revient
+    // au réglage d'origine, pas au réglage précédent, mais c'est très bien comme
+    // ça ». The layout coming back to the preset is the button's point; a
+    // widget's settings coming back to their defaults would be a defect. The
+    // client composes the reset (PR #303, 153da1a) and writes it as any layout:
+    // this guards the server's half — the preset's blocks are stored with the
+    // settings they carry, and read back with them.
+
+    /// <summary>
+    /// What « Réinitialiser » writes: the formula's PRESET — every block at its
+    /// place, size and visibility — each widget carrying the settings the
+    /// account had given it, none of them a default: the band's four figures,
+    /// the Gardens widget's count and custom order, the Counts widget's garden
+    /// and photos. Written over a layout the account had arranged, as on the
+    /// page. Read back, the blocks are the preset's and each widget keeps its
+    /// settings, key for key: a layout equal to the preset is stored as any
+    /// other, never folded back into the preset, whose blocks carry none.
+    /// </summary>
+    [Fact]
+    public async Task PutThenGetPreferences_ALayoutBackAtThePreset_KeepsEachWidgetsSettings()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var garden = Guid.NewGuid().ToString();
+        var settings = new Dictionary<string, Dictionary<string, JsonElement>>
+        {
+            ["keyfigures"] = new() { ["figures"] = JsonValue("""["cities","free","tips","surface"]""") },
+            [DashboardLayout.Blocks.Gardens] = new() { ["count"] = JsonValue("10"), ["sort"] = JsonValue("\"custom\"") },
+            [DashboardLayout.Blocks.Counters] = new() { ["garden"] = JsonValue($"\"{garden}\""), ["photos"] = JsonValue("true") },
+        };
+        var preset = DashboardPresets.For(DashboardLayout.Levels.Expert);
+
+        // The page as the account had arranged it: the preset upside down, the
+        // Harvest hidden — the widgets already set.
+        var arranged = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. preset.Reverse().Select(b => new SaveDashboardBlockRequest(
+                b.Key,
+                b.Size,
+                b.Key == DashboardLayout.Blocks.Harvest,
+                settings.GetValueOrDefault(b.Key)))]);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(Url, arranged)).StatusCode);
+
+        // « Réinitialiser »: the preset, each block carrying the settings it had.
+        var reset = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. preset.Select(b => new SaveDashboardBlockRequest(b.Key, b.Size, b.Hidden, settings.GetValueOrDefault(b.Key)))]);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(Url, reset)).StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.False(body.IsPreset);
+        Assert.Equal(
+            preset.Select(b => (b.Key, b.Size, b.Hidden)),
+            body.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
+
+        var figures = Block(body, "keyfigures").Options;
+        Assert.NotNull(figures);
+        Assert.Equal(["cities", "free", "tips", "surface"], figures["figures"].EnumerateArray().Select(figure => figure.GetString()));
+        var gardens = Block(body, DashboardLayout.Blocks.Gardens).Options;
+        Assert.NotNull(gardens);
+        Assert.Equal(10, gardens["count"].GetInt32());
+        Assert.Equal("custom", gardens["sort"].GetString());
+        var counters = Block(body, DashboardLayout.Blocks.Counters).Options;
+        Assert.NotNull(counters);
+        Assert.Equal(garden, counters["garden"].GetString());
+        Assert.True(counters["photos"].GetBoolean());
+
+        // Nothing added, nothing dropped: those three widgets alone carry
+        // settings, each exactly the keys it was given.
+        Assert.Equal(
+            settings.Keys.Order(StringComparer.Ordinal),
+            body.Blocks.Where(b => b.Options is not null).Select(b => b.Key).Order(StringComparer.Ordinal));
+        Assert.All(settings, widget => Assert.Equal(
+            widget.Value.Keys.Order(StringComparer.Ordinal),
+            Block(body, widget.Key).Options!.Keys.Order(StringComparer.Ordinal)));
+    }
+
     // ── Bounded options (round 1, E1 / G2) ───────────────────────────────────
 
     [Fact]

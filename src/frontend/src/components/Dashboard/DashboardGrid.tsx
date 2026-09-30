@@ -52,8 +52,9 @@ interface Props {
  *
  * Reordering keeps the HIDDEN blocks in their absolute slots: only the visible
  * ones are permuted, and each hidden block stays at the index it held. A widget
- * brought back from the gallery therefore returns where its level put it,
- * instead of drifting to the end every time its neighbours are rearranged.
+ * shown again from the Customize list therefore returns where it stood, the
+ * place the list keeps it at (SMA-437, lot V3-07), instead of drifting to the
+ * end every time its neighbours are rearranged.
  *
  * Both sensors are mounted at all times and the widgets are disabled instead
  * (`useSortable({disabled})`), so leaving Edit mode never remounts a widget -

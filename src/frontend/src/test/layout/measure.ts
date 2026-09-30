@@ -207,7 +207,7 @@ function textRect(el: Element): Box | null {
 }
 
 /** The element's OWN text — its direct text nodes, whitespace collapsed. */
-const ownText = (el: Element): string =>
+export const ownText = (el: Element): string =>
   Array.from(el.childNodes)
     .filter((node) => node.nodeType === Node.TEXT_NODE)
     .map((node) => node.textContent ?? '')
@@ -240,7 +240,7 @@ function dataTag(el: Element, stop: Element): string {
 }
 
 /** Drawn at all: not `display: none`, not `visibility: hidden`, not transparent, and wider and taller than a pixel. */
-function visible(el: Element): boolean {
+export function visible(el: Element): boolean {
   const cs = getComputedStyle(el);
   if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
   const b = el.getBoundingClientRect();

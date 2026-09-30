@@ -23,6 +23,7 @@ import {
   replaceFigure,
   type KeyFigure,
 } from './keyFiguresOptions';
+import { useLiveRegion } from '../../../hooks/useLiveRegion';
 import { DASHBOARD_KEY_FIGURES as K, DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 
@@ -89,25 +90,28 @@ export default function KeyFiguresOptionsPanel({ options, input, onChange }: Pro
   // CHANGES inside it, not when it is inserted already filled. So it is mounted
   // ONCE, outside the two views, born empty, and stays mounted; its text is
   // written into it by its ref — never rendered by React, never set in an
-  // effect.
-  const regionRef = useRef<HTMLDivElement | null>(null);
-  const say = useCallback((text: string) => {
-    if (regionRef.current) regionRef.current.textContent = text;
-  }, []);
+  // effect. SMA-437, lot V3-07, P3 (contract A-6, A-20): the region and its
+  // write are `useLiveRegion()`'s. A note ON SCREEN (PR #303, fix round 1,
+  // R1 — Alexandre, 30/09): it keeps its sentence until the next one
+  // replaces it or the panel closes with it, never emptied after 5 s.
+  const { announce, regionProps } = useLiveRegion({ visible: true });
   // What a replacement or a swap says: written once the four emplacements are
-  // drawn again — the ref callback of their view, as it mounts after the
-  // catalogue closes, after the emplacement took the focus back — into the
-  // region that stayed: a mutation the region announces. Never into the
-  // catalogue it closes.
+  // drawn again — by the ref callback of their view, which MOUNTS as the
+  // catalogue closes (the two views are keyed apart, below: R2-1 of PR #288;
+  // unkeyed, React reused the catalogue's node for the four and only swapped
+  // its ref), once the emplacement it came from has taken the focus back —
+  // React attaches a child's ref before its parent's —, and into the region
+  // that stayed: a mutation the region announces. Never into the catalogue it
+  // closes.
   const pendingSaid = useRef<string | null>(null);
   const sayPendingOnReturn = useCallback(
     (node: HTMLDivElement | null) => {
       if (node && pendingSaid.current !== null) {
-        say(pendingSaid.current);
+        announce(pendingSaid.current);
         pendingSaid.current = null;
       }
     },
-    [say]
+    [announce]
   );
   const [dragging, setDragging] = useState(false);
   /** The catalogue, open on emplacement `slot` with `choice` checked; null on the four emplacements. */
@@ -150,7 +154,7 @@ export default function KeyFiguresOptionsPanel({ options, input, onChange }: Pro
   const openCatalogue = (slot: number) => {
     // The region stays under the catalogue: what it said of the four is not
     // left standing there.
-    say('');
+    announce('');
     setCatalogue({ slot, choice: figures[slot]! });
   };
   const closeCatalogue = () => {
@@ -179,13 +183,11 @@ export default function KeyFiguresOptionsPanel({ options, input, onChange }: Pro
   };
 
   // No children: React never renders its text, so a re-render never
-  // rewrites what `say` wrote. What it holds styles it — the note's tint once
-  // it says something, nothing while it is empty.
+  // rewrites what `announce` wrote. What it holds styles it — the note's tint
+  // once it says something, nothing while it is empty.
   const liveRegion = (
     <Box
-      ref={regionRef}
-      role="status"
-      aria-live="polite"
+      {...regionProps}
       data-key-figures-said
       sx={{
         ...noteSx,
@@ -207,6 +209,7 @@ export default function KeyFiguresOptionsPanel({ options, input, onChange }: Pro
     };
     return (
       <Box
+        key="catalogue"
         onKeyDown={onKeyDown}
         data-key-figures-catalogue
         sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px', py: '4px' }}
@@ -306,7 +309,7 @@ export default function KeyFiguresOptionsPanel({ options, input, onChange }: Pro
   const renderSlots = () => {
     const atDefault = isDefaultSelection(figures);
     return (
-      <Box ref={sayPendingOnReturn} sx={{ display: 'flex', flexDirection: 'column', gap: '10px', py: '4px' }}>
+      <Box key="slots" ref={sayPendingOnReturn} sx={{ display: 'flex', flexDirection: 'column', gap: '10px', py: '4px' }}>
         <Typography component="h4" sx={{ ...headingSx, m: 0, mt: '2px' }}>
           {t('dashboard.blocks.keyfigures.panel.section')}
         </Typography>
@@ -323,7 +326,7 @@ export default function KeyFiguresOptionsPanel({ options, input, onChange }: Pro
           placeOf={placeOf}
           label={t('dashboard.blocks.keyfigures.panel.list')}
           onMove={(from, to) => write(moveFigure(figures, from, to))}
-          onAnnounce={say}
+          onAnnounce={announce}
           onDraggingChange={setDragging}
           renderRow={(figure, index) => {
             const value = valueOf(figure);
@@ -395,7 +398,7 @@ export default function KeyFiguresOptionsPanel({ options, input, onChange }: Pro
           onClick={() => {
             if (atDefault) return;
             write([...DEFAULT_KEY_FIGURES]);
-            say(t('dashboard.blocks.keyfigures.panel.resetSaid'));
+            announce(t('dashboard.blocks.keyfigures.panel.resetSaid'));
           }}
           sx={{
             alignSelf: 'flex-start',

@@ -364,7 +364,8 @@ describe('the MÉTÉO column of the Full width follows the page’s weather (SMA
 // FULL WIDTH (Alexandre, 29/09: « personnellement je préfère que de base, en
 // Expert, le widget Jardins soit en large comme ça »). Its reach: an account
 // arriving at the Expert formula with no layout of its own, and « Réinitialiser
-// au niveau Expert » — both read the preset the server serves (its catalogue,
+// la disposition Expert » (SMA-437, lot V3-07: the layout alone, each widget's
+// settings kept) — both read the preset the server serves (its catalogue,
 // `capabilities.preset`), whose contract is the reference file these fixtures
 // read. A layout the account STORED does not change. SMA-437, lot V3-08, step
 // S5 (A-15): the preset without a hole — the Weather after the Gardens, in the
@@ -407,13 +408,13 @@ describe('the Expert preset puts the Gardens widget in the Full width (PR #300, 
     expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
   });
 
-  it('« Reset to the Expert level » brings the Gardens widget to the Full width: the layout written with « wide », the seven columns drawn', async () => {
+  it('« Reset the Expert layout » brings the Gardens widget to the Full width: the layout written with « wide », the seven columns drawn', async () => {
     serve('expert', 'large');
     await renderPage();
     expect(widget().querySelector('[data-gardens-wide]')).toBeNull();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Reset to the Expert level' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset the Expert layout' }));
 
     await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
     expect(keysAndSizes(lastSaved().blocks)).toEqual(EXPERT_PRESET);

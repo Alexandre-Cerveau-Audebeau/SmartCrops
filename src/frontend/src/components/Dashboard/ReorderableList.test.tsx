@@ -161,6 +161,60 @@ describe('ReorderableList — ▲ ▼ at the keyboard', () => {
   });
 });
 
+// SMA-437, lot V3-07, P1 (contract A-16) — the Customize panel's rows are TWO
+// lines: the row's own (handle, content, ▲ ▼) over the owner's second one,
+// the widget's sizes. A list without it keeps its one line.
+describe('ReorderableList — a second line, and no gesture at all', () => {
+  function Lines({ disabled = false, onMove = () => {} }: { disabled?: boolean; onMove?: (from: number, to: number) => void }) {
+    return (
+      <LanguageProvider>
+        <ReorderableList
+          items={NAMES}
+          getId={(name) => name}
+          getName={(name) => name}
+          placeOf={ordinal}
+          label="Vos quatre chiffres"
+          renderRow={(name) => <span>{name}</span>}
+          renderBelow={(name) => <span data-below>{`sous ${name}`}</span>}
+          onAnnounce={() => {}}
+          onMove={onMove}
+          disabled={disabled}
+        />
+      </LanguageProvider>
+    );
+  }
+
+  it('draws the owner’s second line INSIDE the row, after its handle, content and ▲ ▼ — and none without it', () => {
+    localStorage.setItem('smartcrops-language', 'fr');
+    render(<Lines />);
+    const row = rows()[1]!;
+    const below = row.querySelector('[data-below]')!;
+    expect(below).toHaveTextContent('sous Occupation');
+    // The row's own line comes first: its ▼ precedes the second line in the DOM.
+    const down = within(row).getByRole('button', { name: 'Descendre « Occupation »' });
+    expect(down.compareDocumentPosition(below) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    cleanup();
+
+    render(<Harness />);
+    expect(document.querySelector('[data-below]')).toBeNull();
+  });
+
+  it('takes no gesture when disabled: the handle and ▲ ▼ disabled, nothing moves', () => {
+    localStorage.setItem('smartcrops-language', 'fr');
+    const onMove = vi.fn();
+    render(<Lines disabled onMove={onMove} />);
+    const up = screen.getByRole('button', { name: 'Monter « Variétés »' });
+    const down = screen.getByRole('button', { name: 'Descendre « Variétés »' });
+    const handle = screen.getByRole('button', { name: 'Déplacer « Variétés »' });
+    expect(up).toBeDisabled();
+    expect(down).toBeDisabled();
+    expect(handle).toBeDisabled();
+    fireEvent.click(up);
+    fireEvent.click(down);
+    expect(onMove).not.toHaveBeenCalled();
+  });
+});
+
 describe('ReorderableList — the handle, at the keyboard', () => {
   it('picks the row up with Space, says so, and Escape CANCELS: nothing moves', async () => {
     localStorage.setItem('smartcrops-language', 'fr');

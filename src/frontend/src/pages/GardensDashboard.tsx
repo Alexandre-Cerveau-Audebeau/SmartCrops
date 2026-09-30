@@ -24,18 +24,15 @@ import { useCompactActionBar } from '../components/Dashboard/useCompactActionBar
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
 import GardensOptionsPanel from '../components/Dashboard/blocks/GardensOptionsPanel';
-import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
-import { gardenAdvice } from '../components/Dashboard/blocks/gardenAdvice';
 import GardensBlock, {
   type GardensWeather,
 } from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import KeyFiguresBlock from '../components/Dashboard/blocks/KeyFiguresBlock';
 import KeyFiguresOptionsPanel from '../components/Dashboard/blocks/KeyFiguresOptionsPanel';
-import { keyFigureTiles, type KeyFiguresWeatherStatus } from '../components/Dashboard/blocks/keyFigures';
+import type { KeyFiguresWeatherStatus } from '../components/Dashboard/blocks/keyFigures';
 import { keyFiguresOptions } from '../components/Dashboard/blocks/keyFiguresOptions';
 import MonthBlock from '../components/Dashboard/blocks/MonthBlock';
-import { monthCalendar } from '../components/Dashboard/blocks/plantCalendar';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
 import TipsBlock from '../components/Dashboard/blocks/TipsBlock';
 import TodoBlock from '../components/Dashboard/blocks/TodoBlock';
@@ -58,17 +55,15 @@ import { createGarden } from '../services/gardenApi';
 import { problemOf, requestFailureKind, type RequestFailureKind } from '../services/requestFailure';
 import { isWholeNumber } from '../services/wireChecks';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
-import { formatCount, formatSurface } from '../utils/formatNumber';
+import { formatSurface } from '../utils/formatNumber';
 import {
   isDashboardLevel,
   nextDashboardSize,
   type DashboardBlock,
   type DashboardBlockKey,
   type DashboardLevel,
-  type GalleryPreview,
 } from '../types/Dashboard';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
-import type { GardenView } from '../utils/gardenStats';
 
 /**
  * Router state the planner posts when it navigates here after deleting the
@@ -150,7 +145,7 @@ export default function GardensDashboard() {
     reload,
     setBlocks,
     setLevel,
-    resetToLevel,
+    resetLayout,
   } = useDashboardPreferences();
 
   // SMA-336 PR 2/5: one call instead of seven. `useDashboardData` keeps the
@@ -191,10 +186,10 @@ export default function GardensDashboard() {
   // the last aggregate (E2 b of ③b) for what it is kept for — the place the
   // location dialog and the Weather gear panel name, read from `weatherData`
   // below —, never for a count: the Weather widget and the MÉTÉO column show
-  // their error, and the To-do, Tips and This month widgets, the Key figures
-  // band and the gallery thumbnails compute without it, so « Météo
-  // indisponible » and « sans la météo — indisponible » are true where they
-  // are said. A derivation reads THIS, never `weatherData`.
+  // their error, and the To-do, Tips and This month widgets and the Key
+  // figures band compute without it, so « Météo indisponible » and « sans la
+  // météo — indisponible » are true where they are said. A derivation reads
+  // THIS, never `weatherData`.
   const displayWeather = weatherError ? EMPTY_WEATHER_DATA : weatherData;
 
   // The ONE location dialog of the page (§ F.4), opened from the widget, the
@@ -903,107 +898,6 @@ export default function GardensDashboard() {
     }
   };
 
-  /**
-   * A hidden widget's headline figure, for its gallery thumbnail (round 4, A8).
-   *
-   * Only what the page ACTUALLY holds. Three widgets are fed by the aggregate
-   * and answer with their own headline — the Statistics card's surface over the
-   * occupancy of the first two gardens, exactly what `A7Personnaliser.dc.html`
-   * draws; the Counters card's distinct-variety count; the Gardens card's own
-   * count — then « Ce mois-ci » (PR 4a/5) and « Conseils » (PR 4b/5), each
-   * through its own derivation. Weather and Harvest answer `null`, which the
-   * panel renders as « soon » rather than as a zero.
-   *
-   * Nothing is invented and nothing is derived twice: the surface and the
-   * occupancies come from the same `gardenViews` the meta line and the two
-   * widgets read.
-   */
-  const galleryPreview = (key: DashboardBlockKey): GalleryPreview | null => {
-    if (gardensLoading || gardensError) return null;
-
-    if (key === 'stats') {
-      // A type GUARD rather than a plain predicate (round 6, Extension #5-16):
-      // `Map.get` answers `GardenView | undefined`, and `.filter(Boolean)`-style
-      // predicates do not narrow, which is what the `view!` below was covering.
-      const planned = gardens
-        .map((garden) => gardenViews.get(garden.id))
-        .filter((view): view is GardenView => view?.hasPlan === true);
-      if (planned.length === 0) return null;
-      return {
-        value: surfaceText,
-        bars: planned.slice(0, 2).map((view) => view.occupancyPercent),
-      };
-    }
-    if (key === 'counters') {
-      // THROUGH THE WIDGET'S OWN FILTER (round 5, C4), and through the SAME
-      // resolver the widget reads (round 6, partie A): round 5 had re-derived
-      // the filtered count here, which was a fourth copy of the rule. The
-      // thumbnail now prints the very `varietyCount` the widget's chip prints,
-      // so the card in the gallery cannot say something the widget it stands
-      // for does not say.
-      const stored = blocks.find((block) => block.key === 'counters');
-      const { varietyCount } = resolveCountersFigures(
-        stored?.options ?? null,
-        gardens,
-        dashboardData.varieties,
-        dashboardData.totals
-      );
-
-      if (varietyCount === 0) return null;
-      return { value: formatCount(varietyCount, i18n.language) };
-    }
-    if (key === 'gardens') {
-      if (gardens.length === 0) return null;
-      return { value: formatCount(gardens.length, i18n.language) };
-    }
-    if (key === 'month') {
-      // THROUGH THE WIDGET'S OWN DERIVATION (round 5, C4): the thumbnail
-      // prints « 10 à tailler » from the very `monthCalendar` the widget
-      // counts with, so the card in the gallery cannot state a figure the
-      // widget it stands for does not. It is only ever called for a HIDDEN
-      // widget, so the derivation never runs twice on one page.
-      if (dashboardData.varieties.length === 0) return null;
-      const { active } = monthCalendar(gardens, dashboardData.varieties, displayWeather);
-      return {
-        value: t('dashboard.blocks.month.galleryPrune', { count: active.prune.length }),
-      };
-    }
-    if (key === 'tips') {
-      // THROUGH THE WIDGET'S OWN DERIVATION (C4), like « Ce mois-ci » above:
-      // « 3 conseils » from the very `gardenAdvice` the widget's chip reads,
-      // on the same `gardenViews`. Null — « Bientôt » — while nothing is
-      // planted, the same gate as the calendar's.
-      if (dashboardData.varieties.length === 0) return null;
-      const { tips } = gardenAdvice(gardens, gardenViews, dashboardData.varieties, displayWeather);
-      return { value: t('dashboard.blocks.tips.count', { count: tips.length }) };
-    }
-    if (key === 'keyfigures') {
-      // SMA-437 lot 1, PR B (pre-flight D16) — the value of the band's FIRST
-      // figure, through the very `keyFigureTiles` the band draws with: the
-      // widget exists, so never « Bientôt » (R5) — and without a garden, the
-      // band's own invitation is what it would show, so nothing here.
-      if (gardens.length === 0) return null;
-      const stored = blocks.find((block) => block.key === 'keyfigures');
-      const [tile] = keyFigureTiles(
-        keyFiguresOptions(stored?.options ?? null).figures.slice(0, 1),
-        {
-          gardens,
-          views: gardenViews,
-          varieties: dashboardData.varieties,
-          totals: dashboardData.totals,
-          weather: displayWeather,
-          weatherStatus,
-        },
-        t,
-        i18n.language
-      );
-      if (!tile) return null;
-      // The unit after a no-break space, as the band draws them side by side.
-      return { value: tile.unit ? `${tile.value}\u00a0${tile.unit}` : tile.value };
-    }
-    return null;
-  };
-
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {/* The header row's layout lives in one constant the layout harness
@@ -1218,15 +1112,24 @@ export default function GardensDashboard() {
           level={level}
           capabilities={capabilities}
           blocks={blocks}
+          adjusted={adjusted}
           switching={switching}
-          preview={galleryPreview}
           onClose={() => setPanelOpen(false)}
           // SMA-448, PR #297, fix round 1 (A1) — the panel chooses no formula
           // any more: its link opens the choice screen, like the chip.
           onChangeFormula={(event) => openChooser(event.currentTarget)}
-          onReset={resetToLevel}
-          onShow={(key) =>
-            patchBlock(key, (block) => ({ ...block, hidden: false }))
+          // SMA-437, lot V3-07, P2 (A-17) — the layout alone: each widget's
+          // settings are kept.
+          onReset={resetLayout}
+          // SMA-437, lot V3-07 (A-16) — the list writes what the Edit mode
+          // writes, through the same two doors (§ 4.9: « les deux surfaces
+          // écrivent le même état »): the page follows every gesture.
+          onReorder={setBlocks}
+          onVisibilityChange={(key, hidden) =>
+            patchBlock(key, (block) => ({ ...block, hidden }))
+          }
+          onSizeChange={(key, size) =>
+            patchBlock(key, (block) => ({ ...block, size }))
           }
         />
       )}

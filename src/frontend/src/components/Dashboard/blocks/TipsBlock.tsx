@@ -22,6 +22,7 @@ import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
 import { gardenTypeIcon } from '../gardenTypeIcons';
 import { useRowBudget } from '../useRowBudget';
+import { useLiveRegion } from '../../../hooks/useLiveRegion';
 import { gardenAdvice, type GardenAdvice, type Tip, type TipKind } from './gardenAdvice';
 import { nameList } from './weatherFormat';
 import { weekdayLong } from './weatherTime';
@@ -103,8 +104,8 @@ const TIP_ICONS: Record<TipKind, SvgIconComponent> = {
 
 /**
  * SMA-336 PR 4b/5 — « Conseils », fed by the plans, the catalog and the
- * forecast through the ONE pure function `gardenAdvice`, which the header chip,
- * the three sizes and the gallery thumbnail all read.
+ * forecast through the ONE pure function `gardenAdvice`, which the header chip
+ * and the three sizes all read.
  *
  * Small (`A2Novice.dc.html` l. 316-319): « 3 conseils » in the key-number
  * size, the first tip clamped to three lines (§ 10.12), « Voir la case F3 → »
@@ -815,8 +816,16 @@ export default function TipsBlock({
    * recipe, where React renders the text: the same through a local state —
    * `setState` in the effect, the form G-3 proposed — is an ERROR under this
    * project's `react-hooks/set-state-in-effect`, and writing the DOM is the
-   * use that rule names as the effect's own. No timer, no promise: one
-   * effect, two dependencies.
+   * use that rule names as the effect's own. One effect, two dependencies.
+   *
+   * SMA-437, lot V3-07, P3 (contract A-6, A-20): the region and its write are
+   * `useLiveRegion()`'s — born empty, written by its ref, the same guard (the
+   * sentence it holds is not written again) —, the effect stays what says
+   * WHEN. The hook empties the region 5 s after the sentence (the contract of
+   * the mockups' report), a removal no one hears; the note on the card stays.
+   * An INVISIBLE region (`visible: false`): the one kind the hook still
+   * empties since Alexandre's decision of 30/09 (PR #303, fix round 1, R1) —
+   * off screen, emptying it moves nothing.
    */
   const announced = loading
     ? ''
@@ -830,12 +839,10 @@ export default function TipsBlock({
   // weather note the weather's — so a refresh of the OTHER aggregate neither
   // empties nor re-announces it; `refreshing`, the union, keeps the buttons.
   const announcedRefreshing = loadError ? gardensRefreshing : weatherRefreshing;
-  const statusRef = useRef<HTMLElement>(null);
+  const { announce, regionProps } = useLiveRegion<HTMLElement>({ visible: false });
   useEffect(() => {
-    const node = statusRef.current;
-    const next = announcedRefreshing ? '' : announced;
-    if (node && node.textContent !== next) node.textContent = next;
-  }, [announced, announcedRefreshing]);
+    announce(announcedRefreshing ? '' : announced);
+  }, [announce, announced, announcedRefreshing]);
 
   return (
     <DashboardBlock
@@ -845,8 +852,8 @@ export default function TipsBlock({
       editing={editing}
       chip={chip || undefined}
     >
-      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. No child: its text is the effect's, above. */}
-      <Typography ref={statusRef} role="status" aria-live="polite" data-tips-status sx={visuallyHidden} />
+      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. No child: its text is `announce`'s, above. */}
+      <Typography {...regionProps} data-tips-status sx={visuallyHidden} />
       {body()}
     </DashboardBlock>
   );

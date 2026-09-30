@@ -38,6 +38,13 @@ interface Props<T> {
   placeOf: (index: number) => string;
   /** The row's own content, between its handle and its ▲ ▼. */
   renderRow: (item: T, index: number) => ReactNode;
+  /**
+   * A second line under the row's own, from under the row's glyph to its end
+   * — the widgets' sizes in the Customize panel (SMA-437, lot V3-07: « deux
+   * lignes par widget », contract A-16). Without it a row is one line, as the
+   * band's four figures and the gardens' order draw theirs.
+   */
+  renderBelow?: (item: T, index: number) => ReactNode;
   /** The list's accessible name. */
   label: string;
   /** A row moved from `from` to `to` — by ▲, ▼ or a drop. */
@@ -54,6 +61,12 @@ interface Props<T> {
    * which it CANCELS (contract § 4.5, pre-flight C.9).
    */
   onDraggingChange?: (dragging: boolean) => void;
+  /**
+   * No gesture at all: the handle and ▲ ▼ disabled — while a switch of
+   * formula is in flight, the Customize panel takes none (SMA-448, PR #293,
+   * fix round 1, S5), so none can be made and then lost.
+   */
+  disabled?: boolean;
 }
 
 /** The 30 px ▲ ▼ of V3-04 (`.ol-b`): a bordered square, the chip border's colour. */
@@ -75,15 +88,63 @@ interface RowProps {
   name: string;
   first: boolean;
   last: boolean;
+  disabled: boolean;
   onUp: () => void;
   onDown: () => void;
+  /** The owner's second line, or undefined for a one-line row. */
+  below: ReactNode | undefined;
   children: ReactNode;
 }
 
-function Row({ id, name, first, last, onUp, onDown, children }: RowProps) {
+function Row({ id, name, first, last, disabled, onUp, onDown, below, children }: RowProps) {
   const { t } = useTranslation();
   const arrowSx = useArrowSx();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+
+  // The row's own line: the handle, the owner's content, ▲ ▼.
+  const line = (
+    <>
+      {/* The handle: dnd-kit's own button — Space or Enter picks the row up,
+          the arrows move it, Space or Enter drop it, Escape cancels. */}
+      <IconButton
+        ref={setActivatorNodeRef}
+        aria-label={t('dashboard.reorder.handle', { name })}
+        {...attributes}
+        {...listeners}
+        disabled={disabled}
+        sx={{ width: 28, height: 32, flexShrink: 0, borderRadius: '6px', color: 'text.secondary', cursor: 'grab', touchAction: 'none' }}
+      >
+        <DragIndicatorIcon sx={{ fontSize: 20 }} />
+      </IconButton>
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>{children}</Box>
+      {/* ▲ ▼ are `aria-disabled` at the ends, never `disabled`: a disabled
+          button drops the focus, and the focus has to stay on ▲ when the row
+          it moves reaches the top (contract § 4.5). `disabled` only when the
+          whole list takes no gesture. */}
+      <IconButton
+        aria-label={t('dashboard.reorder.up', { name })}
+        aria-disabled={first || undefined}
+        disabled={disabled}
+        onClick={() => {
+          if (!first) onUp();
+        }}
+        sx={arrowSx}
+      >
+        <KeyboardArrowUpIcon sx={{ fontSize: 20 }} />
+      </IconButton>
+      <IconButton
+        aria-label={t('dashboard.reorder.down', { name })}
+        aria-disabled={last || undefined}
+        disabled={disabled}
+        onClick={() => {
+          if (!last) onDown();
+        }}
+        sx={arrowSx}
+      >
+        <KeyboardArrowDownIcon sx={{ fontSize: 20 }} />
+      </IconButton>
+    </>
+  );
 
   return (
     <Box
@@ -93,10 +154,11 @@ function Row({ id, name, first, last, onUp, onDown, children }: RowProps) {
       style={{ transform: CSS.Translate.toString(transform), transition }}
       sx={{
         display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        minHeight: 42,
-        p: '4px 6px 4px 2px',
+        // One line, centred — or two (V3-07, `.wl-row`): the row's own line
+        // over the owner's second one, 6 px apart.
+        ...(below === undefined
+          ? { alignItems: 'center', gap: '4px', minHeight: 42, p: '4px 6px 4px 2px' }
+          : { flexDirection: 'column', gap: '6px', p: '6px 6px 8px 2px' }),
         backgroundColor: 'background.paper',
         '& + &': { borderTop: '1px solid', borderTopColor: 'divider' },
         position: 'relative',
@@ -114,41 +176,17 @@ function Row({ id, name, first, last, onUp, onDown, children }: RowProps) {
         }),
       }}
     >
-      {/* The handle: dnd-kit's own button — Space or Enter picks the row up,
-          the arrows move it, Space or Enter drop it, Escape cancels. */}
-      <IconButton
-        ref={setActivatorNodeRef}
-        aria-label={t('dashboard.reorder.handle', { name })}
-        {...attributes}
-        {...listeners}
-        sx={{ width: 28, height: 32, flexShrink: 0, borderRadius: '6px', color: 'text.secondary', cursor: 'grab', touchAction: 'none' }}
-      >
-        <DragIndicatorIcon sx={{ fontSize: 20 }} />
-      </IconButton>
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>{children}</Box>
-      {/* ▲ ▼ are `aria-disabled` at the ends, never `disabled`: a disabled
-          button drops the focus, and the focus has to stay on ▲ when the row
-          it moves reaches the top (contract § 4.5). */}
-      <IconButton
-        aria-label={t('dashboard.reorder.up', { name })}
-        aria-disabled={first || undefined}
-        onClick={() => {
-          if (!first) onUp();
-        }}
-        sx={arrowSx}
-      >
-        <KeyboardArrowUpIcon sx={{ fontSize: 20 }} />
-      </IconButton>
-      <IconButton
-        aria-label={t('dashboard.reorder.down', { name })}
-        aria-disabled={last || undefined}
-        onClick={() => {
-          if (!last) onDown();
-        }}
-        sx={arrowSx}
-      >
-        <KeyboardArrowDownIcon sx={{ fontSize: 20 }} />
-      </IconButton>
+      {below === undefined ? (
+        line
+      ) : (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', minHeight: 32 }}>{line}</Box>
+          {/* `.wl-r2 { padding-left: 34px }`: past the handle and its gap, from
+              under the row's glyph; the sizes wrap onto a second line where
+              the drawer is narrow (360 px, in French) — never cut. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', pl: '34px' }}>{below}</Box>
+        </>
+      )}
     </Box>
   );
 }
@@ -175,10 +213,12 @@ export default function ReorderableList<T>({
   getName,
   placeOf,
   renderRow,
+  renderBelow,
   label,
   onMove,
   onAnnounce,
   onDraggingChange,
+  disabled = false,
 }: Props<T>) {
   const { t } = useTranslation();
   const ids = useMemo(() => items.map(getId), [items, getId]);
@@ -279,8 +319,10 @@ export default function ReorderableList<T>({
                 name={getName(item)}
                 first={index === 0}
                 last={index === items.length - 1}
+                disabled={disabled}
                 onUp={() => moveBy(index, -1)}
                 onDown={() => moveBy(index, 1)}
+                below={renderBelow?.(item, index)}
               >
                 {renderRow(item, index)}
               </Row>
