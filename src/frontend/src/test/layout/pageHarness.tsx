@@ -12,6 +12,8 @@ import { AuthProvider } from '../../contexts/AuthContext';
 import { ColorModeProvider } from '../../contexts/ColorModeContext';
 import { LanguageProvider } from '../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
+import { createAppTheme } from '../../theme';
+import { contrast, hex, type Rgb } from '../contrast';
 import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
 import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 import {
@@ -32,7 +34,7 @@ import {
   type NoviceScene,
   type WeatherCityScene,
 } from './scenes';
-import { gridCellsOf, measureCard, wrappedTexts, type CardMeasure, type GridCellsMeasure } from './measure';
+import { gridCellsOf, measureCard, ownText, visible, wrappedTexts, type CardMeasure, type GridCellsMeasure } from './measure';
 
 /**
  * SMA-437, lot V39, PR B, step B9 — the BROWSER side of the page launcher
@@ -59,6 +61,14 @@ import { gridCellsOf, measureCard, wrappedTexts, type CardMeasure, type GridCell
  * serves the REAL page; `measureNovice()` reads the page as one card and card
  * by card; `fail=gardens` answers the aggregate with a 500, for the proof
  * that a page showing its load error is never taken for ready.
+ *
+ * SMA-437, lot V3-07, P5: THE CUSTOMIZE DRAWER, opened from the header on
+ * the same page. `measurePanel()` reads its content as one card, its paper,
+ * its rows, its region and every text's contrast on what is painted behind
+ * it; `focusPanel()` / `clickPanel()` reach a row's handle, ▲, ▼, switch or
+ * size pill, `panelFocus()` says where the focus stands, and
+ * `watchPanelRegion()` / `panelRegionWrites()` count the sentences its region
+ * is handed.
  */
 
 const params = new URLSearchParams(location.search);
@@ -124,6 +134,13 @@ if (gardensKindName && !gardensKind) throw new Error(`No gardens scene ${gardens
 const gardensSize = params.get('gsize') as DashboardSize | null;
 /** What `fetch` serves the page for the Gardens scene: its gardens and their weather. */
 const gardensServed = gardensKind ? gardensSceneData(gardensKind) : null;
+
+/**
+ * The theme the page draws with — the colour mode `pageSetup.ts` stored —:
+ * the Customize drawer's secondary texts are told apart by its
+ * `text.secondary` (SMA-437, lot V3-07, P5).
+ */
+const theme = createAppTheme(params.get('theme') === 'dark' ? 'dark' : 'light');
 
 /** A JSON answer. */
 const json = (body: unknown) =>
@@ -468,6 +485,50 @@ export interface PlannerLimitMeasure {
   fontLoaded: boolean;
 }
 
+/**
+ * One text of the Customize drawer and the contrast it is read at (WCAG
+ * 1.4.3): its computed colour over what is painted behind it — the first
+ * opaque background up its ancestors, with the translucent ones and a
+ * one-colour image (MUI's night veil is a gradient of one colour) composited
+ * back down over it.
+ */
+export interface PanelText {
+  label: string;
+  px: number;
+  weight: number;
+  color: string;
+  /** What is painted behind the text, `rgb(r, g, b)` — or `unreadable`: an image no colour stands for. */
+  background: string;
+  ratio: number;
+  /** Large text — 24 px, or 18.66 px bold —, whose floor is 3:1, not 4.5. */
+  large: boolean;
+  /** Drawn in the theme's `text.secondary`. */
+  secondary: boolean;
+}
+
+/**
+ * SMA-437, lot V3-07, P5 — THE CUSTOMIZE DRAWER as the app opens it: its
+ * content measured as one card — every text and glyph against every other —,
+ * the paper it lies on, the rows it lists, what its region says, and every
+ * text's contrast on what is painted behind it.
+ */
+export interface PanelMeasure extends CardMeasure {
+  viewport: number;
+  /** The drawer's paper: its box, what its content runs past it sideways, what it paints. */
+  paper: { rect: Rect; overflowX: number; backgroundColor: string; backgroundImage: string };
+  /** Each row, in the list's order: its widget, its switch — and whether the widget is shown — or its lock, its size pills and the one pressed (-1: none). */
+  rows: Array<{ key: string; control: 'switch' | 'lock' | 'none'; shown: boolean; pills: number; pressed: number }>;
+  /** What the panel's one region says. */
+  said: string;
+  texts: PanelText[];
+}
+
+/** Where the focus stands in the drawer: the widget of its row, and which control — `handle`, `up`, `down`, `switch`, `pill:<n>` —; or, off the rows, the element. */
+export interface PanelFocus {
+  key: string | null;
+  control: string;
+}
+
 declare global {
   interface Window {
     __page?: typeof page;
@@ -641,6 +702,138 @@ function describeActive(): ActiveMeasure {
       : 'elsewhere';
   return { where, action: active.getAttribute('data-page-action'), text: active.textContent ?? '', mark: markOf(active) };
 }
+
+// ── The Customize drawer (SMA-437, lot V3-07, P5) ───────────────────────────
+
+/** The drawer's paper and its content, found from its list of widgets — null while it is not open. */
+function panelParts(): { paper: HTMLElement; content: HTMLElement } | null {
+  const widgets = document.querySelector<HTMLElement>('[data-panel-widgets]');
+  const paper = widgets?.closest<HTMLElement>('.MuiDrawer-paper');
+  const content = widgets?.closest<HTMLElement>('.MuiDrawer-paper > *');
+  return paper && content ? { paper, content } : null;
+}
+
+/**
+ * One control of a widget's row: its handle, ▲ and ▼ — the three buttons of
+ * the row's first line, in that order —, its switch, or its `n`-th size pill
+ * (`pill:<n>`). Throws, naming it, when the row or the control is missing.
+ */
+function panelControl(key: string, control: string): HTMLElement {
+  const row = document.querySelector(`[data-panel-widget="${key}"]`)?.closest('li');
+  if (!row) throw new Error(`No row ${key} in the Customize drawer.`);
+  if (control === 'switch') {
+    const input = row.querySelector<HTMLElement>('input[role="switch"]');
+    if (!input) throw new Error(`The row ${key} has no switch.`);
+    return input;
+  }
+  if (control.startsWith('pill:')) {
+    const pill = row.querySelectorAll<HTMLElement>('[data-pill]')[Number(control.slice('pill:'.length))];
+    if (!pill) throw new Error(`The row ${key} has no ${control}.`);
+    return pill;
+  }
+  const buttons = [...(row.firstElementChild?.querySelectorAll<HTMLElement>('button') ?? [])];
+  const index = ['handle', 'up', 'down'].indexOf(control);
+  if (index < 0) throw new Error(`No control ${control}.`);
+  if (buttons.length !== 3) throw new Error(`The first line of the row ${key} has ${buttons.length} buttons, not its handle, ▲ and ▼.`);
+  return buttons[index]!;
+}
+
+/** A colour as the engine computes it — `rgb()`, `rgba()` — or as the theme writes it (`#RRGGBB`): its channels and its alpha; null for a keyword. */
+function channels(value: string): { rgb: Rgb; a: number } | null {
+  if (/^#[0-9a-f]{6}$/i.test(value)) return { rgb: hex(value), a: 1 };
+  const found = /rgba?\(([^)]+)\)/.exec(value);
+  if (!found) return null;
+  const parts = found[1]!.split(',').map((part) => parseFloat(part));
+  return { rgb: [parts[0]!, parts[1]!, parts[2]!], a: parts.length === 4 ? parts[3]! : 1 };
+}
+
+/** `colour` at alpha `a`, painted over `below`. */
+const mix = (colour: Rgb, a: number, below: Rgb): Rgb => [0, 1, 2].map((i) => colour[i]! * a + below[i]! * (1 - a)) as Rgb;
+
+/**
+ * A background image as ONE colour — a gradient whose stops are all that
+ * colour, as MUI's night veil is —; `null` for none; `undefined` for any
+ * other image, which no single colour stands for.
+ */
+function uniformImage(value: string): { rgb: Rgb; a: number } | null | undefined {
+  if (value === 'none') return null;
+  const stops = value.match(/rgba?\([^)]*\)/g) ?? [];
+  if (!value.startsWith('linear-gradient(') || stops.length === 0 || new Set(stops).size !== 1) return undefined;
+  return channels(stops[0]!);
+}
+
+/**
+ * What is painted behind `el`: up its ancestors to the first opaque
+ * background colour — its own image over it —, then back down, each
+ * translucent background composited over what lies under it and its image
+ * over that. Null when an image no single colour stands for is in the way.
+ */
+function paintedBehind(el: Element): Rgb | null {
+  type Layer = { rgb: Rgb; a: number } | null;
+  const layers: Array<{ colour: Layer; image: Layer }> = [];
+  // The canvas, should no ancestor paint an opaque ground.
+  let ground: Rgb = [255, 255, 255];
+  for (let node: Element | null = el; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    const colour = channels(style.backgroundColor);
+    const image = uniformImage(style.backgroundImage);
+    if (image === undefined) return null;
+    if (colour && colour.a >= 1) {
+      ground = image ? mix(image.rgb, image.a, colour.rgb) : colour.rgb;
+      break;
+    }
+    layers.push({ colour, image });
+  }
+  for (const { colour, image } of layers.reverse()) {
+    if (colour) ground = mix(colour.rgb, colour.a, ground);
+    if (image) ground = mix(image.rgb, image.a, ground);
+  }
+  return ground;
+}
+
+/** The theme's `text.secondary`, as channels. */
+const SECONDARY = channels(theme.palette.text.secondary);
+
+/** Every text of `root` — as `measureCard` reads its text atoms —, its colour, what is painted behind it, and the ratio it is read at. */
+function textContrasts(root: Element): PanelText[] {
+  const texts: PanelText[] = [];
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    if (!visible(el)) continue;
+    const text = ownText(el);
+    if (!text) continue;
+    const style = getComputedStyle(el);
+    const colour = channels(style.color);
+    const behind = paintedBehind(el);
+    // A text under an ancestor's opacity is drawn that much fainter.
+    let opacity = 1;
+    for (let node: Element | null = el; node && node !== root.parentElement; node = node.parentElement) {
+      opacity *= Number(getComputedStyle(node).opacity);
+    }
+    const drawn = colour && behind ? mix(colour.rgb, colour.a * opacity, behind) : null;
+    const px = parseFloat(style.fontSize);
+    const weight = Number(style.fontWeight) || 400;
+    texts.push({
+      label: `"${text.slice(0, 44)}"`,
+      px,
+      weight,
+      color: style.color,
+      background: behind ? `rgb(${behind.map((channel) => Math.round(channel)).join(', ')})` : 'unreadable',
+      // Cut, never rounded, to the hundredth: a 4.497 is never read as 4.5.
+      ratio: drawn && behind ? Math.floor(contrast(drawn, behind) * 100) / 100 : 0,
+      large: px >= 24 || (px >= 18.66 && weight >= 700),
+      secondary:
+        colour !== null &&
+        SECONDARY !== null &&
+        colour.rgb.every((channel, index) => Math.abs(channel - SECONDARY.rgb[index]!) < 0.5) &&
+        Math.abs(colour.a - SECONDARY.a) < 0.01,
+    });
+  }
+  return texts;
+}
+
+/** What the drawer's region was handed since `watchPanelRegion()` — and since the last count. */
+let regionRecords: MutationRecord[] = [];
+let regionObserver: MutationObserver | null = null;
 
 const page = {
   /**
@@ -964,6 +1157,105 @@ const page = {
     };
   },
 
+  /**
+   * SMA-437, lot V3-07, P5 — THE CUSTOMIZE DRAWER as the app opens it: its
+   * content as one card, its paper, its rows, what its region says, and
+   * every text's contrast on what is painted behind it.
+   */
+  measurePanel(): PanelMeasure {
+    const parts = panelParts();
+    if (!parts) throw new Error('The Customize drawer is not open.');
+    const { paper, content } = parts;
+    // MUI's ripple is clipped by its control BY DESIGN — a decoration, not a
+    // text nor a glyph (as `measureBar` has it): out of the measure.
+    const ripples = [...content.querySelectorAll<HTMLElement>('.MuiTouchRipple-root')];
+    for (const ripple of ripples) ripple.style.visibility = 'hidden';
+    const card = measureCard(content);
+    const texts = textContrasts(content);
+    for (const ripple of ripples) ripple.style.visibility = '';
+    const style = getComputedStyle(paper);
+    return {
+      ...card,
+      viewport: innerWidth,
+      paper: {
+        rect: rectOf(paper),
+        overflowX: paper.scrollWidth - paper.clientWidth,
+        backgroundColor: style.backgroundColor,
+        backgroundImage: style.backgroundImage,
+      },
+      rows: [...content.querySelectorAll<HTMLElement>('[data-panel-widget]')].map((name): PanelMeasure['rows'][number] => {
+        const row = name.closest('li');
+        const input = row?.querySelector<HTMLInputElement>('input[role="switch"]') ?? null;
+        const pills = [...(row?.querySelectorAll('[data-pill]') ?? [])];
+        return {
+          key: name.getAttribute('data-panel-widget') ?? '',
+          control: input ? 'switch' : row?.querySelector('[role="img"]') ? 'lock' : 'none',
+          shown: input ? input.checked : true,
+          pills: pills.length,
+          pressed: pills.findIndex((pill) => pill.getAttribute('aria-pressed') === 'true'),
+        };
+      }),
+      said: content.querySelector('[data-customize-said]')?.textContent ?? '',
+      texts,
+    };
+  },
+
+  /** Focuses a control of a widget's row in the drawer (`handle`, `up`, `down`, `switch`, `pill:<n>`): true when it holds the focus. */
+  focusPanel(key: string, control: string): boolean {
+    const element = panelControl(key, control);
+    element.focus();
+    return document.activeElement === element;
+  },
+
+  /** A click, as the pointer gives it, on a control of a widget's row in the drawer. */
+  clickPanel(key: string, control: string): true {
+    panelControl(key, control).click();
+    return true;
+  },
+
+  /** Where the focus stands in the drawer: a row's control, or the element off the rows. */
+  panelFocus(): PanelFocus {
+    const active = document.activeElement as HTMLElement | null;
+    const key = active?.closest('li')?.querySelector('[data-panel-widget]')?.getAttribute('data-panel-widget') ?? null;
+    if (!active || !key) {
+      return { key: null, control: active ? `${active.tagName.toLowerCase()} « ${active.getAttribute('aria-label') ?? ''} »` : 'none' };
+    }
+    const pills = [...(active.closest('li')?.querySelectorAll('[data-pill]') ?? [])];
+    // Gardens has no switch: a control the row lacks is simply not the one.
+    const holds = (candidate: string) => {
+      try {
+        return panelControl(key, candidate) === active;
+      } catch {
+        return false;
+      }
+    };
+    const control =
+      ['handle', 'up', 'down', 'switch'].find(holds) ??
+      (pills.includes(active) ? `pill:${pills.indexOf(active)}` : active.tagName.toLowerCase());
+    return { key, control };
+  },
+
+  /** From now on, what the drawer's region is handed is counted. False when the drawer is not open. */
+  watchPanelRegion(): boolean {
+    regionObserver?.disconnect();
+    regionRecords = [];
+    const region = document.querySelector('[data-customize-said]');
+    if (!region) return false;
+    regionObserver = new MutationObserver((records) => {
+      regionRecords.push(...records);
+    });
+    regionObserver.observe(region, { childList: true, characterData: true, subtree: true });
+    return true;
+  },
+
+  /** The sentences the region was handed since the last count: the records that put a text in — an emptying puts none. */
+  panelRegionWrites(): number {
+    if (regionObserver) regionRecords.push(...regionObserver.takeRecords());
+    const writes = regionRecords.filter((record) => record.type === 'characterData' || record.addedNodes.length > 0).length;
+    regionRecords = [];
+    return writes;
+  },
+
   /** Types `value` into the `n`-th element `selector` finds, as React reads it: the native setter, then an input event. False when there is none. */
   fill(selector: string, value: string, n = 0): boolean {
     const input = document.querySelectorAll<HTMLInputElement>(selector)[n];
@@ -1050,7 +1342,12 @@ const page = {
    * - `wide-label`: « Personnaliser » made wider than its half;
    * - `filled-region`: the save's region replaced by one born FILLED;
    * - `unmount-toggle`: the bar's toggle unmounted at the key, as the header's
-   *   two buttons were before #291.
+   *   two buttons were before #291;
+   * - `panel-veil` (SMA-437, lot V3-07, P5): the elevation's veil put back on
+   *   the Customize drawer's paper — MUI still writes `--Paper-overlay`
+   *   inline at night;
+   * - `panel-long-word`: a widget's name no row can hold, one word with no
+   *   break in it.
    */
   probe(name: string): boolean {
     const bar = barOf();
@@ -1060,6 +1357,18 @@ const page = {
       const filled = region.cloneNode(false) as HTMLElement;
       filled.textContent = 'Enregistrement…';
       region.replaceWith(filled);
+      return true;
+    }
+    if (name === 'panel-veil' || name === 'panel-long-word') {
+      const parts = panelParts();
+      if (!parts) return false;
+      if (name === 'panel-veil') {
+        parts.paper.style.backgroundImage = 'var(--Paper-overlay)';
+        return true;
+      }
+      const widgetName = parts.content.querySelector('[data-panel-widget="counters"] > span');
+      if (!widgetName) return false;
+      widgetName.textContent = 'Compteursparvariétédanstouslesjardinsdupotager';
       return true;
     }
     if (!bar) return false;
