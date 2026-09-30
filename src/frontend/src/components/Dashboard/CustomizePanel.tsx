@@ -279,7 +279,13 @@ export default function CustomizePanel({
       slotProps={{
         paper: {
           'aria-labelledby': TITLE_ID,
-          sx: { width: { xs: '100%', sm: 380 } },
+          // SMA-437, lot V3-07, P4 (contract A-18 — Alexandre, 28/09: « le
+          // tiroir de nuit sans le voile MUI »; SMA-450): at night MUI lays
+          // the elevation's veil over a Paper — 14.7 % of white at the
+          // temporary Drawer's 16 —, and the panel's secondary text fell to
+          // 3.9:1, under the 4.5 of V14. Removed on THIS drawer only, as on
+          // the options Popover (D15); the theme's `MuiPaper` keeps it.
+          sx: { width: { xs: '100%', sm: 380 }, backgroundImage: 'none' },
         },
       }}
     >

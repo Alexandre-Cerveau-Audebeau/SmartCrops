@@ -7,6 +7,8 @@ import { LanguageProvider } from '../../contexts/LanguageContext';
 import { createAppTheme } from '../../theme';
 import { isAdjusted } from '../../constants/dashboardCapabilities';
 import { capabilitiesFor, presetFor } from '../../test/fixtures/formulas';
+import { contrast, hex, over, type Rgb } from '../../test/contrast';
+import { rulesFor } from '../../test/dashboardDom';
 import CustomizePanel from './CustomizePanel';
 import type { DashboardBlock, DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
 
@@ -20,6 +22,7 @@ import type { DashboardBlock, DashboardBlockKey, DashboardLevel, DashboardSize }
 interface PanelProps {
   level: DashboardLevel;
   initial: DashboardBlock[];
+  mode?: 'light' | 'dark';
   switching?: boolean;
   onClose?: () => void;
   onReset?: () => void;
@@ -33,12 +36,12 @@ interface PanelProps {
  * `patchBlock` do — its reset brings the preset's layout back, and
  * « adjusted » is the page's own `isAdjusted`.
  */
-function Panel({ level, initial, switching = false, onClose = () => {}, onReset, onReorder, onVisibilityChange, onSizeChange }: PanelProps) {
+function Panel({ level, initial, mode = 'light', switching = false, onClose = () => {}, onReset, onReorder, onVisibilityChange, onSizeChange }: PanelProps) {
   const [blocks, setBlocks] = useState(initial);
   const patch = (key: DashboardBlockKey, change: Partial<DashboardBlock>) =>
     setBlocks((current) => current.map((block) => (block.key === key ? { ...block, ...change } : block)));
   return (
-    <ThemeProvider theme={createAppTheme('light')}>
+    <ThemeProvider theme={createAppTheme(mode)}>
       <LanguageProvider>
         <CustomizePanel
           open
@@ -268,5 +271,51 @@ describe('CustomizePanel — the list of the formula’s widgets (A-16)', () => 
 
     fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** The LAST value a node's emitted rules give a property — the one the cascade keeps. */
+function lastDeclared(node: Element, property: string): string | undefined {
+  const found = [...rulesFor(node).matchAll(new RegExp(`[{;]\\s*${property}:\\s*([^;}]+)`, 'g'))];
+  return found.at(-1)?.[1]!.trim();
+}
+
+/** The veil MUI writes inline on a Paper at night — `linear-gradient(rgba(255, 255, 255, a), …)` —, its colour. */
+function nightVeil(paper: HTMLElement): string {
+  const veil = /rgba\([^)]*\)/.exec(paper.style.getPropertyValue('--Paper-overlay'));
+  if (!veil) throw new Error('No --Paper-overlay written inline on the drawer’s Paper');
+  return veil[0];
+}
+
+/**
+ * What the drawer paints behind its text: the Paper's colour, under the last
+ * background image its rules give it — `none`, or the veil MUI declares,
+ * `var(--Paper-overlay)`.
+ */
+function paintedBehindText(paper: HTMLElement): Rgb {
+  const colour = lastDeclared(paper, 'background-color');
+  if (!colour || !/^#[0-9a-f]{6}$/i.test(colour)) throw new Error(`Unexpected background-color on the drawer: ${colour}`);
+  const image = lastDeclared(paper, 'background-image');
+  if (image === 'none') return hex(colour);
+  if (image !== 'var(--Paper-overlay)') throw new Error(`Unexpected background-image on the drawer: ${image}`);
+  return over(nightVeil(paper), hex(colour));
+}
+
+// SMA-437, lot V3-07, P4 (contract A-18 — Alexandre, 28/09: « le tiroir de
+// nuit sans le voile MUI »; SMA-450) — at night MUI lightens a Paper by its
+// elevation: the temporary Drawer's 16 lays 14.7 % of white over its colour,
+// and the panel's secondary text fell to 3.9:1, under the 4.5 of V14. The
+// veil goes on THIS drawer only, as on the options Popover (D15) — the
+// theme's `MuiPaper` keeps it for every other dialog and menu.
+describe('CustomizePanel — the drawer at night (A-18)', () => {
+  it('paints the drawer WITHOUT the elevation veil: its secondary text holds 4.5:1 on what is painted', () => {
+    const theme = createAppTheme('dark');
+    render(<Panel level="gardener" initial={presetFor('gardener')} mode="dark" />);
+    const paper = (panel().closest('.MuiPaper-root') ?? panel()) as HTMLElement;
+    const secondary = hex(theme.palette.text.secondary);
+
+    expect(contrast(secondary, paintedBehindText(paper))).toBeGreaterThanOrEqual(4.5);
+    // The veil MUI still writes inline, painted, would hold it under 4.5.
+    expect(contrast(secondary, over(nightVeil(paper), hex(theme.palette.background.paper)))).toBeLessThan(4.5);
   });
 });
