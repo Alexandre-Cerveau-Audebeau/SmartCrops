@@ -1,4 +1,4 @@
-import { act, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme, type Theme } from '@mui/material/styles';
 import i18next from 'i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -896,7 +896,15 @@ describe('MonthBlock — Large on a phone: one letter a month, an 84px name colu
         }))
       );
 
-    afterEach(() => vi.unstubAllGlobals());
+    // Unmounted BEFORE `matchMedia` is unstubbed (the trap of fix round 1, #3 —
+    // GitHub `4059024241`), as the Full width's hook below does: this hook runs
+    // before Testing Library's own cleanup under vitest's stacked hooks, and a
+    // tree still mounted could read the global the stub installed (PR #301,
+    // fix round 1, R4 — the family, in the code the lot rewrites).
+    afterEach(() => {
+      cleanup();
+      vi.unstubAllGlobals();
+    });
 
     /** Ten characters: whole in the 108px column (twelve fit), clipped in the 84px one (nine fit). */
     const tenLetters = pruned({ plantId: 'ten', commonName: 'courgettes', count: 1, gardenIds: ['g1'] });
@@ -911,5 +919,218 @@ describe('MonthBlock — Large on a phone: one letter a month, an 84px name colu
       const { card } = renderBlock({ size: 'large', varieties: [tenLetters] });
       expect(card.querySelector('[data-month-plant="ten"] [data-month-name]')).not.toHaveAttribute('title');
     });
+  });
+});
+
+// SMA-437, lot V3-08, step S4 — THIS MONTH IN THE FULL WIDTH (A-14, decided by
+// Alexandre on 28/09: form A of V3-08, « la grille seule »). The Large's
+// counters, grid, legend and foot, the grid WIDENED: a 200 px name column and
+// the months in full from 1 200 px, 160 px and the short months from 900, the
+// Large's 108 and 84 px below. Ten rows at rest, then the same button unfolds
+// the rest in place — the card grows, nothing scrolls inside it (A-N10) — and
+// the axis, with no scrolling zone to stick to, heads the grid.
+describe('MonthBlock in the Full width (SMA-437, lot V3-08, S4 — A-14)', () => {
+  /** The page believes it is `width` px wide: each `useMediaQuery` answers by its bounds. */
+  const stubWidth = (width: number) =>
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => {
+        const min = /min-width:\s*([\d.]+)px/.exec(query);
+        const max = /max-width:\s*([\d.]+)px/.exec(query);
+        return {
+          matches: Boolean(min || max) && (!min || width >= Number(min[1])) && (!max || width <= Number(max[1])),
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        };
+      })
+    );
+
+  // Unmounted BEFORE `matchMedia` is unstubbed (the trap of fix round 1, #3 —
+  // GitHub `4059024241`), and English again whatever a French case left
+  // (fix round 1, #1 — GitHub `4059024236`).
+  afterEach(async () => {
+    cleanup();
+    vi.unstubAllGlobals();
+    if (i18next.language !== 'en') await act(() => i18next.changeLanguage('en'));
+  });
+
+  const TEMPLATE = (px: number) => `${px}px repeat(12, minmax(0, 1fr))`;
+
+  it('declares its name column by the width of the page — 84, 108, 160 and 200 px — on the axis and on every row alike', () => {
+    const { card } = renderBlock({ size: 'wide' });
+    const axisRow = card.querySelector('[data-month-axis-row]')!;
+    const row = card.querySelector('[data-month-plant="thyme"]')!;
+
+    for (const grid of [axisRow, row]) {
+      expect(declaredAtBreakpoint(grid, '0px', 'grid-template-columns')).toBe(TEMPLATE(84));
+      expect(declaredAtBreakpoint(grid, '600px', 'grid-template-columns')).toBe(TEMPLATE(108));
+      expect(declaredAtBreakpoint(grid, '900px', 'grid-template-columns')).toBe(TEMPLATE(160));
+      expect(declaredAtBreakpoint(grid, '1200px', 'grid-template-columns')).toBe(TEMPLATE(200));
+    }
+  });
+
+  it('names each month in three forms — in full from 1 200 px, short from 600, the initial under 600 — and in full on the cell', () => {
+    const { card } = renderBlock({ size: 'wide' });
+    const cells = [...card.querySelectorAll('[data-month-axis-row] > *')].slice(1);
+    expect(cells).toHaveLength(12);
+
+    cells.forEach((cell, index) => {
+      const long = cell.querySelector('[data-month-axis-long]')!;
+      const short = cell.querySelector('[data-month-axis-short]')!;
+      const initial = cell.querySelector('[data-month-axis-initial]')!;
+      expect(declaredAtBreakpoint(long, '0px', 'display')).toBe('none');
+      expect(declaredAtBreakpoint(long, '1200px', 'display')).toBe('inline');
+      expect(declaredAtBreakpoint(short, '0px', 'display')).toBe('none');
+      expect(declaredAtBreakpoint(short, '600px', 'display')).toBe('inline');
+      expect(declaredAtBreakpoint(short, '1200px', 'display')).toBe('none');
+      expect(declaredAtBreakpoint(initial, '0px', 'display')).toBe('inline');
+      expect(declaredAtBreakpoint(initial, '600px', 'display')).toBe('none');
+      expect(long.textContent).toBe(monthLabel(index + 1, 'en'));
+      expect(cell.getAttribute('aria-label')).toBe(monthLabel(index + 1, 'en'));
+    });
+  });
+
+  it('in French, the months in full with their capital — « Septembre », the word of the header chip', async () => {
+    const { card } = renderBlock({ size: 'wide' });
+    await act(() => i18next.changeLanguage('fr'));
+
+    expect([...card.querySelectorAll('[data-month-axis-long]')].map((node) => node.textContent)).toEqual([
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+    ]);
+  });
+
+  it('leaves the Large as it was: two forms of the month, and its 108 px column from 600 px on', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const row = card.querySelector('[data-month-plant="thyme"]')!;
+
+    expect(card.querySelector('[data-month-axis-long]')).toBeNull();
+    expect(card.querySelector('[data-month-wide]')).toBeNull();
+    expect(declaredAtBreakpoint(row, '900px', 'grid-template-columns')).toBeNull();
+    expect(declaredAtBreakpoint(row, '1200px', 'grid-template-columns')).toBeNull();
+  });
+
+  it('never scrolls inside itself: as tall as its rows, packed from the top, folded or unfolded (A-N10)', () => {
+    const { card, widget } = renderBlock({ size: 'wide', varieties: manyVarieties(16) });
+    const grid = card.querySelector('[data-month-grid]')!;
+    expect(grid).toHaveAttribute('data-month-wide');
+    const zones = () => ['[data-month-grid]', '[data-month-rows]', '[data-month-body]'].map((selector) => ruleText(card.querySelector(selector)!));
+
+    for (const rules of zones()) {
+      expect(rules).not.toContain('overflow');
+      expect(rules).not.toContain('flex:1');
+      expect(rules).not.toContain('space-evenly');
+    }
+    fireEvent.click(widget.getByRole('button', { name: 'Show the 6 other varieties' }));
+    for (const rules of zones()) expect(rules).not.toContain('overflow');
+  });
+
+  it('heads its grid with the axis — never stuck, there is no scrolling zone to stick to', () => {
+    const { card } = renderBlock({ size: 'wide', varieties: manyVarieties(16) });
+
+    expect(ruleText(card.querySelector('[data-month-axis-row]')!)).not.toContain('position:sticky');
+  });
+
+  it('lists ten rows at rest, then « Show the 6 other varieties » unfolds all sixteen in place and folds them back', () => {
+    const { card, widget } = renderBlock({ size: 'wide', varieties: manyVarieties(16) });
+    const button = widget.getByRole('button', { name: 'Show the 6 other varieties' });
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(10);
+    expect(button).toHaveAttribute('aria-controls', card.querySelector('[data-month-grid]')!.id);
+
+    fireEvent.click(button);
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(16);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(button);
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(10);
+  });
+
+  it('counts every variety in its chip and its three counters, folded or unfolded (A-4)', () => {
+    const { card, widget } = renderBlock({ size: 'wide', varieties: manyVarieties(16) });
+    const counters = () => COUNTERS.map((key) => card.querySelector(`[data-month-count="${key}"]`)!.textContent);
+    const before = counters();
+    expect(card.querySelector('[data-month-count="prune"]')).toHaveTextContent('16');
+
+    fireEvent.click(widget.getByRole('button', { name: 'Show the 6 other varieties' }));
+
+    expect(counters()).toEqual(before);
+  });
+
+  /** Twenty-two characters: whole in the 200 px column (24 fit), clipped in the 160 px one (19 fit). */
+  const sprouts = pruned({ plantId: 'sprouts', commonName: 'chou de Bruxelles nain', count: 1, gardenIds: ['g1'] });
+
+  it.each([
+    [1280, 'sprouts', false],
+    [1024, 'sprouts', true],
+    [1024, 'harts', false],
+    [700, 'harts', true],
+  ] as const)('at %i px, the tooltip of %s follows the Full width’s column — described: %s (V32)', (width, id, described) => {
+    stubWidth(width);
+    const { card } = renderBlock({ size: 'wide', varieties: [sprouts, hartsTongue] });
+    const name = card.querySelector(`[data-month-plant="${id}"] [data-month-name]`)!;
+
+    if (described) expect(name).toHaveAttribute('title');
+    else expect(name).not.toHaveAttribute('title');
+  });
+
+  it('opens unfolded when told to (`defaultExpanded`, the harness’s scenes), never otherwise', () => {
+    const { card } = renderBlock({ size: 'wide', varieties: manyVarieties(16), defaultExpanded: true });
+
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(16);
+  });
+});
+
+// PR #301, fix round 1, R3 — THE BARS OF A ROW CENTRED ON ITS NAME, in the Full
+// width (Alexandre, 29/09: « Je suis ok avec ton point 3 »; P-S4-2 reversed): a
+// row's stack holds the lanes its variety HAS, stretched to the row's height
+// and centred in it, where the Large keeps its four lanes in their places. The
+// declarations are read here; the pixels are the layout harness's.
+describe('MonthBlock in the Full width — each row’s bars centred on its name (PR #301, fix round 1, R3)', () => {
+  /** The lane grids of a row: every child of its lanes container but the tinted column. */
+  const laneGrids = (card: HTMLElement, plant: string) =>
+    [...card.querySelector(`[data-month-plant="${plant}"] [data-month-lanes]`)!.children].filter(
+      (child) => !child.hasAttribute('data-month-now')
+    );
+
+  it('stacks only the lanes a variety has — the thyme’s pruning, the lettuce’s sowing and harvest —, stretched to the row and centred in it', () => {
+    const { card } = renderBlock({ size: 'wide' });
+    const lanes = card.querySelector('[data-month-plant="thyme"] [data-month-lanes]')!;
+
+    expect(laneGrids(card, 'thyme')).toHaveLength(1);
+    expect(laneGrids(card, 'thyme').map((grid) => grid.getAttribute('data-month-lane'))).toEqual(['prune']);
+    expect(laneGrids(card, 'lettuce').map((grid) => grid.getAttribute('data-month-lane'))).toEqual(['sow', 'harvest']);
+    expect(ruleText(lanes)).toContain('align-self:stretch');
+    expect(ruleText(lanes)).toContain('justify-content:center');
+    // The same bar as before, and the one tinted column behind the stack.
+    expect(lanes.querySelectorAll('[data-month-bar="prune"]')).toHaveLength(1);
+    expect(lanes.querySelectorAll('[data-month-now]')).toHaveLength(1);
+  });
+
+  it('…and a variety with the four lanes keeps the four, in the legend’s order', () => {
+    const fourLanes = varietyFixture({
+      plantId: 'four',
+      commonName: 'Tomato',
+      gardenIds: ['g1'],
+      pruningMonths: 'June,July,August',
+      sowingPeriod: 'march-may',
+      harvestPeriod: 'july-october',
+      floweringSeason: 'Summer',
+    });
+    const { card } = renderBlock({ size: 'wide', varieties: [fourLanes] });
+
+    expect(laneGrids(card, 'four').map((grid) => grid.getAttribute('data-month-lane'))).toEqual(['prune', 'sow', 'flower', 'harvest']);
+  });
+
+  it('leaves the Large as it was: the four lanes of every row in their places, the stack neither stretched nor centred', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const lanes = card.querySelector('[data-month-plant="thyme"] [data-month-lanes]')!;
+
+    expect(laneGrids(card, 'thyme')).toHaveLength(4);
+    expect(ruleText(lanes)).not.toContain('align-self:stretch');
+    expect(ruleText(lanes)).not.toContain('justify-content:center');
   });
 });

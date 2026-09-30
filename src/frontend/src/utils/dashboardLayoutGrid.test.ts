@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { presetFor } from '../test/fixtures/formulas';
 import {
+  emptyCells,
   moveItem,
   packGrid,
   rowTops,
@@ -286,6 +288,78 @@ describe('rowTops — the top of every row, with free-height rows among them (SM
     const placed = packGrid([medium('a'), medium('b'), band('band'), small('c')], 4);
     // a and b on row 0, the band on row 1, c on row 2.
     expect(rowTops(placed, new Map([['band', 130]]), 273, 20)).toEqual([0, 293, 443]);
+  });
+});
+
+// SMA-437, lot V3-08, step S5 (A-15) — the cells no card covers: a HOLE
+// between two cards, which the sparse cursor walked past for good, or the
+// page's open end after the last. Written by hand, as every expectation here.
+describe('emptyCells — a hole between two cards, or the page’s open end (SMA-437, lot V3-08, S5)', () => {
+  const wide = (key: string, columns: number): GridItem => ({ key, ...spanFor('wide', columns) });
+
+  it('sees the hole the Expert preset of PR #300 left at four columns: the four cells right of the Weather, between two cards', () => {
+    // The band on row 0; the Weather in Large on rows 1-2, columns 0-1; the
+    // Gardens in the Full width cannot share those two rows and opens row 3.
+    // Columns 2-3 of rows 1-2 stay empty: 566 × 566 px at 1 280 px.
+    const items = [
+      wide('keyfigures', 4),
+      large('weather'),
+      wide('gardens', 4),
+      large('tips'),
+      large('month'),
+      large('todo'),
+      large('counters'),
+      large('stats'),
+      large('harvest'),
+    ];
+    expect(emptyCells(packGrid(items, 4), 4)).toEqual({
+      between: [
+        { col: 2, row: 1 },
+        { col: 3, row: 1 },
+        { col: 2, row: 2 },
+        { col: 3, row: 2 },
+      ],
+      trailing: [],
+    });
+  });
+
+  it('tells the page’s open end from a hole: half a row after the last card’s corner is trailing — the Gardener preset as it stood until PR #301’s fix round 1, written out', () => {
+    // Weather M (columns 0-1, row 0), Gardens L (2-3, rows 0-1), Tips M (0-1,
+    // row 1), This month M (0-1, row 2) — columns 2-3 of row 1 are the
+    // Gardens' —, To-do M (2-3, row 2), Counters M (0-1, row 3): columns 2-3
+    // of row 3 come after the last corner. No preset leaves one any more (the
+    // test below), so the rule's other branch keeps this probe, as the hole
+    // above keeps PR #300's Expert preset.
+    const items = [medium('weather'), large('gardens'), medium('tips'), medium('month'), medium('todo'), medium('counters')];
+    expect(emptyCells(packGrid(items, 4), 4)).toEqual({
+      between: [],
+      trailing: [
+        { col: 2, row: 3 },
+        { col: 3, row: 3 },
+      ],
+    });
+  });
+
+  // PR #301, fix round 1, R2 — the Gardener preset AS SERVED, read from the
+  // reference file rather than copied: To-do in Large grows down into the half
+  // row the preset used to leave at four columns, and no other card moves.
+  it.each([4, 2, 1])('the Gardener preset leaves no empty cell at %i column(s) — no half row at the end of the page', (columns) => {
+    const items = presetFor('gardener')
+      .filter((block) => !block.hidden)
+      .map((block) => ({ key: block.key, ...spanFor(block.size, columns) }));
+    expect(emptyCells(packGrid(items, columns), columns)).toEqual({ between: [], trailing: [] });
+  });
+
+  it('finds nothing in a full grid, and nothing in an empty one', () => {
+    expect(emptyCells(packGrid([large('a'), large('b')], 4), 4)).toEqual({ between: [], trailing: [] });
+    expect(emptyCells(new Map(), 4)).toEqual({ between: [], trailing: [] });
+  });
+
+  it.each([4, 2, 1])('the Expert preset leaves no empty cell at %i column(s) — the page at 1 280; 1 024 and 600; 390 and 360 px', (columns) => {
+    const items = presetFor('expert')
+      .filter((block) => !block.hidden)
+      .map((block) => ({ key: block.key, ...spanFor(block.size, columns) }));
+    expect(emptyCells(packGrid(items, columns), columns)).toEqual({ between: [], trailing: [] });
   });
 });
 

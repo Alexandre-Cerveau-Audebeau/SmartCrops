@@ -177,6 +177,57 @@ export function packGrid(
   return placements;
 }
 
+/** The empty cells of a packed layout, sorted by where they fall ({@link emptyCells}). */
+export interface EmptyCells {
+  /** No card covers them, and a card is placed after them: a hole in the page. */
+  between: GridCell[];
+  /** After the last card's corner, on the rows the cards reach: the page's end, left open. */
+  trailing: GridCell[];
+}
+
+/**
+ * SMA-437, lot V3-08 (A-15) — the cells of a packed layout NO CARD COVERS,
+ * in two kinds.
+ *
+ * `between`: an empty cell BEFORE the top-left corner of the last card, in
+ * reading order — left to right, then top to bottom. The sparse cursor has
+ * walked past it and never walks back, so no later card will fill it: it is
+ * a hole between two cards. The Expert preset of PR #300 left four of them at
+ * four columns — the Weather in Large, then the Gardens in the Full width,
+ * which could not share the Weather's two rows: 566 × 566 px empty right of
+ * the Weather at 1 280 px (SMA-448, 29/09).
+ *
+ * `trailing`: an empty cell after that corner — beside or under the last
+ * cards, on the rows they reach: where the page ends before the grid does,
+ * as the Gardener preset's half row at four columns did until PR #301's fix
+ * round 1 (R2: To-do in Large grows down into it).
+ *
+ * Pure, over any placement — the model's, from {@link packGrid}, or the one
+ * a harness reads back from the boxes an engine laid out — so the rule that
+ * names a hole is the same on both sides.
+ */
+export function emptyCells(placements: ReadonlyMap<string, GridPlacement>, columns: number): EmptyCells {
+  const width = Math.max(1, Math.floor(columns));
+  const covered = new Set<number>();
+  let rows = 0;
+  let lastCorner = -1;
+  for (const placement of placements.values()) {
+    rows = Math.max(rows, placement.row + placement.rows);
+    lastCorner = Math.max(lastCorner, placement.row * width + placement.col);
+    for (let row = placement.row; row < placement.row + placement.rows; row += 1) {
+      for (let col = placement.col; col < placement.col + placement.cols; col += 1) covered.add(row * width + col);
+    }
+  }
+  const between: GridCell[] = [];
+  const trailing: GridCell[] = [];
+  for (let index = 0; index < rows * width; index += 1) {
+    if (covered.has(index)) continue;
+    const cell = { col: index % width, row: Math.floor(index / width) };
+    (index < lastCorner ? between : trailing).push(cell);
+  }
+  return { between, trailing };
+}
+
 /**
  * SMA-437 lot 1, PR A, step A4 (pre-flight D6) — the top of every row of a
  * packed layout, in pixels from the top of the grid, for a grid whose rows are

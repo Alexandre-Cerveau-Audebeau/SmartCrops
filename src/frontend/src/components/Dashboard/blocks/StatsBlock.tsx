@@ -1,9 +1,12 @@
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import DashboardBlock from '../DashboardBlock';
@@ -40,7 +43,32 @@ interface Props {
    */
   refreshing?: boolean;
   onRetry: () => void;
+  /**
+   * The Full width's gardens unfolded at mount — the layout harness measures
+   * the unfolded list (SMA-437, lot V3-08). The page never passes it: the
+   * list opens folded, and the fold is the reader's.
+   */
+  defaultExpanded?: boolean;
 }
+
+/**
+ * SMA-437, lot V3-08 (A-14) — the gardens the Full width lists at rest: the
+ * Large's ten lines (V10), then « Afficher les N autres jardins », which
+ * unfolds the list in place and grows the card (A-N10: nothing scrolls
+ * inside a Full width). The same ten for the one-line form and the Large's.
+ */
+const WIDE_ROWS = 10;
+
+/**
+ * SMA-437, lot V3-08 (A-14, form A of V3-08) — ONE line per garden, from
+ * 900 px: the name on 200 px, which WRAPS (the width serves to cut nothing);
+ * the occupancy bar and « 20 m² · 68 % »; the exposure bar and the dominant
+ * share. The two figures keep a `min-content` floor, as the Large's column
+ * does: a figure wider than its track widens its row's rather than being
+ * clipped, and the bars take what is left.
+ */
+const ONE_LINE_COLUMNS =
+  'minmax(0, 200px) minmax(0, 1fr) minmax(min-content, 116px) minmax(0, 1fr) minmax(min-content, 72px)';
 
 /**
  * SMA-336 PR 2/5 — « Statistics »: the three sections of the frozen design —
@@ -66,6 +94,16 @@ interface Props {
  * stays: each further garden costs another 84 px (one occupancy row and one
  * exposure row), so a long list still has to scroll — inside the card, which is
  * what the design asks for, and never over the widget below it.
+ *
+ * SMA-437, lot V3-08 (A-14, decided by Alexandre on 28/09) — THE FULL WIDTH,
+ * the Expert's, where the Large's two lists become ONE line per garden from
+ * 900 px (form A of V3-08): the name, the occupancy bar and its figure, the
+ * exposure bar and the dominant share, under the two section titles turned
+ * column headers — after the chip, the cell line and the dominant exposure,
+ * and before the foot, all the Large's (R4). Under 900 px, the Large's lists
+ * one under the other. Ten gardens at rest, then a button that unfolds the
+ * rest in place and folds it back — the card grows, nothing scrolls inside
+ * it (A-N10), nothing is written.
  */
 export default function StatsBlock({
   size,
@@ -75,9 +113,24 @@ export default function StatsBlock({
   loadError,
   refreshing = false,
   onRetry,
+  defaultExpanded = false,
 }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
+  const theme = useTheme();
+  // The Full width's one-line form from 900 px — the theme's `md`, where the
+  // Key figures tiles go four in a row (A-1.2): under it the width holds the
+  // Large's rows, not five columns (V3-08, § 1).
+  const oneLine = useMediaQuery(theme.breakpoints.up('md'));
+  /**
+   * The Full width unfolded past its ten gardens. Session-only, in React and
+   * nowhere else — a reading position, not a preference (V18): nothing is
+   * written, as for Ce mois-ci's rows and the Gardens widget's « + N ». The
+   * chip, the cell line and the foot never read it: they count every garden.
+   */
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  /** Ties the fold button to the lists it opens, for `aria-controls`. */
+  const listsId = useId();
 
   // The SAME views the Gardens widget reads (round 1, E22): both are on an
   // Expert page at once, and the exposure engine used to run twice per garden
@@ -217,6 +270,18 @@ export default function StatsBlock({
    * fixed maximum is what makes rows of separate grids line up, and the
    * `min-content` floor is what stops the figure being clipped on a card too
    * narrow to grant it — the bar collapses first, which is the right order.
+   *
+   * SMA-437, lot V3-08, step S2 — and on a PHONE it collapsed to nothing: the
+   * three tracks and their two gaps ask 160 + 14 + 14 + 116 px of a row that
+   * has 280 (a Large at 360 px), so the bar was drawn at 0 px — 4 at 390, and
+   * the Medium's at 0 and 12 (the mock-ups' finding, measured again by the
+   * harness). Under 600 px the name takes a line of its own, the whole row
+   * wide, where it WRAPS instead of being cut, and the bar and its figure
+   * share the line under it — the bar gets the row less the figure. From
+   * 600 px the row is the three tracks above, unchanged. The children keep
+   * their order (name, bar, figure); only their areas move — the name by its
+   * own `sx`, the bar in a box of its own, the figure as the last child
+   * (`:last-child`, never `:nth-child`, which Emotion flags as unsafe).
    */
   const statRow = (
     key: string,
@@ -229,26 +294,34 @@ export default function StatsBlock({
       data-stat-row
       sx={{
         display: 'grid',
-        gridTemplateColumns:
-          'minmax(0, 160px) minmax(0, 1fr) minmax(min-content, 116px)',
-        gap: '14px',
+        gridTemplateColumns: {
+          xs: 'minmax(0, 1fr) minmax(min-content, 116px)',
+          sm: 'minmax(0, 160px) minmax(0, 1fr) minmax(min-content, 116px)',
+        },
+        gridTemplateAreas: { xs: '"name name" "bar value"', sm: '"name bar value"' },
+        '& > :last-child': { gridArea: 'value' },
+        columnGap: '14px',
+        rowGap: '4px',
         alignItems: 'center',
         minHeight: 42,
       }}
     >
       <Typography
+        data-stat-name
         sx={{
+          gridArea: 'name',
           minWidth: 0,
           fontSize: DASHBOARD_TYPE.body,
           fontWeight: 600,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          whiteSpace: { xs: 'normal', sm: 'nowrap' },
+          overflowWrap: 'anywhere',
         }}
       >
         {name}
       </Typography>
-      {middle}
+      <Box sx={{ gridArea: 'bar', minWidth: 0 }}>{middle}</Box>
       {value}
     </Box>
   );
@@ -270,16 +343,22 @@ export default function StatsBlock({
     </Box>
   );
 
+  /** One garden and its view — an entry of the lists below. */
+  type Entry = (typeof views)[number];
+
   /**
    * OCCUPATION PAR JARDIN — « Terrasse · [bar] · 20 m² · 68 % » (round 4, A6).
    *
    * The surface was nowhere on these rows; the artboard prints it beside the
    * percentage, which is what turns a share into a quantity — 68 % of a 20 m²
    * terrace and 68 % of a 3 m² balcony are not the same news.
+   *
+   * Of the entries it is handed (SMA-437, lot V3-08): every garden on the
+   * Medium and Large cards, the ten of the Full width at rest.
    */
-  const occupancyRows = (
-    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {views.map(({ garden, view }) =>
+  const occupancyRows = (list: readonly Entry[], id?: string) => (
+    <Box id={id} sx={{ display: 'flex', flexDirection: 'column' }}>
+      {list.map(({ garden, view }) =>
         statRow(
           garden.id,
           garden.name,
@@ -368,6 +447,34 @@ export default function StatsBlock({
   );
 
   /**
+   * A garden's dominant share — « ▨ 62 % » — for a garden whose plan rates a
+   * dominant category: the swatch, the category's name for assistive
+   * technology, the share. The Large's per-garden list and the Full width's
+   * line both close on it.
+   */
+  const dominantShare = (view: Entry['view']) => {
+    if (!view.dominantExposure) return null;
+    return (
+      <>
+        <ExposureDot category={view.dominantExposure} size={12} />
+        {/* The swatch is the artboard's whole right column, and a
+            colour alone is not a label. The name of the category
+            travels with the figure for assistive technology; on
+            screen it is the LEGEND of the section directly above
+            that maps each colour to its name, which is how the
+            artboard resolves it too — and adding the word here would
+            cost the 120 px track the figure needs. */}
+        <Box component="span" sx={visuallyHidden}>
+          {t(`planner.exposure.categories.${view.dominantExposure}`)}
+        </Box>
+        <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>
+          {share(view.exposure[view.dominantExposure], ratedCells(view.exposure))}
+        </Box>
+      </>
+    );
+  };
+
+  /**
    * EXPOSITION PAR JARDIN — a segmented bar per garden, the dominant share on
    * the right (round 4, A6).
    *
@@ -379,13 +486,13 @@ export default function StatsBlock({
    * The name of the dominant category has not been lost: it is what the swatch
    * stands for, and the accessible label carries it in words, so the row still
    * says which exposure the figure is about without colour being the signal.
+   *
+   * Of the entries it is handed, as the occupancy list above.
    */
-  const perGardenExposureRows = (
-    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {views.map(({ garden, view }) => {
-        const rated = ratedCells(view.exposure);
-
-        return statRow(
+  const perGardenExposureRows = (list: readonly Entry[], id?: string) => (
+    <Box id={id} sx={{ display: 'flex', flexDirection: 'column' }}>
+      {list.map(({ garden, view }) =>
+        statRow(
           garden.id,
           garden.name,
           view.dominantExposure ? (
@@ -402,32 +509,79 @@ export default function StatsBlock({
             <Box />
           ),
           view.dominantExposure
-            ? rowValue(
-                <>
-                  <ExposureDot category={view.dominantExposure} size={12} />
-                  {/* The swatch is the artboard's whole right column, and a
-                      colour alone is not a label. The name of the category
-                      travels with the figure for assistive technology; on
-                      screen it is the LEGEND of the section directly above
-                      that maps each colour to its name, which is how the
-                      artboard resolves it too — and adding the word here would
-                      cost the 120 px track the figure needs. */}
-                  <Box component="span" sx={visuallyHidden}>
-                    {t(`planner.exposure.categories.${view.dominantExposure}`)}
-                  </Box>
-                  <Box
-                    component="span"
-                    sx={{ fontWeight: 700, color: 'text.primary' }}
-                  >
-                    {share(view.exposure[view.dominantExposure], rated)}
-                  </Box>
-                </>
-              )
+            ? rowValue(dominantShare(view))
             : rowValue(
                 <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
               )
-        );
-      })}
+        )
+      )}
+    </Box>
+  );
+
+  /** EXPOSITION DOMINANTE — ÉTÉ · MIDI: the section title of the whole page's distribution. */
+  const exposureSectionTitle = () =>
+    sectionTitle(
+      t('dashboard.blocks.stats.exposureSection', {
+        season: t(`planner.exposure.seasons.${DASHBOARD_SEASON}`),
+        moment: t(`planner.exposure.moments.${DASHBOARD_MOMENT}`),
+      })
+    );
+
+  /**
+   * SMA-437, lot V3-08 (A-14, form A) — ONE line per garden, the Full width's
+   * from 900 px: the name, which wraps in its 200 px; the occupancy bar and
+   * « 20 m² · 68 % »; the exposure bar — named with the garden's whole
+   * distribution, as on the Large (round 5, C1) — and the dominant share.
+   *
+   * A garden with NO plan has no figure to state on the line: ONE « Sans
+   * plan » mark stands where the figures begin and runs across them, where
+   * the Large's two lists each carry one (B3) — one line, one mark, and a
+   * mark no wider than its words. A plan that rates no exposure keeps its
+   * occupancy, and the mark takes the exposure's two columns.
+   */
+  const oneLineRow = ({ garden, view }: Entry) => (
+    <Box
+      key={garden.id}
+      data-stat-row
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: ONE_LINE_COLUMNS,
+        columnGap: '14px',
+        alignItems: 'center',
+        minHeight: 42,
+      }}
+    >
+      <Typography
+        data-stat-name
+        sx={{ minWidth: 0, fontSize: DASHBOARD_TYPE.body, fontWeight: 600, overflowWrap: 'anywhere' }}
+      >
+        {garden.name}
+      </Typography>
+      {view.hasPlan ? (
+        <>
+          <OccupancyBar percent={view.occupancyPercent} valueHidden stretch />
+          {rowValue(
+            t('dashboard.blocks.stats.occupancyValue', {
+              surface: surfaceText(view.surfaceM2),
+              percent: percentText(view.occupancyPercent),
+            })
+          )}
+          {view.dominantExposure ? (
+            <>
+              <ExposureBar tally={view.exposure} height={12} label={exposureSummary(garden.name, view.exposure)} />
+              {rowValue(dominantShare(view))}
+            </>
+          ) : (
+            <Box sx={{ gridColumn: '4 / -1', justifySelf: 'start' }}>
+              <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
+            </Box>
+          )}
+        </>
+      ) : (
+        <Box sx={{ gridColumn: '2 / -1', justifySelf: 'start' }}>
+          <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
+        </Box>
+      )}
     </Box>
   );
 
@@ -562,7 +716,7 @@ export default function StatsBlock({
     >
       {headline(true)}
       {sectionTitle(t('dashboard.blocks.stats.occupancySection'))}
-      {occupancyRows}
+      {occupancyRows(views)}
       {freeCellsLine}
     </Box>
   );
@@ -580,19 +734,93 @@ export default function StatsBlock({
     >
       {headline(false)}
       {sectionTitle(t('dashboard.blocks.stats.occupancySection'))}
-      {occupancyRows}
-      {sectionTitle(
-        t('dashboard.blocks.stats.exposureSection', {
-          season: t(`planner.exposure.seasons.${DASHBOARD_SEASON}`),
-          moment: t(`planner.exposure.moments.${DASHBOARD_MOMENT}`),
-        })
-      )}
+      {occupancyRows(views)}
+      {exposureSectionTitle()}
       {distributionRows}
       {sectionTitle(t('dashboard.blocks.stats.perGardenExposureSection'))}
-      {perGardenExposureRows}
+      {perGardenExposureRows(views)}
       {freeCellsLine}
     </Box>
   );
+
+  /**
+   * SMA-437, lot V3-08 (A-14) — the Full width's fold: « Afficher les 2
+   * autres jardins » past the ten, « Réduire » once unfolded — the idiom of
+   * Ce mois-ci's rows (V26) and of the Gardens widget's « + N » (A-N23): in
+   * place, the card growing with it, nothing written. The count is the
+   * cap's, the same folded and unfolded, so the label does not change under
+   * the reader's hand.
+   */
+  const foldButton = (hidden: number, controls: string) =>
+    hidden > 0 ? (
+      <Button
+        data-stats-fold
+        variant="text"
+        size="small"
+        onClick={() => setExpanded((open) => !open)}
+        aria-expanded={expanded}
+        aria-controls={controls}
+        sx={{
+          alignSelf: 'flex-start',
+          p: 0,
+          minWidth: 0,
+          fontSize: DASHBOARD_TYPE.secondary,
+          fontWeight: 700,
+          textTransform: 'none',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {expanded
+          ? t('dashboard.blocks.stats.collapse')
+          : t('dashboard.blocks.stats.moreGardens', { count: hidden })}
+      </Button>
+    ) : null;
+
+  /**
+   * SMA-437, lot V3-08 (A-14) — THE FULL WIDTH, the Expert's. As tall as its
+   * content (A-N10): no scrolling zone, where the Large scrolls inside its
+   * 566 px. From 900 px, ONE line per garden, under the page's distribution
+   * (form A of V3-08); under 900 px, the Large's three sections one under
+   * the other. Ten gardens at rest in either form.
+   */
+  const wideBody = () => {
+    const shown = expanded ? views : views.slice(0, WIDE_ROWS);
+    const hidden = Math.max(0, views.length - WIDE_ROWS);
+    if (oneLine) {
+      return (
+        <Box data-stats-wide="one-line" sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {headline(false)}
+          {exposureSectionTitle()}
+          {distributionRows}
+          <Box
+            data-stats-wide-head
+            sx={{ display: 'grid', gridTemplateColumns: ONE_LINE_COLUMNS, columnGap: '14px', alignItems: 'end', mt: '8px' }}
+          >
+            <Box sx={{ gridColumn: '2 / 4' }}>{sectionTitle(t('dashboard.blocks.stats.occupancySection'))}</Box>
+            <Box sx={{ gridColumn: '4 / 6' }}>{sectionTitle(t('dashboard.blocks.stats.perGardenExposureSection'))}</Box>
+          </Box>
+          <Box id={listsId} sx={{ display: 'flex', flexDirection: 'column' }}>
+            {shown.map(oneLineRow)}
+          </Box>
+          {foldButton(hidden, listsId)}
+          {freeCellsLine}
+        </Box>
+      );
+    }
+    return (
+      <Box data-stats-wide="lists" sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {headline(false)}
+        {sectionTitle(t('dashboard.blocks.stats.occupancySection'))}
+        {occupancyRows(shown, `${listsId}-occupancy`)}
+        {exposureSectionTitle()}
+        {distributionRows}
+        {sectionTitle(t('dashboard.blocks.stats.perGardenExposureSection'))}
+        {perGardenExposureRows(shown, `${listsId}-exposure`)}
+        {foldButton(hidden, `${listsId}-occupancy ${listsId}-exposure`)}
+        {freeCellsLine}
+      </Box>
+    );
+  };
 
   const body = () => {
     if (loading) {
@@ -644,6 +872,8 @@ export default function StatsBlock({
 
     if (size === 'small') return smallBody();
     if (size === 'medium') return mediumBody();
+    // The Full width (lot V3-08): its own form — never the Large stretched.
+    if (size === 'wide') return wideBody();
     return largeBody();
   };
 
@@ -655,9 +885,10 @@ export default function StatsBlock({
       editing={editing}
       // Only where the artboard puts it, and only when the figures exist: a
       // card that is loading, has failed, has no garden or has no drawn plan
-      // has no surface and no occupancy to state.
+      // has no surface and no occupancy to state. The Large's, and the Full
+      // width's, which keeps everything the Large says (R4; V3-08, § 1).
       chip={
-        size === 'large' && !loading && !loadError && planned.length > 0
+        (size === 'large' || size === 'wide') && !loading && !loadError && planned.length > 0
           ? headerChip
           : undefined
       }

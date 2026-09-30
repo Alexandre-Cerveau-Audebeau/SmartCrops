@@ -92,25 +92,54 @@ public class DashboardPresetsTests
 
     /// <summary>
     /// « en tête du preset Expert » (contract § 3.3 [A], § 4.5): the band first,
-    /// in the Full width — its one size — then the eight widgets, in Large but
-    /// the Gardens: in the Full width since SMA-448, lot F5-b (PR #300, fix
-    /// round 1, P1 — Alexandre, 29/09: « personnellement je préfère que de
-    /// base, en Expert, le widget Jardins soit en large comme ça »). The seven
-    /// others keep their Large; their own default is lot V3-08's to decide.
+    /// in the Full width — its one size. Then the Gardens in the Full width
+    /// (SMA-448, lot F5-b — PR #300, fix round 1, P1, Alexandre, 29/09:
+    /// « personnellement je préfère que de base, en Expert, le widget Jardins
+    /// soit en large comme ça »), and the Weather after them in the Full width
+    /// (SMA-437, lot V3-08, step S5 — A-15: no cell empty at one, two or four
+    /// columns). Since PR #301, fix round 1, R1 — Alexandre, 29/09: « Je pense
+    /// que l'option B est la mieux, car le user peut voir directement les
+    /// avantages de son offre, et peut réduire ce qu'il veut » —, Tips in Large
+    /// beside To-do and Harvest in Medium, one above the other, then This
+    /// month, Counts and Statistics in the Full width: every width the formula
+    /// has, shown, and still no cell empty. Literals on purpose: this is the
+    /// decision, written out.
     /// </summary>
     [Fact]
-    public void For_Expert_PutsTheKeyFiguresBandFirst_InFullWidth_ThenGardensInFullWidth_AndTheSevenOthersInLarge()
+    public void For_Expert_PutsTheBandFirst_ThenTheGardensAndTheWeather_TipsBesideToDoAndHarvest_ThenThisMonthCountsAndStatisticsInTheFullWidth()
     {
         var expert = DashboardPresets.For(DashboardLayout.Levels.Expert);
 
-        Assert.Equal(new DashboardPresetBlock("keyfigures", "wide", false), expert[0]);
-        Assert.Equal(
-            DashboardLayout.Blocks.All.Where(key => key != "keyfigures"),
-            expert.Skip(1).Select(b => b.Key));
-        Assert.Equal(new DashboardPresetBlock("gardens", "wide", false), expert.Single(b => b.Key == "gardens"));
-        Assert.All(
-            expert.Skip(1).Where(b => b.Key != "gardens"),
-            block => Assert.Equal(new DashboardPresetBlock(block.Key, "large", false), block));
+        (string Key, string Size, bool Hidden)[] expected =
+        [
+            ("keyfigures", "wide", false), ("gardens", "wide", false), ("weather", "wide", false),
+            ("tips", "large", false), ("todo", "medium", false), ("harvest", "medium", false),
+            ("month", "wide", false), ("counters", "wide", false), ("stats", "wide", false),
+        ];
+        Assert.Equal(expected, expert.Select(b => (b.Key, b.Size, b.Hidden)));
+    }
+
+    /// <summary>
+    /// The frozen design's Gardener (<c>_spec.md</c> § 8) — Weather Medium,
+    /// Gardens Large, Tips, This month, To-do and Counts Medium, Harvest
+    /// hidden — but To-do in Large since PR #301, fix round 1, R2 (retained
+    /// for want of an objection, 29/09): the six visible widgets filled
+    /// fourteen cells, and four columns left half a row empty at the end of
+    /// the page. To-do grows down into it, and no other card moves. Literals
+    /// on purpose: this is the decision, written out.
+    /// </summary>
+    [Fact]
+    public void For_Gardener_IsTheFrozenDesignsSix_ToDoInLarge_HarvestHidden()
+    {
+        var gardener = DashboardPresets.For(DashboardLayout.Levels.Gardener);
+
+        (string Key, string Size, bool Hidden)[] expected =
+        [
+            ("weather", "medium", false), ("gardens", "large", false), ("tips", "medium", false),
+            ("month", "medium", false), ("todo", "large", false), ("counters", "medium", false),
+            ("harvest", "large", true),
+        ];
+        Assert.Equal(expected, gardener.Select(b => (b.Key, b.Size, b.Hidden)));
     }
 
     [Theory]

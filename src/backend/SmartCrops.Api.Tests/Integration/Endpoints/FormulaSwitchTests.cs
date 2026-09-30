@@ -128,8 +128,12 @@ public class FormulaSwitchTests : IntegrationTestBase
     /// account that ARRIVES at the Expert formula with no Expert layout in the
     /// archive — a Gardener who arranged its page, entering the Expert for the
     /// first time — reads the Expert preset, the Gardens widget in the Full
-    /// width and every other widget where it was. The Gardener's arrangement
-    /// waits in the archive, untouched (V4).
+    /// width; since SMA-437, lot V3-08, step S5 (A-15), the preset without a
+    /// hole — the Weather after the Gardens, in the Full width too; since
+    /// PR #301, fix round 1, R1 (Alexandre, 29/09 — the alternative B), Tips
+    /// in Large beside To-do and Harvest in Medium, then This month, Counts and
+    /// Statistics in the Full width. The Gardener's arrangement waits in the
+    /// archive, untouched (V4).
     /// </summary>
     [Fact]
     public async Task PutCurrent_AGardenerEnteringTheExpertFormulaForTheFirstTime_ReadsGardensInTheFullWidth()
@@ -146,8 +150,8 @@ public class FormulaSwitchTests : IntegrationTestBase
 
         Assert.Equal("expert", expert.Level);
         Assert.Equal(
-            [("keyfigures", "wide"), ("weather", "large"), ("gardens", "wide"), ("tips", "large"), ("month", "large"),
-             ("todo", "large"), ("counters", "large"), ("stats", "large"), ("harvest", "large")],
+            [("keyfigures", "wide"), ("gardens", "wide"), ("weather", "wide"), ("tips", "large"), ("todo", "medium"),
+             ("harvest", "medium"), ("month", "wide"), ("counters", "wide"), ("stats", "wide")],
             expert.Blocks.Select(b => (b.Key, b.Size)));
 
         // The Gardener's own arrangement comes back from the archive, as it was.

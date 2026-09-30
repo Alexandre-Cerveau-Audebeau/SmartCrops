@@ -904,7 +904,10 @@
         "freeCellsCount_one": "{{count, number}} free cell",
         "freeCellsCount_other": "{{count, number}} free cells",
         "sunnyCount_one": "{{count, number}} in full sun",
-        "sunnyCount_other": "{{count, number}} in full sun"
+        "sunnyCount_other": "{{count, number}} in full sun",
+        "moreGardens_one": "Show the {{count, number}} other garden",
+        "moreGardens_other": "Show the {{count, number}} other gardens",
+        "collapse": "Show less"
       },
       "harvest": {
         "title": "Harvest",

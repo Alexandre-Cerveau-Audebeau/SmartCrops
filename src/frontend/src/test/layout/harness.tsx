@@ -35,7 +35,7 @@ import { ACTIONS_PROBES, PROBE_SCENES, probeWidget, type ProbeScene } from './pr
 import { measureFocus, type FocusMeasure } from './focusProbe';
 import { capabilitiesFor } from '../fixtures/formulas';
 import { encodeResults } from './encode';
-import { RESULTS_ID, measureCard, measureControls, wrappedTexts, type CardMeasure, type ControlMeasure } from './measure';
+import { RESULTS_ID, gridCellsOf, measureCard, measureControls, wrappedTexts, type CardMeasure, type ControlMeasure, type GridCellsMeasure } from './measure';
 
 /**
  * SMA-336 mobile lot, step 7 (pre-flight D7) — the BROWSER side of the layout
@@ -127,6 +127,37 @@ export interface SceneMeasure extends CardMeasure {
   gardensTable: boolean;
   gardensCut: boolean;
   gardenActionsOutside: number;
+  /**
+   * SMA-437, lot V3-08, step S2 — every bar of a Statistics row, in px, with
+   * the width of the NEXT cell of its row: the figure the bar illustrates
+   * (« 20 m² · 68 % » beside the occupancy track, the dominant share beside
+   * the exposure bar). A bar narrower than its own figure says nothing — the
+   * mock-ups measured the phone's Large with its occupancy bar at 0 px at 360
+   * and 12 px at 390 (« the bar collapses first »). Empty on every other card.
+   */
+  statBars: Array<{ kind: 'occupancy' | 'exposure'; bar: number; value: number }>;
+  /**
+   * SMA-437, lot V3-08, step S6 — the Full width of Statistics, Counts and
+   * This month: the form drawn (`one-line` or `lists` for Statistics, the
+   * column count for Counts, `grid` for This month), the data rows drawn, the
+   * fold's label, and This month's name column and axis — the month in full,
+   * short, or its initial. Null on every other card.
+   */
+  wideWidget: {
+    form: string;
+    rows: number;
+    fold: string | null;
+    counterColumns: number;
+    monthNameColumn: number;
+    monthAxis: 'long' | 'short' | 'initial' | null;
+  } | null;
+  /**
+   * PR #301, fix round 1, R3 — every row of This month in the Full width: the
+   * lanes its painted bars fill, and how far, in px, the vertical centre of
+   * those bars lies from the centre of the row's name — below it when
+   * positive. Empty on every other card.
+   */
+  monthBars: Array<{ plant: string; lanes: number; offset: number }>;
 }
 
 /**
@@ -174,6 +205,12 @@ export interface GridMeasure {
   cardOverlaps: string[];
   /** In Edit mode, each card's controls; empty at rest. */
   controls: Array<{ key: string; controls: ControlMeasure[] }>;
+  /**
+   * SMA-437, lot V3-08, step S5 — the cells the engine gave each card, and
+   * the empty ones: between two cards (a hole), or after the last
+   * (`gridCellsOf`).
+   */
+  cells: GridCellsMeasure;
 }
 
 /** A box relative to an origin, to a tenth of a pixel. */
@@ -531,6 +568,43 @@ function measurePanel(scene: PanelScene): PanelMeasure {
   };
 }
 
+/**
+ * SMA-437, lot V3-08, step S6 — what a Full width of Statistics, Counts or
+ * This month drew: its form, its rows, its fold, the Counts' columns as the
+ * engine resolved them, This month's name column and the form of its axis —
+ * the one span of the three the engine displays. Null for any other card.
+ */
+function wideWidgetOf(card: HTMLElement): SceneMeasure['wideWidget'] {
+  const form =
+    card.querySelector('[data-stats-wide]')?.getAttribute('data-stats-wide') ??
+    card.querySelector('[data-counters-wide]')?.getAttribute('data-counters-wide') ??
+    (card.querySelector('[data-month-wide]') ? 'grid' : null);
+  if (form === null) return null;
+  const edible = card.querySelector('[data-counters-wide] [id$="-edible"]');
+  const corner = card.querySelector('[data-month-wide] [data-month-corner]');
+  const firstMonth = card.querySelector('[data-month-wide] [data-month-axis-row]')?.children[1] ?? null;
+  const displayed = (selector: string) => {
+    const span = firstMonth?.querySelector(selector);
+    return span != null && getComputedStyle(span).display !== 'none';
+  };
+  return {
+    form,
+    rows: card.querySelectorAll('[data-stat-row], [data-variety-row], [data-month-plant]').length,
+    fold: card.querySelector('[data-stats-fold], [data-counters-fold], [data-month-more-varieties]')?.textContent ?? null,
+    counterColumns: edible ? getComputedStyle(edible).gridTemplateColumns.split(' ').length : 0,
+    monthNameColumn: corner ? Math.round(corner.getBoundingClientRect().width * 10) / 10 : 0,
+    monthAxis: !firstMonth
+      ? null
+      : displayed('[data-month-axis-long]')
+        ? 'long'
+        : displayed('[data-month-axis-short]')
+          ? 'short'
+          : displayed('[data-month-axis-initial]')
+            ? 'initial'
+            : null,
+  };
+}
+
 /** What the harness reads of a card beyond `measureCard`, the same for a one-card scene and a card of a grid. */
 function cardExtras(card: HTMLElement) {
   const origin = card.getBoundingClientRect();
@@ -556,6 +630,40 @@ function cardExtras(card: HTMLElement) {
     gardensEmptySearch: card.querySelector('[data-gardens-search]') !== null && card.querySelector('[data-invite-panel]') !== null,
     gardensBeyond: card.querySelectorAll('[data-garden-beyond]').length,
     gardensFootWrapped: foot ? wrappedTexts(foot) : [],
+    // Each bar of each Statistics row, beside the cell after the one that
+    // holds it — its figure (SMA-437, lot V3-08, S2).
+    statBars: Array.from(card.querySelectorAll('[data-stat-row]')).flatMap((row) =>
+      Array.from(row.querySelectorAll('[data-occupancy-track], [data-exposure-bar]')).map((bar) => {
+        let cell: Element = bar;
+        while (cell.parentElement && cell.parentElement !== row) cell = cell.parentElement;
+        const figure = cell.nextElementSibling;
+        return {
+          kind: bar.hasAttribute('data-occupancy-track') ? ('occupancy' as const) : ('exposure' as const),
+          bar: Math.round(bar.getBoundingClientRect().width * 10) / 10,
+          value: figure ? Math.round(figure.getBoundingClientRect().width * 10) / 10 : 0,
+        };
+      })
+    ),
+    // The Full width of Statistics, Counts and This month (SMA-437, lot V3-08, S6).
+    wideWidget: wideWidgetOf(card),
+    // Each row of This month in the Full width: its painted bars as one box,
+    // against its name (PR #301, fix round 1, R3).
+    monthBars: Array.from(card.querySelectorAll('[data-month-wide] [data-month-plant]')).flatMap((row) => {
+      const name = row.querySelector('[data-month-name]');
+      const bars = Array.from(row.querySelectorAll('[data-month-bar]'));
+      if (!name || bars.length === 0) return [];
+      const n = name.getBoundingClientRect();
+      const boxes = bars.map((bar) => bar.getBoundingClientRect());
+      const top = Math.min(...boxes.map((box) => box.top));
+      const bottom = Math.max(...boxes.map((box) => box.bottom));
+      return [
+        {
+          plant: row.getAttribute('data-month-plant') ?? '',
+          lanes: new Set(bars.map((bar) => bar.getAttribute('data-month-bar'))).size,
+          offset: Math.round(((top + bottom) / 2 - (n.top + n.bottom) / 2) * 10) / 10,
+        },
+      ];
+    }),
     keyFigureTiles: Array.from(card.querySelectorAll('[data-key-figure]')).map((tile) => {
       const value = tile.querySelector('[data-key-figure-value]');
       const box = tile.getBoundingClientRect();
@@ -637,6 +745,7 @@ function measureGrid(grid: GridScene, host: HTMLElement): GridMeasure {
     controls: grid.editing
       ? cards.map((card) => ({ key: card.getAttribute('data-widget')!, controls: measureControls(card) }))
       : [],
+    cells: gridCellsOf(cards),
   };
 }
 

@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACTIONS_SCENES, GRID_SCENES, HEADER_SCENES, LAYOUT_SCENES, PANEL_SCENES } from './scenes';
+import { ACTIONS_SCENES, GRID_SCENES, HEADER_SCENES, LAYOUT_SCENES, PANEL_SCENES, gardensListOf, wideVarietiesOf } from './scenes';
+import { monthCalendar } from '../../components/Dashboard/blocks/plantCalendar';
+import { EMPTY_WEATHER_DATA } from '../../types/DashboardWeather';
 import { ACTIONS_PROBES, FORCED_ACTION_LABEL, PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
 import type { ActionsMeasure, GridMeasure, HeaderMeasure, PanelMeasure, SceneMeasure } from './harness';
 import type { FocusMeasure } from './focusProbe';
@@ -501,6 +503,218 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         // Weather M, Tips S and This month S above, To-do M and Counters M below: pinned rows on both sides of the Gardens' own.
         expect(tracks.filter((track) => track === 273).length, `${id} ${name}`).toBeGreaterThanOrEqual(2);
         expect(tracks.some((track) => Math.abs(track - gardens.box.h) < 1), `${id} ${name}: ${measured.rows}`).toBe(true);
+      }
+    });
+  });
+
+  // SMA-437, lot V3-08, step S2 — the Statistics bars, at every width of the
+  // runs. The mock-ups (V3-08, § 4.2 of their report) measured the phone's
+  // Large with its occupancy bar at 0 px at 360 and 12 px at 390: the row's
+  // tracks — 160 + 14 + 1fr + 14 + 116 — leave the bar nothing on a 280 px
+  // card, « the bar collapses first ». A bar is drawn when it is at least as
+  // wide as the figure it illustrates; narrower, it says nothing.
+  describe('the Statistics bars (SMA-437, lot V3-08, S2)', () => {
+    const STATS_SCENES = LAYOUT_SCENES.filter((scene) => scene.key === 'stats' && scene.size !== 'small').map((scene) => scene.name);
+
+    it('measures bars in every Statistics scene that draws rows, in every run — never a pass on nothing', () => {
+      for (const run of RUNS) {
+        for (const name of STATS_SCENES) {
+          const kinds = new Set(sceneOf(run, name).statBars.map((bar) => bar.kind));
+          expect(kinds.has('occupancy'), `${run.id} ${name}`).toBe(true);
+        }
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: every bar of every Statistics row is drawn, at least as wide as its own figure — the occupancy and the exposure alike', (id) => {
+      const run = runOf(id);
+      const faults = STATS_SCENES.flatMap((name) =>
+        sceneOf(run, name)
+          .statBars.filter((bar) => !(bar.bar > 0 && bar.bar >= bar.value))
+          .map((bar) => `${name}: the ${bar.kind} bar ${bar.bar} px beside a figure of ${bar.value} px`)
+      );
+      expect(faults).toEqual([]);
+    });
+  });
+
+  // SMA-437, lot V3-08, step S6 (V5) — STATISTICS, COUNTS AND THIS MONTH IN
+  // THE FULL WIDTH (A-14), on one, five, twelve and sixty gardens and three
+  // very long names, at rest and unfolded, in every run — the defects of
+  // `measureCard` are the four rules every scene answers below (no overlap,
+  // nothing clipped, nothing spilled, nothing beyond the card). Here: the
+  // whole grid wide and as tall as its content, never a scrolling zone
+  // (A-N10); ten lines at rest and every one unfolded; the form of each width;
+  // and no ellipsis but the ones the product names.
+  describe('Statistics, Counts and This month in the Full width (SMA-437, lot V3-08, S6 — A-14)', () => {
+    const FULL_SCENES = LAYOUT_SCENES.filter((scene) => scene.wide !== undefined);
+    const fullOf = (key: DashboardBlockKey) => FULL_SCENES.filter((scene) => scene.key === key);
+    /** The gardens a scene serves, and its varieties. */
+    const gardensIn = (scene: (typeof FULL_SCENES)[number]) => gardensListOf(scene.wide!.list);
+    const varietiesIn = (scene: (typeof FULL_SCENES)[number]) => wideVarietiesOf(scene.wide!.list);
+
+    /**
+     * The ellipses the product NAMES, and only those (V5; the mock-ups'
+     * `data-ellipsis-ok`): a variety's name in a Counts column; a garden's
+     * name in a Counts filter chip (MUI's `Chip`); a variety's name in This
+     * month's name column (the tooltip of V32); a garden's name in the
+     * Statistics' 160 px column, from 600 px under 900 — the one-line form
+     * and the phone wrap it; and a widget's title yielding to its chip
+     * (`.hd-t`, `DashboardBlock`), which the Large does as well on a phone.
+     */
+    const TITLES = ['Statistiques', 'Statistics', 'Compteurs par variété', 'Counts by variety', 'Ce mois-ci', 'This month'];
+    const admitted = (cut: { text: string; where: string }, vw: number) =>
+      cut.where === 'variety-row=true' ||
+      cut.where === 'chip' ||
+      cut.where === 'month-name=true' ||
+      (cut.where === 'stat-name=true' && vw >= 600 && vw < 900) ||
+      (cut.where === '' && TITLES.includes(cut.text.replace(/^"|"$/g, '')));
+
+    it('holds its nineteen scenes — five lists for each of the three, and the unfolded ones — measured as Full widths in every run', () => {
+      expect(FULL_SCENES).toHaveLength(19);
+      for (const run of RUNS) {
+        for (const scene of FULL_SCENES) expect(sceneOf(run, scene.name).wideWidget, `${run.id} ${scene.name}`).not.toBeNull();
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: every scene takes the whole grid and the height of its content — no scrolling zone, nothing under the fold of its body', (id) => {
+      const run = runOf(id);
+      for (const scene of FULL_SCENES) {
+        const measured = sceneOf(run, scene.name);
+        expect(measured.card.w, scene.name).toBe(run.vw < 600 ? run.vw - 32 : gridWidthAt(run.vw));
+        expect(measured.scrollers, scene.name).toEqual([]);
+        expect(measured.body.scrollH, scene.name).toBeLessThanOrEqual(measured.body.h + 1);
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: Statistics — one line per garden from 900 px, the Large’s two lists below; ten gardens at rest, every one unfolded, the fold while one is hidden', (id) => {
+      const run = runOf(id);
+      for (const scene of fullOf('stats')) {
+        const drawn = sceneOf(run, scene.name).wideWidget!;
+        const gardens = gardensIn(scene).length;
+        const shown = scene.wide!.expanded ? gardens : Math.min(gardens, 10);
+        const oneLine = run.vw >= 900;
+        expect(drawn.form, scene.name).toBe(oneLine ? 'one-line' : 'lists');
+        expect(drawn.rows, scene.name).toBe(oneLine ? shown : shown * 2);
+        expect(drawn.fold !== null, scene.name).toBe(gardens > 10);
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: Counts — four columns from 1 200 px, three from 900, two below; 37, 28 or 19 varieties at rest, every one unfolded, the fold while one is hidden', (id) => {
+      const run = runOf(id);
+      const columns = run.vw >= 1200 ? 4 : run.vw >= 900 ? 3 : 2;
+      const atRest = columns === 4 ? 37 : columns === 3 ? 28 : 19;
+      for (const scene of fullOf('counters')) {
+        const drawn = sceneOf(run, scene.name).wideWidget!;
+        const kinds = varietiesIn(scene).length;
+        expect(drawn.form, scene.name).toBe(String(columns));
+        expect(drawn.counterColumns, scene.name).toBe(columns);
+        expect(drawn.rows, scene.name).toBe(scene.wide!.expanded ? kinds : Math.min(kinds, atRest));
+        expect(drawn.fold !== null, scene.name).toBe(kinds > atRest);
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: This month — the name column of 200, 160, 108 or 84 px, the months in full from 1 200 px, short from 600, initials below; ten rows at rest, every one unfolded', (id) => {
+      const run = runOf(id);
+      const nameColumn = run.vw >= 1200 ? 200 : run.vw >= 900 ? 160 : run.vw >= 600 ? 108 : 84;
+      const axis = run.vw >= 1200 ? 'long' : run.vw >= 600 ? 'short' : 'initial';
+      for (const scene of fullOf('month')) {
+        const drawn = sceneOf(run, scene.name).wideWidget!;
+        // The varieties with a calendar — whatever the month, the rows of the grid.
+        const known = monthCalendar(gardensIn(scene), varietiesIn(scene), EMPTY_WEATHER_DATA).known.length;
+        expect(drawn.form, scene.name).toBe('grid');
+        expect(drawn.monthNameColumn, scene.name).toBeCloseTo(nameColumn, 0);
+        expect(drawn.monthAxis, scene.name).toBe(axis);
+        expect(drawn.rows, scene.name).toBe(scene.wide!.expanded ? known : Math.min(known, 10));
+        expect(drawn.fold !== null, scene.name).toBe(known > 10);
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: ellipsizes nothing but what the product names — a variety’s name, a filter chip, a garden’s name in the Statistics’ 160 px column, a widget’s title before its chip', (id) => {
+      const run = runOf(id);
+      const unnamed = FULL_SCENES.flatMap((scene) =>
+        sceneOf(run, scene.name)
+          .ellipsized.filter((cut) => !admitted(cut, run.vw))
+          .map((cut) => `${scene.name}: ${cut.text} at ${cut.where}`)
+      );
+      expect(unnamed).toEqual([]);
+    });
+  });
+
+  // PR #301, fix round 1, R3 — THE BARS OF THIS MONTH IN THE FULL WIDTH,
+  // CENTRED IN THEIR ROW (Alexandre, 29/09: « Je suis ok avec ton point 3 »;
+  // P-S4-2 reversed). A plant with one bar saw it on its lane's own slot — a
+  // pruning on the top one —, nearer the name above than its own. Each row's
+  // bars now stand centred on its name, one bar or four, at every width of the
+  // Full width; the Large keeps its four lanes in their places.
+  describe('This month in the Full width — each row’s bars centred on its name (PR #301, fix round 1, R3)', () => {
+    const MONTH_WIDE = LAYOUT_SCENES.filter((scene) => scene.key === 'month' && scene.size === 'wide').map((scene) => scene.name);
+    /** A few pixels: the half pixels two centred boxes may round to — never the 10 px of a lane. */
+    const CENTRED_WITHIN_PX = 2;
+
+    it('measures one-bar rows and a four-bar row in every run — never a pass on nothing', () => {
+      for (const run of RUNS) {
+        const rows = MONTH_WIDE.flatMap((name) => sceneOf(run, name).monthBars);
+        expect(rows.filter((row) => row.lanes === 1).length, run.id).toBeGreaterThan(0);
+        expect(rows.filter((row) => row.lanes === 4).length, run.id).toBeGreaterThan(0);
+      }
+    });
+
+    it.each(RUNS.map((run) => run.id))('%s: every row’s bars are centred on its name, within 2 px — one bar or four', (id) => {
+      const run = runOf(id);
+      const faults = MONTH_WIDE.flatMap((name) =>
+        sceneOf(run, name)
+          .monthBars.filter((row) => Math.abs(row.offset) > CENTRED_WITHIN_PX)
+          .map((row) => `${name}: ${row.plant}, ${row.lanes} lane(s), ${row.offset} px from its name’s centre`)
+      );
+      expect(faults).toEqual([]);
+    });
+  });
+
+  // SMA-437, lot V3-08, step S5 (A-15) — THE EXPERT PRESET WITHOUT A HOLE: in
+  // every run, no cell of the preset's grid is left empty — between two cards
+  // or after the last —, read in the engine, cell by cell (`gridCellsOf`). And
+  // the instrument is shown the hole it exists to see (SMA-446): the preset as
+  // PR #300 left it, 566 × 566 px empty right of the Weather at 1 280 px.
+  describe('the Expert preset without a hole (SMA-437, lot V3-08, S5 — A-15)', () => {
+    it.each(RUNS.map((run) => run.id))('%s: the Expert preset leaves no cell empty — none between two cards, none after the last — at rest and in Edit mode', (id) => {
+      const run = runOf(id);
+      for (const name of ['grid-expert', 'grid-expert-edit']) {
+        const { cells } = gridOf(run, name);
+        expect(Object.keys(cells.placed), `${id} ${name}`).toHaveLength(9);
+        expect({ between: cells.between, trailing: cells.trailing }, `${id} ${name}: ${JSON.stringify(cells.placed)}`).toEqual({
+          between: [],
+          trailing: [],
+        });
+      }
+    });
+
+    it('sees the hole it exists to see: the preset of PR #300 leaves four cells empty right of the Weather at 1 280 px — 566 × 566 px, between two cards — and none on two columns or one', () => {
+      for (const run of RUNS) {
+        const { cells } = gridOf(run, 'grid-expert-hole-probe');
+        if (run.vw < 1200) {
+          expect(cells.between, run.id).toEqual([]);
+          continue;
+        }
+        expect(cells.between.map((cell) => cell.split(' ')[0]), run.id).toEqual(['2,1', '3,1', '2,2', '3,2']);
+        const boxes = cells.between.map((cell) => /@([\d.]+),([\d.]+) ([\d.]+)×([\d.]+)/.exec(cell)!.slice(1).map(Number));
+        const width = Math.max(...boxes.map(([x, , w]) => x! + w!)) - Math.min(...boxes.map(([x]) => x!));
+        const height = Math.max(...boxes.map(([, y, , h]) => y! + h!)) - Math.min(...boxes.map(([, y]) => y!));
+        expect(width, run.id).toBeCloseTo(566, 0);
+        expect(height, run.id).toBeCloseTo(566, 0);
+      }
+    });
+
+    // PR #301, fix round 1, R2 — the Gardener preset too, since To-do takes
+    // the Large: the half row four columns left at the end of its page is
+    // gone, read in the engine as the Expert's grid is.
+    it.each(RUNS.map((run) => run.id))('%s: the Gardener preset leaves no cell empty either — no half row at the end of the page — at rest and in Edit mode (PR #301, fix round 1, R2)', (id) => {
+      const run = runOf(id);
+      for (const name of ['grid-gardener', 'grid-gardener-edit']) {
+        const { cells } = gridOf(run, name);
+        expect(Object.keys(cells.placed), `${id} ${name}`).toHaveLength(6);
+        expect({ between: cells.between, trailing: cells.trailing }, `${id} ${name}: ${JSON.stringify(cells.placed)}`).toEqual({
+          between: [],
+          trailing: [],
+        });
       }
     });
   });

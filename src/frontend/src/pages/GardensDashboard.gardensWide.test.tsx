@@ -220,7 +220,7 @@ describe('the Full width of the Gardens widget, a right of the Expert (SMA-448, 
     expect(lastSaved().blocks.find((block) => block.key === 'gardens')!.size).toBe('small');
   });
 
-  it('an Expert’s stored layout with Gardens in the Full width draws the seven-column table — and the Gardens widget is the only one in that size on the page beside the band', async () => {
+  it('an Expert’s stored layout with Gardens in the Full width draws the seven-column table', async () => {
     serve('expert', 'wide');
     await renderPage();
 
@@ -366,20 +366,23 @@ describe('the MÉTÉO column of the Full width follows the page’s weather (SMA
 // arriving at the Expert formula with no layout of its own, and « Réinitialiser
 // au niveau Expert » — both read the preset the server serves (its catalogue,
 // `capabilities.preset`), whose contract is the reference file these fixtures
-// read. A layout the account STORED does not change. Every other widget keeps
-// its size: theirs is lot V3-08's to decide.
+// read. A layout the account STORED does not change. SMA-437, lot V3-08, step
+// S5 (A-15): the preset without a hole — the Weather after the Gardens, in the
+// Full width too. PR #301, fix round 1, R1 (Alexandre, 29/09 — the alternative
+// B): Tips in Large beside To-do and Harvest in Medium, then This month,
+// Counts and Statistics in the Full width.
 
 /** The Expert preset, widget by widget — the decision, written out. */
 const EXPERT_PRESET = [
   'keyfigures wide',
-  'weather large',
   'gardens wide',
+  'weather wide',
   'tips large',
-  'month large',
-  'todo large',
-  'counters large',
-  'stats large',
-  'harvest large',
+  'todo medium',
+  'harvest medium',
+  'month wide',
+  'counters wide',
+  'stats wide',
 ];
 const keysAndSizes = (blocks: readonly DashboardBlock[]) => blocks.map((block) => `${block.key} ${block.size}`);
 

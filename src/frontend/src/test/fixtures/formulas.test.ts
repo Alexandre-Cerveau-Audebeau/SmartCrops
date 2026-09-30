@@ -30,22 +30,34 @@ describe('the served presets (SMA-336, SMA-448)', () => {
 
   // SMA-448, lot F5-b — PR #300, fix round 1, P1 (Alexandre, 29/09:
   // « personnellement je préfère que de base, en Expert, le widget Jardins soit
-  // en large comme ça »): the Gardens widget in the Full width; the seven others
-  // keep their Large (theirs is lot V3-08's).
-  it('Expert: the Key figures band first, in Full width — its one size — then the eight widgets, the Gardens in Full width and the seven others in Large, none hidden', () => {
+  // en large comme ça »): the Gardens widget in the Full width. SMA-437, lot
+  // V3-08, step S5 (A-15): the preset without a hole — the Weather after the
+  // Gardens, in the Full width too. PR #301, fix round 1, R1 (Alexandre, 29/09
+  // — the alternative B): Tips in Large beside To-do and Harvest in Medium,
+  // then This month, Counts and Statistics in the Full width.
+  it('Expert: the Key figures band first, in Full width — its one size — then the Gardens and the Weather in Full width, Tips in Large beside To-do and Harvest in Medium, then This month, Counts and Statistics in Full width, none hidden', () => {
     expect(presetFor('expert')).toEqual([
       { key: 'keyfigures', size: 'wide', hidden: false },
-      ...EIGHT.map((key) => ({ key, size: key === 'gardens' ? 'wide' : 'large', hidden: false })),
+      { key: 'gardens', size: 'wide', hidden: false },
+      { key: 'weather', size: 'wide', hidden: false },
+      { key: 'tips', size: 'large', hidden: false },
+      { key: 'todo', size: 'medium', hidden: false },
+      { key: 'harvest', size: 'medium', hidden: false },
+      { key: 'month', size: 'wide', hidden: false },
+      { key: 'counters', size: 'wide', hidden: false },
+      { key: 'stats', size: 'wide', hidden: false },
     ]);
   });
 
-  it('Gardener shows six widgets, Gardens in Large, and hides Harvest — Statistics is not its own (SMA-448, R1)', () => {
+  // PR #301, fix round 1, R2: To-do in Large, into the half row four columns
+  // used to leave empty at the end of the page — no other card moves.
+  it('Gardener shows six widgets, Gardens and To-do in Large, and hides Harvest — Statistics is not its own (SMA-448, R1)', () => {
     expect(presetFor('gardener')).toEqual([
       { key: 'weather', size: 'medium', hidden: false },
       { key: 'gardens', size: 'large', hidden: false },
       { key: 'tips', size: 'medium', hidden: false },
       { key: 'month', size: 'medium', hidden: false },
-      { key: 'todo', size: 'medium', hidden: false },
+      { key: 'todo', size: 'large', hidden: false },
       { key: 'counters', size: 'medium', hidden: false },
       { key: 'harvest', size: 'large', hidden: true },
     ]);

@@ -11,14 +11,15 @@ namespace SmartCrops.Core.Dashboard;
 /// <para>The rule it carries (A-N11): the Full width is an Expert capability,
 /// and a block gets it only once its Full-width version is DRAWN — until then
 /// a crafted request could show its Large stretched over the page's width. So
-/// the table follows what is drawn, not only what is permitted: Statistiques,
-/// Compteurs and Ce mois-ci will each add
-/// <see cref="DashboardLayout.Sizes.Wide"/> to their Expert row in their own
-/// lot, on both sides. The Key figures band arrived with it as its one size
-/// (PR B, step B1 — pre-flight D3: « keyfigures@Expert = [wide] ; tout le reste
-/// = [P, M, G] »); Météo followed with SMA-448, lot F4 (V3-02: every city at
-/// once), as its fourth size; Jardins with SMA-448, lot F5-b (V3-03: the
-/// seven-column table), as its fourth size too.</para>
+/// the table follows what is drawn, not only what is permitted. The Key
+/// figures band arrived with it as its one size (PR B, step B1 — pre-flight
+/// D3: « keyfigures@Expert = [wide] ; tout le reste = [P, M, G] »); Météo
+/// followed with SMA-448, lot F4 (V3-02: every city at once), as its fourth
+/// size; Jardins with SMA-448, lot F5-b (V3-03: the seven-column table), as
+/// its fourth size too; Statistiques, Compteurs and Ce mois-ci with SMA-437,
+/// lot V3-08 (A-14, decided by Alexandre on 28/09: one line per garden, four
+/// columns from 1 200 px, the grid alone), as their fourth size. Conseils and
+/// À faire never take it (A-N11), Récolte not yet.</para>
 ///
 /// <para>Which level HAS a block is not this table's to say but its preset's
 /// (<see cref="DashboardPresets.Permits"/>, D4): the band's rows at the Novice
@@ -63,10 +64,16 @@ public static class DashboardCapabilities
             // Expert's Gardens is drawn in Full width — the seven-column table.
             [DashboardLayout.Blocks.Gardens] = ThreeSizesAndWide,
             [DashboardLayout.Blocks.Tips] = ThreeSizes,
-            [DashboardLayout.Blocks.Month] = ThreeSizes,
+            // SMA-437, lot V3-08 (A-14): the grid alone — the names' column
+            // at 200 px and the months in full from 1 200 px.
+            [DashboardLayout.Blocks.Month] = ThreeSizesAndWide,
             [DashboardLayout.Blocks.Todo] = ThreeSizes,
-            [DashboardLayout.Blocks.Counters] = ThreeSizes,
-            [DashboardLayout.Blocks.Stats] = ThreeSizes,
+            // SMA-437, lot V3-08 (A-14): the Large's lines in four columns
+            // from 1 200 px, three from 900.
+            [DashboardLayout.Blocks.Counters] = ThreeSizesAndWide,
+            // SMA-437, lot V3-08 (A-14): one line per garden — occupancy and
+            // exposure side by side.
+            [DashboardLayout.Blocks.Stats] = ThreeSizesAndWide,
             [DashboardLayout.Blocks.Harvest] = ThreeSizes,
             [DashboardLayout.Blocks.KeyFigures] = WideOnly,
         };

@@ -1,7 +1,7 @@
-import { fireEvent, render, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import type {
@@ -973,5 +973,212 @@ describe('CountersBlock — the filter row and the grid (round 6, N6)', () => {
 
     const grid = widget.getByText('Basil').parentElement!.parentElement!;
     expect(rulesFor(grid).replace(/\s+/g, '')).toContain('column-gap:24px');
+  });
+});
+
+/** Twenty-six varieties, the density lock's: 19 at Large, seven behind the fold. */
+const twentySix = Array.from({ length: 26 }, (_, index) =>
+  variety({ plantId: `p-${index}`, commonName: `Variety ${index}` })
+);
+
+/** The rows drawn. */
+const drawnRows = () => widgetNode().querySelectorAll('[data-variety-row]').length;
+
+// SMA-437, lot V3-08, step S3 — THE FOLD IS ONE BUTTON. « +7 varieties » and
+// « Show fewer » were two buttons, the second replacing the first: each press
+// dropped the keyboard's focus to the page, and neither said whether the list
+// was open. Now one button whose label turns and whose `aria-expanded` says
+// which — the fold of This month's rows and of the Statistics' Full width.
+describe('CountersBlock — one fold button, its state spoken (SMA-437, lot V3-08, S3)', () => {
+  it('at Large, « +7 varieties » and « Show fewer » are ONE button whose aria-expanded follows the list', () => {
+    const widget = renderBlock({ size: 'large', varieties: twentySix });
+    const fold = widget.getByRole('button', { name: '+7 varieties' });
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(fold);
+
+    expect(drawnRows()).toBe(26);
+    expect(fold).toBeInTheDocument();
+    expect(fold).toHaveTextContent('Show fewer');
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(fold);
+
+    expect(drawnRows()).toBe(19);
+    expect(fold).toHaveTextContent('+7 varieties');
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('names the lists it opens — both grids once « Ornamental » is drawn', () => {
+    const widget = renderBlock({
+      size: 'large',
+      varieties: [
+        ...twentySix,
+        variety({ plantId: 'o-1', commonName: 'Lady fern', plantType: 'Ornamental', isEdible: false }),
+      ],
+    });
+    const fold = widget.getByRole('button', { name: '+8 varieties' });
+    // At rest the ornamental variety is behind the cut: one grid.
+    expect(fold.getAttribute('aria-controls')!.split(' ')).toHaveLength(1);
+
+    fireEvent.click(fold);
+
+    const controlled = fold.getAttribute('aria-controls')!.split(' ');
+    expect(controlled).toHaveLength(2);
+    expect(document.getElementById(controlled[1]!)).toContainElement(widget.getByText('Lady fern'));
+  });
+});
+
+// SMA-437, lot V3-08, step S3 — COUNTS IN THE FULL WIDTH (A-14, decided by
+// Alexandre on 28/09: form A of V3-08, « quatre colonnes dès 1 200 px »). The
+// Large's list over FOUR columns from 1 200 px, three from 900 px, two below;
+// ten lines at rest — 37, 28 and 19 varieties (`COUNTERS_WIDE_LIST`) — then
+// the fold unfolds the rest in place: the card grows, nothing scrolls inside
+// it (A-N10), nothing is written.
+describe('CountersBlock in the Full width (SMA-437, lot V3-08, S3 — A-14)', () => {
+  /** The page believes it is `width` px wide: each `useMediaQuery` answers by its bounds. */
+  const stubWidth = (width: number) =>
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => {
+        const min = /min-width:\s*([\d.]+)px/.exec(query);
+        const max = /max-width:\s*([\d.]+)px/.exec(query);
+        return {
+          matches: Boolean(min || max) && (!min || width >= Number(min[1])) && (!max || width <= Number(max[1])),
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        };
+      })
+    );
+
+  // Unmounted BEFORE `matchMedia` is unstubbed (the trap of fix round 1, #3 —
+  // GitHub `4059024241`).
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  /** Forty-four edible varieties: 37 at rest over four columns, 28 over three, 19 over two. */
+  const fortyFour = Array.from({ length: 44 }, (_, index) =>
+    variety({ plantId: `p-${index}`, commonName: `Variety ${index}`, count: 44 - index })
+  );
+
+  /** The `grid-template-columns` of the list's grids, as the engine computes them. */
+  const gridColumns = () =>
+    [...widgetNode().querySelectorAll('*')]
+      .map((node) => getComputedStyle(node).gridTemplateColumns)
+      .filter((value) => value.includes('minmax'));
+
+  it.each([
+    [1280, 4, 37, '+7 varieties'],
+    [1200, 4, 37, '+7 varieties'],
+    [1024, 3, 28, '+16 varieties'],
+    [900, 3, 28, '+16 varieties'],
+    [600, 2, 19, '+25 varieties'],
+    [360, 2, 19, '+25 varieties'],
+  ] as const)('at %i px: %i columns, %i varieties at rest — ten lines — then « %s »', (width, columns, rest, more) => {
+    stubWidth(width);
+    const widget = renderBlock({ size: 'wide', varieties: fortyFour });
+
+    expect(widgetNode().querySelector('[data-counters-wide]')).toHaveAttribute('data-counters-wide', String(columns));
+    expect(gridColumns()).toEqual([`repeat(${columns}, minmax(0, 1fr))`]);
+    expect(drawnRows()).toBe(rest);
+    expect(Math.ceil(rest / columns)).toBeLessThanOrEqual(COUNTERS_LINE_CAP.wide);
+    expect(widget.getByRole('button', { name: more })).toBeInTheDocument();
+  });
+
+  it('holds ten lines at rest in the worst split — one edible variety and forty-three ornamental ones over four columns', () => {
+    stubWidth(1280);
+    const widget = renderBlock({
+      size: 'wide',
+      varieties: [
+        variety({ plantId: 'e-0', commonName: 'Basil' }),
+        ...Array.from({ length: 43 }, (_, index) =>
+          variety({ plantId: `o-${index}`, commonName: `Fern ${index}`, plantType: 'Ornamental', isEdible: false })
+        ),
+      ],
+    });
+    const [edible, ornamental] = widget
+      .getByRole('button', { name: '+7 varieties' })
+      .getAttribute('aria-controls')!
+      .split(' ')
+      .map((id) => document.getElementById(id)!.querySelectorAll('[data-variety-row]').length);
+
+    expect([edible, ornamental]).toEqual([1, 36]);
+    expect(Math.ceil(edible! / 4) + Math.ceil(ornamental! / 4)).toBe(COUNTERS_LINE_CAP.wide);
+  });
+
+  it('unfolds all forty-four in place and folds them back — one button, its aria-expanded following the list', () => {
+    stubWidth(1280);
+    const widget = renderBlock({ size: 'wide', varieties: fortyFour });
+    const fold = widget.getByRole('button', { name: '+7 varieties' });
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(fold);
+
+    expect(drawnRows()).toBe(44);
+    expect(fold).toHaveTextContent('Show fewer');
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(fold);
+
+    expect(drawnRows()).toBe(37);
+  });
+
+  it('never scrolls inside itself: the Full width is as tall as its list (A-N10)', () => {
+    stubWidth(1280);
+    renderBlock({ size: 'wide', varieties: fortyFour });
+
+    const rules = rulesFor(widgetNode().querySelector('[data-counters-wide]')!).replace(/\s+/g, '');
+    expect(rules).not.toContain('overflow-y:auto');
+    expect(rules).not.toContain('overflow:auto');
+  });
+
+  it('keeps everything the Large says — the chip, the filter chips, « Ornamental », the link to the Library (R4)', () => {
+    stubWidth(1280);
+    const widget = renderBlock({
+      size: 'wide',
+      gardens: [garden('g1', 'Terrasse'), garden('g2', 'Balcon')],
+      varieties: [
+        variety({ plantId: 'p-1', commonName: 'Basil' }),
+        variety({ plantId: 'p-2', commonName: 'Lady fern', plantType: 'Ornamental', isEdible: false }),
+      ],
+      totals: totals({ varietyCount: 2 }),
+    });
+
+    expect(widget.getByText('2 varieties')).toBeInTheDocument();
+    expect(widget.getByText('All gardens')).toBeInTheDocument();
+    expect(widget.getByRole('heading', { level: 3, name: 'Ornamental' })).toBeInTheDocument();
+    expect(widget.getByText('Add from the Library →')).toBeInTheDocument();
+  });
+
+  it('counts every variety in its chip, folded or unfolded (A-4)', () => {
+    stubWidth(1280);
+    const widget = renderBlock({ size: 'wide', varieties: fortyFour, totals: totals({ varietyCount: 44 }) });
+    expect(widget.getByText('44 varieties')).toBeInTheDocument();
+
+    fireEvent.click(widget.getByRole('button', { name: '+7 varieties' }));
+
+    expect(widget.getByText('44 varieties')).toBeInTheDocument();
+  });
+
+  it('draws no fold when the list fits its ten lines', () => {
+    stubWidth(1280);
+    const widget = renderBlock({ size: 'wide', varieties: fortyFour.slice(0, 37) });
+
+    expect(drawnRows()).toBe(37);
+    expect(widget.queryByRole('button', { name: /varieties|Show fewer/ })).toBeNull();
+  });
+
+  it('opens unfolded when told to (`defaultExpanded`, the harness’s scenes), never otherwise', () => {
+    stubWidth(1280);
+    renderBlock({ size: 'wide', varieties: fortyFour, defaultExpanded: true });
+
+    expect(drawnRows()).toBe(44);
   });
 });

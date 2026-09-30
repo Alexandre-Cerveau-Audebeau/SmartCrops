@@ -15,11 +15,7 @@ import {
 import { placement } from '../test/fixtures/placements';
 import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
-import {
-  DASHBOARD_BLOCK_KEYS,
-  type DashboardBlock,
-  type DashboardLevel,
-} from '../types/Dashboard';
+import type { DashboardBlock, DashboardLevel } from '../types/Dashboard';
 import type {
   DashboardData,
   DashboardGardenData,
@@ -171,8 +167,10 @@ afterEach(() => {
 });
 
 describe('GardensDashboard — grid from the stored preferences (SMA-336)', () => {
-  it('renders the nine widgets of the Expert preset: the Key figures band first, then the eight in the canonical order', async () => {
-    // SMA-437 lot 1, PR B, step B1 — « en tête du preset Expert ».
+  it('renders the nine widgets of the Expert preset: the Key figures band first, then the Gardens and the Weather, Tips, To-do and Harvest, then This month, Counts and Statistics', async () => {
+    // SMA-437 lot 1, PR B, step B1 — « en tête du preset Expert »; lot V3-08,
+    // step S5 (A-15) — the Gardens, then the Weather, the preset without a
+    // hole; PR #301, fix round 1, R1 — the alternative B (Alexandre, 29/09).
     servePreferences('expert');
 
     renderPage();
@@ -180,7 +178,14 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
     await waitFor(() => expect(renderedKeys()).toHaveLength(9));
     expect(renderedKeys()).toEqual([
       'keyfigures',
-      ...DASHBOARD_BLOCK_KEYS.filter((key) => key !== 'keyfigures'),
+      'gardens',
+      'weather',
+      'tips',
+      'todo',
+      'harvest',
+      'month',
+      'counters',
+      'stats',
     ]);
   });
 

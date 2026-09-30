@@ -1,13 +1,13 @@
-import { cleanup, render, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import { serializeCellsJson, type CellData } from '../../../types/GardenLayout';
 import { gardenFixture } from '../../../test/fixtures/dashboard';
 import { at } from '../../../test/fixtures/placements';
-import { rulesFor } from '../../../test/dashboardDom';
+import { declaredAtBreakpoint, rulesFor } from '../../../test/dashboardDom';
 import StatsBlock from './StatsBlock';
 
 // SMA-336 PR 2/5 — the Statistics widget. What it must get right: the surface
@@ -615,5 +615,203 @@ describe('StatsBlock — the N5 finishes (round 6, partie D)', () => {
     const rules = rulesFor(item).toLowerCase().replace(/\s+/g, '');
     expect(rules).toContain(`color:${theme.palette.text.primary}`);
     expect(rules).not.toContain('color:rgba(0,0,0,0.87)');
+  });
+});
+
+// SMA-437, lot V3-08, step S2 — THE PHONE'S ROW. The mock-ups measured the
+// Large at 360 px with its occupancy bar at 0 px (12 at 390): the three tracks
+// and their gaps ask 160 + 14 + 14 + 116 px of a 280 px row. Under 600 px the
+// name takes a line of its own, the whole row wide, and wraps; the bar and its
+// figure share the line under it. From 600 px, the three tracks as before —
+// read breakpoint by breakpoint (`declaredAtBreakpoint`), since jsdom lays
+// nothing out: the harness measures the widths (`dashboardLayout.test.tsx`).
+describe('StatsBlock — the row on a phone (SMA-437, lot V3-08, S2)', () => {
+  it('puts the name on its own line above the bar and its figure under 600 px, and keeps the three tracks from 600 px', () => {
+    renderBlock();
+    const row = widgetNode().querySelector('[data-stat-row]')!;
+
+    expect(declaredAtBreakpoint(row, '0px', 'grid-template-areas')).toBe('"name name" "bar value"');
+    expect(declaredAtBreakpoint(row, '0px', 'grid-template-columns')).toBe('minmax(0, 1fr) minmax(min-content, 116px)');
+    expect(declaredAtBreakpoint(row, '600px', 'grid-template-areas')).toBe('"name bar value"');
+    expect(declaredAtBreakpoint(row, '600px', 'grid-template-columns')).toBe(
+      'minmax(0, 160px) minmax(0, 1fr) minmax(min-content, 116px)'
+    );
+  });
+
+  it('lets the name wrap on a phone — the whole row is its own — and ellipsizes it in its 160 px column from 600 px, as before', () => {
+    renderBlock();
+    const name = widgetNode().querySelector('[data-stat-row]')!.firstElementChild!;
+
+    expect(declaredAtBreakpoint(name, '0px', 'white-space')).toBe('normal');
+    expect(declaredAtBreakpoint(name, '600px', 'white-space')).toBe('nowrap');
+  });
+
+  it('keeps the row’s three children in their order — the name, the bar, the figure — only their areas move', () => {
+    renderBlock();
+    const row = widgetNode().querySelector('[data-stat-row]')!;
+
+    expect(row.children).toHaveLength(3);
+    expect(row.children[0]!.textContent).toBe('Terrasse');
+    expect(row.children[1]!.querySelector('[data-occupancy-track]')).not.toBeNull();
+    expect(row.children[2]!.textContent).toMatch(/m² · \d+%$/);
+  });
+});
+
+// SMA-437, lot V3-08, step S2 — THE FULL WIDTH (A-14, decided by Alexandre on
+// 28/09: form A of V3-08, « une ligne par jardin »). From 900 px, ONE line per
+// garden — the name, the occupancy bar and « 20 m² · 68 % », the exposure bar
+// and the dominant share — under the two section titles turned column
+// headers; under 900 px, the Large's lists one under the other. Ten gardens at
+// rest, then « Show the N other gardens » unfolds them in place (A-N10: the
+// card grows, nothing scrolls inside it) and « Show less » folds them back.
+describe('StatsBlock in the Full width (SMA-437, lot V3-08 — A-14)', () => {
+  /** The page believes it is 900 px wide or more: `useMediaQuery(up('md'))` answers true. */
+  const stubDesktop = () =>
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('min-width:900px'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
+  // Unmounted BEFORE `matchMedia` is unstubbed (the trap of fix round 1, #3 —
+  // GitHub `4059024241`): this `afterEach` runs before Testing Library's own
+  // cleanup under vitest's stacked hooks, and a tree still mounted could read
+  // the global the stub installed.
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  /** Twelve gardens: ten at rest, two behind the fold. */
+  const twelve = () => Array.from({ length: 12 }, (_, index) => garden({ id: `g${index + 1}`, name: `Parcelle ${index + 1}` }));
+  const rows = () => [...widgetNode().querySelectorAll('[data-stat-row]')];
+  const names = () => rows().map((row) => row.firstElementChild!.textContent);
+
+  it('from 900 px draws ONE line per garden — the name, both bars and both figures — under the two section titles', () => {
+    stubDesktop();
+    const widget = renderBlock({ size: 'wide', gardens: [garden(), garden({ id: 'g2', name: 'Balcon' })] });
+
+    expect(widgetNode().querySelector('[data-stats-wide="one-line"]')).not.toBeNull();
+    expect(names()).toEqual(['Terrasse', 'Balcon']);
+    for (const row of rows()) {
+      expect(row.querySelector('[data-occupancy-track]')).not.toBeNull();
+      expect(row.querySelector('[data-exposure-bar]')).not.toBeNull();
+      expect(row.textContent).toMatch(/m² · \d+%/);
+    }
+    const head = widgetNode().querySelector('[data-stats-wide-head]') as HTMLElement;
+    expect(within(head).getByRole('heading', { level: 3, name: 'Occupancy by garden' })).toBeInTheDocument();
+    expect(within(head).getByRole('heading', { level: 3, name: 'Exposure by garden' })).toBeInTheDocument();
+    // Everything the Large says (R4): the page's distribution, the cell line, the foot.
+    expect(widget.getByText('Dominant exposure — Summer · Noon')).toBeInTheDocument();
+    expect(widget.getByText(/active cells/)).toBeInTheDocument();
+    expect(widget.getByText(/free cells/)).toBeInTheDocument();
+  });
+
+  it('lays each line on the five tracks of V3-08 — the name on 200 px, the figures on 116 and 72 with their floor', () => {
+    stubDesktop();
+    renderBlock({ size: 'wide' });
+
+    expect(rulesFor(rows()[0]!).replace(/\s+/g, '')).toContain(
+      'grid-template-columns:minmax(0,200px)minmax(0,1fr)minmax(min-content,116px)minmax(0,1fr)minmax(min-content,72px)'
+    );
+  });
+
+  it('carries the Large’s header chip — the surface and the overall occupancy (R4)', () => {
+    stubDesktop();
+    renderBlock({ size: 'wide' });
+
+    expect(chipNode().textContent).toBe('2.0 m² · 0% average occupancy');
+  });
+
+  it('lists ten gardens at rest, then « Show the 2 other gardens » unfolds the rest in place, and « Show less » folds them back', () => {
+    stubDesktop();
+    const widget = renderBlock({ size: 'wide', gardens: twelve() });
+
+    expect(names()).toEqual(twelve().slice(0, 10).map((entry) => entry.name));
+    const more = widget.getByRole('button', { name: 'Show the 2 other gardens' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(document.getElementById(more.getAttribute('aria-controls')!)).toContainElement(rows()[0] as HTMLElement);
+
+    fireEvent.click(more);
+
+    expect(names()).toEqual(twelve().map((entry) => entry.name));
+    const less = widget.getByRole('button', { name: 'Show less' });
+    expect(less).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(less);
+
+    expect(rows()).toHaveLength(10);
+  });
+
+  it('draws no fold at ten gardens or fewer', () => {
+    stubDesktop();
+    const widget = renderBlock({ size: 'wide', gardens: twelve().slice(0, 10) });
+
+    expect(rows()).toHaveLength(10);
+    expect(widget.queryByRole('button', { name: /other garden/ })).toBeNull();
+  });
+
+  it('says « Show the other garden » in the singular, at eleven', () => {
+    stubDesktop();
+    const widget = renderBlock({ size: 'wide', gardens: twelve().slice(0, 11) });
+
+    expect(widget.getByRole('button', { name: 'Show the 1 other garden' })).toBeInTheDocument();
+  });
+
+  it('keeps the counts of every garden, folded or unfolded: the chip and the foot do not follow the fold (A-4)', () => {
+    stubDesktop();
+    const widget = renderBlock({ size: 'wide', gardens: twelve() });
+    const chip = chipNode().textContent;
+    const foot = widget.getByText(/free cells/).textContent;
+
+    fireEvent.click(widget.getByRole('button', { name: 'Show the 2 other gardens' }));
+
+    expect(chipNode().textContent).toBe(chip);
+    expect(widget.getByText(/free cells/).textContent).toBe(foot);
+  });
+
+  it('puts ONE « No plan » mark on the line of a garden without a plan — across its figures, not one per list', () => {
+    stubDesktop();
+    renderBlock({ size: 'wide', gardens: [garden(), garden({ id: 'g2', name: 'Jamais dessiné', width: null, height: null })] });
+
+    const marks = [...widgetNode().querySelectorAll('[data-missing-mark]')];
+    expect(marks).toHaveLength(1);
+    const row = marks[0]!.closest('[data-stat-row]')!;
+    expect(row.firstElementChild!.textContent).toBe('Jamais dessiné');
+    expect(row.querySelector('[data-occupancy-track]')).toBeNull();
+    expect(row.querySelector('[data-exposure-bar]')).toBeNull();
+  });
+
+  it('under 900 px draws the Large’s three sections one under the other — ten gardens each at rest, ONE fold for both lists', () => {
+    const widget = renderBlock({ size: 'wide', gardens: twelve() });
+
+    expect(widgetNode().querySelector('[data-stats-wide="lists"]')).not.toBeNull();
+    expect(widget.getByText('Occupancy by garden')).toBeInTheDocument();
+    expect(widget.getByText('Exposure by garden')).toBeInTheDocument();
+    // Ten in the occupancy list, ten in the per-garden exposure list.
+    expect(rows()).toHaveLength(20);
+    const more = widget.getByRole('button', { name: 'Show the 2 other gardens' });
+    const controlled = more.getAttribute('aria-controls')!.split(' ');
+    expect(controlled).toHaveLength(2);
+    for (const id of controlled) expect(document.getElementById(id)).not.toBeNull();
+
+    fireEvent.click(more);
+
+    expect(rows()).toHaveLength(24);
+  });
+
+  it('opens unfolded when told to (`defaultExpanded`, the harness’s scenes), never otherwise', () => {
+    stubDesktop();
+    renderBlock({ size: 'wide', gardens: twelve(), defaultExpanded: true });
+
+    expect(rows()).toHaveLength(12);
   });
 });
