@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 import { AiAssistantFab } from './AiAssistantFab';
@@ -26,6 +26,9 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): the button reads the stubbed `matchMedia`
+  // until it is gone — only then is the stub dropped.
+  cleanup();
   vi.unstubAllGlobals();
 });
 

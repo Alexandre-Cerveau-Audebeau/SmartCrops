@@ -139,7 +139,14 @@ beforeEach(() => {
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Unmount FIRST (SMA-452, the rule of PR #300's I1): this hook runs before
+  // Testing Library's automatic cleanup (vitest's `sequence.hooks = 'stack'`),
+  // and the page sends its pending layout save as it unmounts — cleared first,
+  // the mocks would record that write for the next test.
+  cleanup();
+  vi.clearAllMocks();
+});
 
 function renderPage() {
   return render(

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
@@ -13,6 +13,9 @@ function renderPage() {
 }
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): the page reads the stubbed `matchMedia`
+  // until it is gone — only then is the stub dropped.
+  cleanup();
   vi.unstubAllGlobals();
 });
 

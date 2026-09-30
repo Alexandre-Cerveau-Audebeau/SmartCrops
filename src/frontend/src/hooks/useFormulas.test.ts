@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { catalogFor } from '../test/fixtures/formulas';
 
@@ -8,6 +8,10 @@ import { fetchFormulas } from '../services/formulasApi';
 import { ownFormula, useFormulas } from './useFormulas';
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
+  // back below stays in place until the tree that reads it is gone.
+  cleanup();
   vi.clearAllMocks();
 });
 

@@ -982,6 +982,9 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the card measures with the stubbed
+    // geometry and observer until it is gone — only then do they go back.
+    cleanup();
     restore();
     vi.unstubAllGlobals();
   });

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGlyphsFit } from './useGlyphsFit';
 
@@ -126,6 +126,9 @@ describe('useGlyphsFit — the chips keep their glyphs wherever they fit (SMA-43
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the rows are measured with the stubbed
+    // geometry and observer until they are gone — only then do they go back.
+    cleanup();
     restore();
     vi.unstubAllGlobals();
   });

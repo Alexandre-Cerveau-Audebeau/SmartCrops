@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -35,6 +35,10 @@ function renderTheRealChain() {
 const reconnect = () => screen.findByRole('button', { name: /^(Sign in again|Se reconnecter)$/ });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
+  // back below stays in place until the tree that reads it is gone.
+  cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });

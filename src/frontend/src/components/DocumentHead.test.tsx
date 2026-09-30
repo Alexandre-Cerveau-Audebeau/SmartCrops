@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { act } from 'react';
-import { render } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 import i18next from '../i18n/i18n';
@@ -54,6 +54,10 @@ function NavigationProbe() {
 
 describe('DocumentHead (SMA-354)', () => {
   afterEach(async () => {
+    // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+    // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the override
+    // and the language reset below re-rendered a head still mounted.
+    cleanup();
     setDocumentTitleOverride(null);
     canonicalLink()?.remove();
     document.title = '';

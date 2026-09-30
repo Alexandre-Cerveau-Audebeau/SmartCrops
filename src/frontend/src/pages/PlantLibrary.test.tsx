@@ -62,16 +62,18 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  vi.clearAllMocks();
-  vi.useRealTimers();
   // Unmount FIRST (SMA-174). Vitest runs afterEach hooks in reverse order of
   // registration, so this hook used to run before Testing Library's automatic
   // cleanup — and the language reset below fired `languageChanged` into a tree
   // still mounted: every `useTranslation` re-rendered outside act(), 28 to 35
   // React warnings per test (1 405 per run), 70 to 180 ms of stack capture and
   // console output each. Unmounted, the reset re-renders nothing; the automatic
-  // cleanup that follows finds nothing left to unmount.
+  // cleanup that follows finds nothing left to unmount. Before the mocks and
+  // the clock too (SMA-452 § 13): the tree is unmounted on the clock it ran
+  // on, with the mocks it ran against.
   cleanup();
+  vi.clearAllMocks();
+  vi.useRealTimers();
   localStorage.clear();
   delete (window as { matchMedia?: unknown }).matchMedia;
   // A test below flips the language; reset the shared i18next singleton so the

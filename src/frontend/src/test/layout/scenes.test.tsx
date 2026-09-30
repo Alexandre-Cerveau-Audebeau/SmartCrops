@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +21,11 @@ const MARCH = Date.UTC(2026, 2, 5, 9, 0, 0);
 const NOVEMBER = Date.UTC(2026, 10, 20, 17, 0, 0);
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); a scene a failed
+  // test left mounted is unmounted on the clock it ran on, and only then is
+  // the real one back.
+  cleanup();
   vi.useRealTimers();
   vi.resetModules();
 });

@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -412,8 +413,9 @@ const settle = async () => {
 /**
  * The last layout the debounced save sent. Always the LAST call, never the
  * first: the hook flushes a pending write on unmount, and vitest's stacked
- * hooks run this file's `clearAllMocks` BEFORE Testing Library's cleanup, so
- * the previous test's flush can land at index 0 of this test's calls.
+ * hooks ran this file's `clearAllMocks` BEFORE Testing Library's cleanup, so
+ * the previous test's flush could land at index 0 of this test's calls — the
+ * `afterEach` below unmounts first since SMA-452.
  */
 const lastSaved = () => {
   const calls = vi.mocked(saveDashboardPreferences).mock.calls;
@@ -441,7 +443,14 @@ beforeEach(() => {
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Unmount FIRST (SMA-452, the rule of PR #300's I1): this hook runs before
+  // Testing Library's automatic cleanup (vitest's `sequence.hooks = 'stack'`),
+  // and the page sends its pending layout save as it unmounts — cleared first,
+  // the mocks would record that write for the next test.
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
   // SMA-437, lot V39, step A2 (A-7 — Alexandre, 25/09) — REWRITTEN: this test
@@ -687,7 +696,11 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     servePreferences('gardener');
     renderPage();
 
-    await screen.findByRole('button', { name: 'Edit' });
+    // The grid first (SMA-452 § 12): « Edit » is drawn, disabled, before it,
+    // and an absence read then holds on a page with no widget at all.
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).toBeEnabled());
+    expect(document.querySelector('[data-widget="weather"]')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Move Weather' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Hide Weather' })).toBeNull();
   });
@@ -1065,7 +1078,12 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
     restoreGeometry = stubGridGeometry();
   });
 
-  afterEach(() => restoreGeometry());
+  afterEach(() => {
+    // Unmount before the real geometry comes back (SMA-452 § 13): the page
+    // measures with this one until it is gone.
+    cleanup();
+    restoreGeometry();
+  });
 
   it('the drag handle carries dnd-kit’s draggable semantics', async () => {
     await enterEditMode();
@@ -1314,7 +1332,12 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
     restoreGeometry = stubGridGeometry(sizes);
   });
 
-  afterEach(() => restoreGeometry());
+  afterEach(() => {
+    // Unmount before the real geometry comes back (SMA-452 § 13): the page
+    // measures with this one until it is gone.
+    cleanup();
+    restoreGeometry();
+  });
 
   it('translates a neighbour out of the way without scaling it', async () => {
     // Before the fix the applied transform read
@@ -1450,7 +1473,12 @@ describe('GardensDashboard — one column on a phone sorts by the MEASURED heigh
     restoreGeometry = stubPhoneGeometry(heights);
   });
 
-  afterEach(() => restoreGeometry());
+  afterEach(() => {
+    // Unmount before the real geometry comes back (SMA-452 § 13): the page
+    // measures with this one until it is gone.
+    cleanup();
+    restoreGeometry();
+  });
 
   /** Picks the widget up, then N keyboard steps down, with dnd-kit's measurement tick between each. */
   async function pickUpAndStepDown(handle: HTMLElement, steps: number) {

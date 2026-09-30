@@ -97,12 +97,15 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  vi.clearAllMocks();
+  // Unmount FIRST, before the mocks are cleared too (SMA-452 § 13): what the
+  // tree does as it unmounts reaches the mocks while they are in place, and is
+  // cleared with them instead of being left for the next test.
   // Unmount before the language reset (SMA-174): this hook runs before Testing
   // Library's automatic cleanup, and the reset used to re-render every mounted
   // `useTranslation` outside act() — 626 React warnings per CI run from this
   // file alone, the whole Library re-rendered once more for nothing.
   cleanup();
+  vi.clearAllMocks();
   localStorage.clear();
   delete (window as { matchMedia?: unknown }).matchMedia;
   await i18next.changeLanguage('en');

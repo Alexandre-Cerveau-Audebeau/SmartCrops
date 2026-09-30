@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import { createAppTheme } from '../theme';
@@ -162,6 +162,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452, the rule of PR #300's I1): this hook runs before
+  // Testing Library's automatic cleanup (vitest's `sequence.hooks = 'stack'`),
+  // and the page sends its pending layout save as it unmounts — cleared first,
+  // the mocks would record that write for the next test.
+  cleanup();
+  // The clock a test simulated goes back to the engine's own — after the
+  // unmount, which runs on the clock the test ran on.
   vi.useRealTimers();
   vi.clearAllMocks();
 });
@@ -233,7 +240,11 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
     servePreferences('expert', blocks);
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
+    // « Customize » is drawn, DISABLED, while the layout loads: a click then is
+    // lost — C28's trap, and `openPanel`'s (SMA-452 § 12).
+    const customize = await screen.findByRole('button', { name: 'Customize' });
+    await waitFor(() => expect(customize).toBeEnabled());
+    fireEvent.click(customize);
 
     const panel = await screen.findByRole('dialog', { name: 'Customize' });
     const add = within(panel).getByRole('button', { name: 'Add Key figures' });

@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gardenFixture } from '../test/fixtures/dashboard';
 import { SAVE_DEBOUNCE_MS } from './useDashboardPreferences';
@@ -49,6 +49,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the hook is
+  // unmounted on the clock it ran on, and only then is the real one back.
+  cleanup();
   vi.useRealTimers();
 });
 

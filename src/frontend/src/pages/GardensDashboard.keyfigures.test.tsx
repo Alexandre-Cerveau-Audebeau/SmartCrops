@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -134,6 +134,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452, the rule of PR #300's I1): this hook runs before
+  // Testing Library's automatic cleanup (vitest's `sequence.hooks = 'stack'`),
+  // and the page sends its pending layout save as it unmounts — cleared first,
+  // the mocks would record that write for the next test. The real
+  // `scrollIntoView` comes back once nothing mounted can call it.
+  cleanup();
   Element.prototype.scrollIntoView = originalScrollIntoView;
   vi.clearAllMocks();
 });

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 import PlantDetailToc from './PlantDetailToc';
@@ -22,6 +22,9 @@ function setMatchMedia(matches: boolean) {
 }
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): the contents read the stubbed `matchMedia`
+  // until they are gone — only then is the stub dropped.
+  cleanup();
   vi.unstubAllGlobals();
 });
 

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import {
   afterEach,
@@ -75,6 +75,10 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the view drops
+  // its pending print and gives the title back while `print` is still stubbed.
+  cleanup();
   printSpy.mockRestore();
   vi.clearAllMocks();
 });

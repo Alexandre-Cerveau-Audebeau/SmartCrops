@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import {
   afterEach,
@@ -69,6 +69,10 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the stage cancels
+  // its capture and clears its bound on the stubs it ran with.
+  cleanup();
   clickSpy.mockRestore();
   vi.unstubAllGlobals();
   vi.clearAllMocks();

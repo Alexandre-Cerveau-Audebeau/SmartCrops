@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 import GardenConfigDialog from './GardenConfigDialog';
@@ -40,7 +40,13 @@ const savedConfig = (onConfirm: ReturnType<typeof vi.fn>): GardenConfig =>
 beforeEach(async () => {
   await i18n.changeLanguage('en');
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
+  // back below stays in place until the tree that reads it is gone.
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe('GardenConfigDialog (SMA-17, §12)', () => {
   it('renders every section and all five garden-type cards', () => {

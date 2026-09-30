@@ -1,5 +1,5 @@
 import { StrictMode, useEffect } from 'react';
-import { act, render, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import type { Plant } from '../types/Plant';
@@ -24,6 +24,11 @@ import { findPlants } from '../services/plantApi';
 // prevRef regression.
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the hook is
+  // unmounted on the clock it ran on, with the mocks it ran against, and
+  // only then are they put back.
+  cleanup();
   vi.clearAllMocks();
   vi.useRealTimers();
 });
