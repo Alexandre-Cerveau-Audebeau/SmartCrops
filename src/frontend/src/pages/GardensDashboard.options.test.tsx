@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -141,7 +141,14 @@ beforeEach(() => {
   vi.mocked(fetchDashboardData).mockResolvedValue(data);
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Unmount FIRST (SMA-452, the rule of PR #300's I1): this hook runs before
+  // Testing Library's automatic cleanup (vitest's `sequence.hooks = 'stack'`),
+  // and the page sends its pending layout save as it unmounts — cleared first,
+  // the mocks would record that write for the next test.
+  cleanup();
+  vi.clearAllMocks();
+});
 
 function renderPage() {
   render(

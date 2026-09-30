@@ -261,11 +261,14 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  vi.clearAllMocks();
-  // Unmount before the language reset (SMA-174): this hook runs before Testing
-  // Library's automatic cleanup, and the reset used to re-render the whole
-  // mounted dashboard outside act() — 657 React warnings per CI run.
+  // Unmount FIRST — before the mocks are cleared too (SMA-452, the rule of PR
+  // #300's I1: the page sends its pending layout save as it unmounts, which
+  // the cleared mocks would record for the next test), and before the
+  // language reset (SMA-174): this hook runs before Testing Library's
+  // automatic cleanup, and the reset used to re-render the whole mounted
+  // dashboard outside act() — 657 React warnings per CI run.
   cleanup();
+  vi.clearAllMocks();
   await i18next.changeLanguage('fr');
 });
 
