@@ -428,14 +428,27 @@ export function useDashboardPreferences() {
   const dismissRefusal = useCallback(() => setRefusal(null), []);
 
   /**
-   * Back to the current formula's preset, discarding the manual arrangement —
-   * of THIS formula only: the layouts of the others wait in the server's
-   * archive, untouched.
+   * « Réinitialiser la disposition » (SMA-437, lot V3-07, P2 — contract A-17,
+   * decided by Alexandre on 28/09): back to the current formula's preset
+   * LAYOUT — its order, its sizes, what it shows — of THIS formula only (the
+   * layouts of the others wait in the server's archive, untouched), and
+   * KEEPING each widget's own settings, its `options`: the band's four
+   * figures, the Counters' filter and photos, the Gardens' count and sort. It
+   * used to write the preset whole, which erased them (fact F1 of the
+   * contract). The custom order of the gardens is the gardens' own (A-N5),
+   * never touched here: a reset puts back a layout, never a setting.
    */
-  const resetToLevel = useCallback(() => {
+  const resetLayout = useCallback(() => {
     const current = layoutRef.current;
     if (!current || !capabilities) return;
-    commit({ level: current.level, blocks: presetOf(capabilities) });
+    const settings = new Map(current.blocks.map((block) => [block.key, block.options]));
+    commit({
+      level: current.level,
+      blocks: presetOf(capabilities).map((block) => {
+        const options = settings.get(block.key);
+        return options == null ? block : { ...block, options };
+      }),
+    });
   }, [commit, capabilities]);
 
   const level = layout?.level ?? DEFAULT_DASHBOARD_LEVEL;
@@ -460,6 +473,6 @@ export function useDashboardPreferences() {
     reload,
     setBlocks,
     setLevel,
-    resetToLevel,
+    resetLayout,
   };
 }

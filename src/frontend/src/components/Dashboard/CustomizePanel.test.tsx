@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import { LanguageProvider } from '../../contexts/LanguageContext';
 import { createAppTheme } from '../../theme';
+import { isAdjusted } from '../../constants/dashboardCapabilities';
 import { capabilitiesFor, presetFor } from '../../test/fixtures/formulas';
 import CustomizePanel from './CustomizePanel';
 import type { DashboardBlock, DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
@@ -21,13 +22,18 @@ interface PanelProps {
   initial: DashboardBlock[];
   switching?: boolean;
   onClose?: () => void;
+  onReset?: () => void;
   onReorder?: (blocks: DashboardBlock[]) => void;
   onVisibilityChange?: (key: DashboardBlockKey, hidden: boolean) => void;
   onSizeChange?: (key: DashboardBlockKey, size: DashboardSize) => void;
 }
 
-/** The panel over a layout it writes back, as the page's `setBlocks` and `patchBlock` do. */
-function Panel({ level, initial, switching = false, onClose = () => {}, onReorder, onVisibilityChange, onSizeChange }: PanelProps) {
+/**
+ * The panel over a layout it writes back, as the page's `setBlocks` and
+ * `patchBlock` do — its reset brings the preset's layout back, and
+ * « adjusted » is the page's own `isAdjusted`.
+ */
+function Panel({ level, initial, switching = false, onClose = () => {}, onReset, onReorder, onVisibilityChange, onSizeChange }: PanelProps) {
   const [blocks, setBlocks] = useState(initial);
   const patch = (key: DashboardBlockKey, change: Partial<DashboardBlock>) =>
     setBlocks((current) => current.map((block) => (block.key === key ? { ...block, ...change } : block)));
@@ -39,10 +45,14 @@ function Panel({ level, initial, switching = false, onClose = () => {}, onReorde
           level={level}
           capabilities={capabilitiesFor(level)}
           blocks={blocks}
+          adjusted={isAdjusted(blocks, capabilitiesFor(level))}
           switching={switching}
           onClose={onClose}
           onChangeFormula={() => {}}
-          onReset={() => {}}
+          onReset={() => {
+            onReset?.();
+            setBlocks(presetFor(level));
+          }}
           onReorder={(next) => {
             onReorder?.(next);
             setBlocks(next);
@@ -198,6 +208,30 @@ describe('CustomizePanel — the list of the formula’s widgets (A-16)', () => 
     fireEvent.click(within(rowOf('tips')).getByRole('button', { name: 'Grand' }));
     expect(said().textContent).toBe('« Conseils » en Grand.');
     expect(within(rowOf('gardens')).getByRole('img', { name: 'Jardins ne peut pas être masqué' })).toBeInTheDocument();
+  });
+
+  // SMA-437, lot V3-07, P2 (contract A-17; V3-07 § 6) — « Réinitialiser la
+  // disposition X »: inert on the preset, saying why; otherwise it puts the
+  // layout back and the region says so, in the panel's one region.
+  it('names the reset after the formula; inert on the preset, it says why and does nothing; once the layout moves, it resets and says so', () => {
+    const onReset = vi.fn();
+    render(<Panel level="expert" initial={presetFor('expert')} onReset={onReset} />);
+    const reset = screen.getByRole('button', { name: 'Reset the Expert layout' });
+    expect(reset).toHaveAttribute('aria-disabled', 'true');
+    expect(panel()).toHaveTextContent('This is already the starting layout.');
+    fireEvent.click(reset);
+    expect(onReset).not.toHaveBeenCalled();
+    expect(said().textContent).toBe('');
+
+    fireEvent.click(within(rowOf('stats')).getByRole('switch', { name: 'Show — Statistics' }));
+    expect(reset).not.toHaveAttribute('aria-disabled');
+    expect(panel()).toHaveTextContent('Each widget’s own settings (key figures, sorts, photos) are kept.');
+
+    fireEvent.click(reset);
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(said().textContent).toBe('The Expert layout is restored.');
+    expect(reset).toHaveAttribute('aria-disabled', 'true');
+    expect(within(rowOf('stats')).getByRole('switch', { name: 'Show — Statistics' })).toBeChecked();
   });
 
   it('takes no gesture while a switch of formula is in flight: the switches, the sizes, the handles and ▲ ▼ disabled (S5)', () => {

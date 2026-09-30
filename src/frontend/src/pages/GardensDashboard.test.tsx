@@ -1053,7 +1053,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 
-  it('the reset names the current level and restores its preset', async () => {
+  it('the reset names the current formula and restores its preset’s layout', async () => {
     const blocks = presetFor('gardener');
     blocks[2]!.hidden = true;
     servePreferences('gardener', blocks);
@@ -1064,11 +1064,41 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     ).toBeInTheDocument();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Reset to the Gardener level' })
+      screen.getByRole('button', { name: 'Reset the Gardener layout' })
     );
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(6));
     expect(await screen.findByText('Gardener view')).toBeInTheDocument();
+  });
+
+  // SMA-437, lot V3-07, P2 (contract A-17; V3-07 § 6, « (a) inerte ») — on
+  // the preset the reset has nothing to put back: inert, and it says why.
+  // Once the layout moves it puts it back, the region says so, and the focus
+  // stays on the button that has just turned inert.
+  it('the reset is inert on the starting layout and says why; once the layout moves, it puts it back, says so, and keeps the focus', async () => {
+    await openPanel();
+    const reset = screen.getByRole('button', { name: 'Reset the Gardener layout' });
+    expect(reset).toHaveAttribute('aria-disabled', 'true');
+    expect(reset).toBeEnabled();
+    expect(within(screen.getByRole('dialog', { name: 'Customize' })).getByText('This is already the starting layout.')).toBeInTheDocument();
+    fireEvent.click(reset);
+    expect(panelSaid().textContent).toBe('');
+
+    fireEvent.click(within(panelRow('tips')).getByRole('switch', { name: 'Show — Tips' }));
+    await waitFor(() => expect(reset).not.toHaveAttribute('aria-disabled'));
+    expect(
+      within(screen.getByRole('dialog', { name: 'Customize' })).getByText(
+        'Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, photos) are kept.'
+      )
+    ).toBeInTheDocument();
+
+    reset.focus();
+    fireEvent.click(reset);
+
+    await waitFor(() => expect(renderedKeys()).toContain('tips'));
+    expect(panelSaid().textContent).toBe('The Gardener layout is restored.');
+    expect(reset).toHaveAttribute('aria-disabled', 'true');
+    expect(document.activeElement).toBe(reset);
   });
 
   it('puts a glyph in front of the reset, as the artboard has it (A10-12)', async () => {
@@ -1077,7 +1107,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     await openPanel();
 
     const reset = screen.getByRole('button', {
-      name: 'Reset to the Gardener level',
+      name: 'Reset the Gardener layout',
     });
     expect(
       reset.querySelector('svg[data-testid="RestartAltOutlinedIcon"]')
@@ -1224,7 +1254,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(within(choice).getByRole('button', { name: 'Choose Novice' })).toBeDisabled();
     const panel = panelUnderTheScreen();
     expect(within(panel).getByRole('button', { name: 'Change formula', hidden: true })).toBeDisabled();
-    expect(within(panel).getByRole('button', { name: 'Reset to the Gardener level', hidden: true })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Reset the Gardener layout', hidden: true })).toBeDisabled();
     expect(within(panel).getByRole('switch', { name: 'Show — Harvest', hidden: true })).toBeDisabled();
     expect(within(panel).getByRole('button', { name: 'Move “Harvest” up', hidden: true })).toBeDisabled();
     for (const pill of within(panel).getAllByRole('button', { name: 'Large', hidden: true })) expect(pill).toBeDisabled();
@@ -1235,7 +1265,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     const panelAfter = screen.getByRole('dialog', { name: 'Customize' });
     expect(within(panelAfter).getByText('Expert')).toBeInTheDocument();
     expect(within(panelAfter).getByRole('button', { name: 'Change formula' })).toBeEnabled();
-    expect(within(panelAfter).getByRole('button', { name: 'Reset to the Expert level' })).toBeEnabled();
+    expect(within(panelAfter).getByRole('button', { name: 'Reset the Expert layout' })).toBeEnabled();
   });
 
   // SMA-448, PR #293, fix round 1 — S6: the switch lands but its layout

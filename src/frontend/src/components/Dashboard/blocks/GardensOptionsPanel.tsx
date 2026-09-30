@@ -65,8 +65,9 @@ const noteSx = { fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.45, color: 't
  * never rendered by React.
  *
  * Setting the count or the sort never turns the chip « · ajustée » (V19);
- * « Réinitialiser » brings the count and the sort back to their defaults and
- * leaves the order where it is — it belongs to the gardens, not to a layout.
+ * « Réinitialiser » keeps the count and the sort — a reset puts back a
+ * layout, never a setting (SMA-437, lot V3-07, contract A-17) — and leaves
+ * the order where it is: it belongs to the gardens, not to a layout.
  */
 export default function GardensOptionsPanel({ options, sorts, gardens, ready, onChange, order }: Props) {
   const { t } = useTranslation();

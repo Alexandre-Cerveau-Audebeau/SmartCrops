@@ -145,7 +145,7 @@ export default function GardensDashboard() {
     reload,
     setBlocks,
     setLevel,
-    resetToLevel,
+    resetLayout,
   } = useDashboardPreferences();
 
   // SMA-336 PR 2/5: one call instead of seven. `useDashboardData` keeps the
@@ -1112,12 +1112,15 @@ export default function GardensDashboard() {
           level={level}
           capabilities={capabilities}
           blocks={blocks}
+          adjusted={adjusted}
           switching={switching}
           onClose={() => setPanelOpen(false)}
           // SMA-448, PR #297, fix round 1 (A1) — the panel chooses no formula
           // any more: its link opens the choice screen, like the chip.
           onChangeFormula={(event) => openChooser(event.currentTarget)}
-          onReset={resetToLevel}
+          // SMA-437, lot V3-07, P2 (A-17) — the layout alone: each widget's
+          // settings are kept.
+          onReset={resetLayout}
           // SMA-437, lot V3-07 (A-16) — the list writes what the Edit mode
           // writes, through the same two doors (§ 4.9: « les deux surfaces
           // écrivent le même état »): the page follows every gesture.

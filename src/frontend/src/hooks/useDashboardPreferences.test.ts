@@ -286,7 +286,7 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 
-  it('resetToLevel() restores the current level preset and clears « ajustée »', async () => {
+  it('resetLayout() restores the current formula’s preset layout and clears « ajustée »', async () => {
     const blocks = presetFor('gardener');
     blocks[0]!.hidden = true;
     vi.mocked(fetchDashboardPreferences).mockResolvedValue(
@@ -295,7 +295,7 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     const { result } = renderHook(() => useDashboardPreferences());
     await waitFor(() => expect(result.current.adjusted).toBe(true));
 
-    act(() => result.current.resetToLevel());
+    act(() => result.current.resetLayout());
 
     expect(result.current.blocks).toEqual(presetFor('gardener'));
     expect(result.current.adjusted).toBe(false);
@@ -306,6 +306,48 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
         expect.any(AbortSignal)
       )
     );
+  });
+
+  // SMA-437, lot V3-07, P2 (contract A-17 — Alexandre, 28/09: « Réinitialiser
+  // ne remet que la disposition (l'ordre, les tailles, ce qui est affiché),
+  // les réglages de chaque widget conservés »). The reset used to write the
+  // preset WHOLE, erasing every widget's options with the arrangement.
+  it('the reset puts back the preset’s order, sizes and visibility — and KEEPS every widget’s own settings', async () => {
+    const figures = ['cities', 'free', 'tips', 'surface'];
+    const [band, gardens, ...rest] = presetFor('expert');
+    const arranged: DashboardBlock[] = [
+      { ...gardens!, size: 'large', options: { count: 5, sort: 'name' } },
+      { ...band!, options: { figures } },
+      ...rest.map((block) =>
+        block.key === 'counters' ? { ...block, hidden: true, options: { garden: 'g2', photos: true } } : block
+      ),
+    ];
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue(
+      preferences({ level: 'expert', isPreset: false, blocks: arranged })
+    );
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.adjusted).toBe(true));
+
+    act(() => result.current.resetLayout());
+
+    const optionsOf = (key: string) => result.current.blocks.find((block) => block.key === key)?.options;
+    // The preset's layout: its order, its sizes, what it shows…
+    expect(result.current.blocks.map(({ key, size, hidden }) => ({ key, size, hidden }))).toEqual(
+      presetFor('expert').map(({ key, size, hidden }) => ({ key, size, hidden }))
+    );
+    expect(result.current.adjusted).toBe(false);
+    // …and each widget's own settings, as they were.
+    expect({
+      keyfigures: optionsOf('keyfigures'),
+      gardens: optionsOf('gardens'),
+      counters: optionsOf('counters'),
+      weather: optionsOf('weather'),
+    }).toEqual({
+      keyfigures: { figures },
+      gardens: { count: 5, sort: 'name' },
+      counters: { garden: 'g2', photos: true },
+      weather: undefined,
+    });
   });
 
   it('flushes the pending write when the page unmounts mid-debounce', async () => {
@@ -718,7 +760,7 @@ describe('useDashboardPreferences — no edit is taken while a switch is in flig
     edited[0]!.size = 'small';
     act(() => result.current.setBlocks(edited));
     expect(result.current.blocks).toEqual(presetFor('gardener'));
-    act(() => result.current.resetToLevel());
+    act(() => result.current.resetLayout());
     expect(result.current.blocks).toEqual(presetFor('gardener'));
     expect(result.current.switching).toBe(true);
 

@@ -41,6 +41,12 @@ interface Props {
   /** Every block of the layout, in the page's order — hidden ones included. */
   blocks: DashboardBlock[];
   /**
+   * The layout is not its formula's preset (`isAdjusted` — order, sizes,
+   * visibility; never the options, V19): « Réinitialiser » has something to
+   * put back. On the preset it is inert, and says so.
+   */
+  adjusted: boolean;
+  /**
    * A switch of formula is in flight (SMA-448, PR #293, fix round 1, S5): the
    * link to the choice, the list and the reset take no gesture until the
    * page stands at one formula again — none can be made, then lost.
@@ -82,6 +88,7 @@ export default function CustomizePanel({
   level,
   capabilities,
   blocks,
+  adjusted,
   switching,
   onClose,
   onChangeFormula,
@@ -133,6 +140,20 @@ export default function CustomizePanel({
     if (size === block.size) return;
     onSizeChange(block.key, size);
     say(t('dashboard.panel.sizedSaid', { widget: nameOf(block.key), size: t(`dashboard.sizes.${size}`) }));
+  };
+
+  const levelName = t(`dashboard.levels.${level}.name`);
+
+  /**
+   * « Réinitialiser la disposition X » (P2 — contract A-17): the preset's
+   * layout back, each widget's settings kept, said in the region. Inert on the
+   * preset itself (`aria-disabled`, never `disabled`: the focus stays on the
+   * button it has just made inert — the band's « Rétablir » rule, § 4.5).
+   */
+  const reset = () => {
+    if (!adjusted) return;
+    onReset();
+    say(t('dashboard.panel.resetSaid', { level: levelName }));
   };
 
   const sectionTitleSx = {
@@ -344,7 +365,7 @@ export default function CustomizePanel({
           {/* The note F20 rewritten (contract § 1.2, § 7.3; A-16): the formula
               decides what is available, the panel what is on the page. */}
           <Typography sx={noteSx}>
-            {t('dashboard.panel.note', { level: t(`dashboard.levels.${level}.name`) })}
+            {t('dashboard.panel.note', { level: levelName })}
           </Typography>
         </Box>
 
@@ -389,19 +410,33 @@ export default function CustomizePanel({
               same rule as A10-11 on the page header and A2 on the widget
               titles: in these artboards a control that acts carries a mark.
               Under the list since V3-07 (`.obs`, `align-self: flex-start`), at
-              the panel's 14 px (V11). */}
+              the panel's 14 px (V11). Inert on the preset: the secondary tone
+              and the divider's border, never a text faded under V14. */}
           <Button
             variant="outlined"
             size="small"
             startIcon={<RestartAltOutlinedIcon />}
-            onClick={onReset}
+            aria-disabled={!adjusted || undefined}
+            onClick={reset}
             disabled={switching}
-            sx={{ alignSelf: 'flex-start', fontSize: `${DASHBOARD_TYPE.secondary}px` }}
+            sx={{
+              alignSelf: 'flex-start',
+              fontSize: `${DASHBOARD_TYPE.secondary}px`,
+              '&[aria-disabled="true"]': {
+                color: 'text.secondary',
+                borderColor: 'divider',
+                cursor: 'default',
+                backgroundColor: 'transparent',
+              },
+            }}
           >
-            {t('dashboard.panel.reset', {
-              level: t(`dashboard.levels.${level}.name`),
-            })}
+            {t('dashboard.panel.reset', { level: levelName })}
           </Button>
+          {/* What it does — or, on the preset, why it does nothing (V3-07 § 6,
+              (a) and (a) inerte). */}
+          <Typography sx={noteSx}>
+            {t(adjusted ? 'dashboard.panel.resetNote' : 'dashboard.panel.resetDone')}
+          </Typography>
         </Box>
       </Box>
     </Drawer>

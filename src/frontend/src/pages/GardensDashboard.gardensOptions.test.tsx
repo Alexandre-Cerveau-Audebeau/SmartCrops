@@ -335,15 +335,24 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     expect(within(list).getAllByRole('listitem')[1]!.textContent).toContain('Carré aromatique');
   });
 
-  it('« Reset » of the layout brings the count and the sort back and leaves the order where it is', async () => {
+  // SMA-437, lot V3-07, P2 (contract A-17 — Alexandre, 28/09): « Réinitialiser »
+  // puts back the LAYOUT alone — the order, the sizes, what is shown — and
+  // keeps each widget's settings: the count and the sort stay, as the order
+  // of the gardens stays (A-N5). The two say the same thing: a reset puts back
+  // a layout, never a setting. This test pinned the reset that erased them.
+  it('« Reset » of the layout keeps the count and the sort, and leaves the order where it is', async () => {
     const panel = await openGardensOptions('expert', { sort: 'custom', count: 5 });
     fireEvent.click(within(panel).getByRole('button', { name: 'Done' }));
+    // An arrangement for the reset to undo: Tips hidden.
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Tips' }));
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
-    fireEvent.click(await screen.findByRole('button', { name: /Reset to the Expert level/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset the Expert layout' }));
 
-    await waitFor(() => expect(gardensOptionsOf(lastSaved().blocks)).toBeUndefined());
+    // The reset's own write: Tips shown again — then what it carried.
+    await waitFor(() => expect(lastSaved().blocks.find((block) => block.key === 'tips')?.hidden).toBe(false));
+    expect(gardensOptionsOf(lastSaved().blocks)).toEqual({ sort: 'custom', count: 5 });
     expect(saveGardenOrder).not.toHaveBeenCalled();
   });
 });
