@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRowBudget } from './useRowBudget';
@@ -96,6 +96,9 @@ describe('useRowBudget — whole rows that fit the measured list (SMA-336 mobile
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the list is measured with the stubbed
+    // geometry and observer until it is gone — only then do they go back.
+    cleanup();
     restore();
     vi.unstubAllGlobals();
   });

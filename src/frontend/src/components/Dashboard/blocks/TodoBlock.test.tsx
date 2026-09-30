@@ -37,6 +37,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the tree is
+  // unmounted on the clock it ran on, and only then is the real one back.
+  cleanup();
   vi.useRealTimers();
 });
 
@@ -897,6 +901,9 @@ describe('TodoBlock — Medium: the list clips, and caps its rows by measure (mo
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the card measures with the stubbed
+    // geometry and observer until it is gone — only then do they go back.
+    cleanup();
     restore();
     vi.unstubAllGlobals();
   });

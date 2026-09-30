@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/i18n';
@@ -88,6 +88,10 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
+  // back below stays in place until the tree that reads it is gone.
+  cleanup();
   vi.clearAllMocks();
 });
 

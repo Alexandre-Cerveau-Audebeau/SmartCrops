@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -103,6 +103,10 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
+  // back below stays in place until the tree that reads it is gone.
+  cleanup();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -2000,6 +2004,9 @@ function mockMatchMedia(initial: boolean) {
 
 describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => {
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the planner reads the stubbed
+    // `matchMedia` until it is gone — only then is the stub dropped.
+    cleanup();
     delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
@@ -2144,6 +2151,9 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
 // sheet unmounting.
 describe('SMA-18 mobile touch (lot 2)', () => {
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the planner reads the stubbed
+    // `matchMedia` until it is gone — only then is the stub dropped.
+    cleanup();
     delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
@@ -2429,6 +2439,9 @@ describe('SMA-18 mobile touch (lot 2)', () => {
 // handlers, bounds and names cannot drift.
 describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the planner reads the stubbed
+    // `matchMedia` until it is gone — only then is the stub dropped.
+    cleanup();
     delete (window as { matchMedia?: unknown }).matchMedia;
   });
 

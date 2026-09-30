@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
@@ -12,6 +12,10 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the section
+  // cancels its frame and drops its observer on the stubs it ran with.
+  cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });

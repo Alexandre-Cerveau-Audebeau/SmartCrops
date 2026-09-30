@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -100,6 +100,9 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the bar reads the stubbed `matchMedia`
+    // until it is gone — only then is the stub dropped.
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -278,6 +281,9 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the bar reads the stubbed `matchMedia`
+    // until it is gone — only then is the stub dropped.
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -440,6 +446,9 @@ describe('Admin entry (SMA-414)', () => {
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the bar reads the stubbed `matchMedia`
+    // until it is gone — only then is the stub dropped.
+    cleanup();
     vi.unstubAllGlobals();
   });
 

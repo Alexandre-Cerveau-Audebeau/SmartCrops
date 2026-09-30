@@ -54,6 +54,8 @@ describe('global ResizeObserver stub (SMA-426) — during a local stub', () => {
   });
 
   afterEach(() => {
+    // Not unmount-first, on purpose (SMA-452 § 13): this describe renders
+    // nothing, and it reproduces the idiom the lock is about.
     vi.unstubAllGlobals();
   });
 
@@ -139,6 +141,9 @@ describe('global ResizeObserver stub (SMA-426) — the passive-effect race', () 
   });
 
   afterEach(() => {
+    // Not unmount-first, on purpose (SMA-452 § 13): the stub dropped BEFORE
+    // Testing Library unmounts the tree is the very race this describe locks
+    // — unmounted first, the test below would pass without the setup stub.
     vi.unstubAllGlobals();
     (
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown }

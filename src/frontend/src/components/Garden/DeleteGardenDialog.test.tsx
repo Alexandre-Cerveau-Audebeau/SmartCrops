@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 
@@ -35,7 +35,13 @@ beforeEach(async () => {
   await i18n.changeLanguage('en');
   vi.mocked(deleteGarden).mockReset();
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
+  // back below stays in place until the tree that reads it is gone.
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe('DeleteGardenDialog (SMA-18 lot 1) — copy', () => {
   it('names the planner draft consequences with plurals on both counts, and describes itself', () => {

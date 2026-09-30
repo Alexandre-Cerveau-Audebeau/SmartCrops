@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SAVE_DEBOUNCE_MS,
@@ -88,6 +88,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the hook is
+  // unmounted on the clock it ran on, and only then is the real one back.
+  cleanup();
   // The SINGLE owner of the timer mode (round 3, E″1). Timer mode is
   // file-global state, so a test that installs fake timers must not be the one
   // responsible for taking them down: an assertion that throws first would

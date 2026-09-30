@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SITE_NAVBAR_SELECTOR, useElementHeight, useSiteNavbarHeight } from './useSiteNavbarHeight';
@@ -60,6 +60,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): the heights are measured with the stubbed
+  // geometry until the tree is gone — only then does it go back.
+  cleanup();
   restoreRects();
 });
 

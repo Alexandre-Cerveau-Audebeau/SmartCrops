@@ -133,6 +133,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the tree is
+  // unmounted on the clock it ran on and with its unit system, and only then
+  // are they put back.
+  cleanup();
   localStorage.removeItem('smartcrops.unitSystem');
   vi.useRealTimers();
 });
@@ -819,6 +824,9 @@ describe('WeatherBlock — the days yield whole rows to the partial invitation, 
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the card measures with the stubbed
+    // geometry and observer until it is gone — only then do they go back.
+    cleanup();
     restore();
     vi.unstubAllGlobals();
   });

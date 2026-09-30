@@ -42,6 +42,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); the tree is
+  // unmounted on the clock it ran on, and only then is the real one back.
+  cleanup();
   vi.useRealTimers();
 });
 
@@ -825,6 +829,9 @@ describe('MonthBlock — Large on a phone: one letter a month, an 84px name colu
   // this suite (fix round 1, #1 — GitHub `4059024236`): a French assertion
   // that throws would otherwise leave it French for whatever runs next.
   afterEach(async () => {
+    // Unmount FIRST (SMA-452 § 13), then the language: a reset into a tree
+    // still mounted re-renders it after its test (the family of SMA-174).
+    cleanup();
     if (i18next.language !== 'en') await act(() => i18next.changeLanguage('en'));
   });
 

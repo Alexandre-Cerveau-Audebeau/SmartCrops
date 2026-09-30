@@ -1,4 +1,4 @@
-import { fireEvent, render, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -100,6 +100,10 @@ const stubPhone = () =>
   );
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
+  // back below stays in place until the tree that reads it is gone.
+  cleanup();
   vi.unstubAllGlobals();
   localStorage.removeItem('smartcrops.unitSystem');
 });

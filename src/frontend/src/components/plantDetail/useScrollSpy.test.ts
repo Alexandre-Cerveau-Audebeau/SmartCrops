@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useScrollSpy } from './useScrollSpy';
 
@@ -40,6 +40,10 @@ const entryFor = (id: string, isIntersecting: boolean) =>
   }) as unknown as IntersectionObserverEntry;
 
 afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): the hook disconnects its observer on the
+  // stub it created it with, and its container leaves the body the normal
+  // way — before the body itself is emptied.
+  cleanup();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });

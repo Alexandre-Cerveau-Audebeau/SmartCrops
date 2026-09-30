@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
@@ -30,7 +30,13 @@ function renderDialog(
 beforeEach(async () => {
   await i18n.changeLanguage('en');
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  // Unmount FIRST (SMA-452 § 13): this hook runs before Testing Library's
+  // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
+  // back below stays in place until the tree that reads it is gone.
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
   it('names the placement — plant, footprint and the single cell of a 1×1 — and describes itself', () => {

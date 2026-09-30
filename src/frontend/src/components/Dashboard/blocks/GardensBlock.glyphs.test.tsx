@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -115,6 +115,9 @@ describe('GardensBlock — the Medium chips’ glyphs, wherever they fit (SMA-43
   });
 
   afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the card measures with the stubbed
+    // geometry and observer until it is gone — only then do they go back.
+    cleanup();
     restore();
     vi.unstubAllGlobals();
   });
