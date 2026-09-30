@@ -12,7 +12,8 @@ import type { DashboardBlockKey } from '../../types/Dashboard';
 
 /**
  * SMA-336 — one icon per widget: the title row (amendment A2), the invitation
- * panels and the Customize gallery all read this table.
+ * panels and the Customize panel's list (SMA-437, lot V3-07) all read this
+ * table.
  *
  * ROUND 4 — the eight are no longer chosen, they are IDENTIFIED. Every `<svg
  * class="ic">` the frozen artboards put before a `<span class="hd-t">` was

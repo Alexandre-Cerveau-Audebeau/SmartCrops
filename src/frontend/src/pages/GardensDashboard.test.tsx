@@ -233,27 +233,6 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
     expect(screen.getByRole('button', { name: /Change the size of Weather/ })).toBeInTheDocument();
   });
 
-  it('shows, in the gallery, a hidden band’s FIRST figure — never « Soon » (pre-flight D16)', async () => {
-    const blocks = presetFor('expert').map((block) =>
-      block.key === 'keyfigures' ? { ...block, hidden: true } : block
-    );
-    servePreferences('expert', blocks);
-
-    renderPage();
-    // « Customize » is drawn, DISABLED, while the layout loads: a click then is
-    // lost — C28's trap, and `openPanel`'s (SMA-452 § 12).
-    const customize = await screen.findByRole('button', { name: 'Customize' });
-    await waitFor(() => expect(customize).toBeEnabled());
-    fireEvent.click(customize);
-
-    const panel = await screen.findByRole('dialog', { name: 'Customize' });
-    const add = within(panel).getByRole('button', { name: 'Add Key figures' });
-    const row = add.parentElement as HTMLElement;
-    // The first default figure — free cells — of Casa Lolo: twelve.
-    await waitFor(() => expect(row).toHaveTextContent('12'));
-    expect(within(row).queryByText('Soon')).toBeNull();
-  });
-
   it('leaves the level’s hidden widgets out of the grid', async () => {
     servePreferences('gardener');
 
@@ -973,7 +952,7 @@ describe('GardensDashboard — the widget header (round 4, A1 / A2)', () => {
     // Weather is the one widget the artboards do not title: since PR 3b/5
     // (arbitrage Q1) its card has no header at all — it opens on the place
     // line's pin, and its hero glyph is the condition's own (WeatherBlock's
-    // tests). `BLOCK_ICONS.weather` still serves the Customize gallery.
+    // tests). `BLOCK_ICONS.weather` still serves the Customize list.
     expect(document.querySelector('[data-widget="weather"] h2')).toBeNull();
   });
 });
@@ -1011,6 +990,34 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(within(panel).queryByText('the essentials, nothing more')).toBeNull();
     expect(within(panel).queryByText('everything, in large')).toBeNull();
     expect(within(panel).getByRole('button', { name: 'Change formula' })).toHaveAttribute('aria-haspopup', 'dialog');
+  });
+
+  // SMA-437, lot V3-07, P1 (contract A-16, Alexandre 28/09: « deux lignes par
+  // widget (A) ») — the panel LISTS the formula's widgets, every one of them,
+  // in the page's order: a hidden widget keeps its place, switched off. The
+  // gallery of hidden widgets it replaces showed only those, as thumbnails.
+  it('lists every widget of the formula in the page’s order — a hidden one at its place, switched off — as a reorderable list (A-16)', async () => {
+    const blocks = presetFor('gardener');
+    blocks.find((block) => block.key === 'tips')!.hidden = true;
+    servePreferences('gardener', blocks);
+
+    await openPanel();
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
+    const list = within(panel).getByRole('list', { name: 'Your widgets' });
+    const rows = within(list).getAllByRole('listitem');
+
+    expect(rows.map((row) => row.querySelector('[data-panel-widget]')?.getAttribute('data-panel-widget'))).toEqual([
+      'weather',
+      'gardens',
+      'tips',
+      'month',
+      'todo',
+      'counters',
+      'harvest',
+    ]);
+    expect(within(rows[2]!).getByRole('switch', { name: 'Show — Tips' })).not.toBeChecked();
+    expect(within(rows[0]!).getByRole('switch', { name: 'Show — Weather' })).toBeChecked();
+    expect(within(rows[6]!).getByRole('switch', { name: 'Show — Harvest' })).not.toBeChecked();
   });
 
   it('names the drawer for assistive technology', async () => {
@@ -1077,50 +1084,89 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     ).not.toBeNull();
   });
 
-  /**
-   * SMA-448, lot F1 — the Statistics thumbnail lives at the Expert formula,
-   * the one that has Statistics (R1): an Expert layout with Statistics and
-   * Harvest hidden, so the gallery offers both, as the Gardener's used to.
-   */
-  const serveExpertWithStatisticsAndHarvestHidden = () =>
-    servePreferences(
-      'expert',
-      presetFor('expert').map((block) =>
-        block.key === 'stats' || block.key === 'harvest' ? { ...block, hidden: true } : block
-      )
-    );
+  /** The panel's own live region — by its attribute: dnd-kit renders a silenced one of its own. */
+  const panelSaid = () =>
+    screen.getByRole('dialog', { name: 'Customize' }).querySelector('[data-customize-said]') as HTMLElement;
+  /** A row of the panel's list, by its widget. */
+  const panelRow = (key: string) =>
+    screen.getByRole('dialog', { name: 'Customize' }).querySelector(`[data-panel-widget="${key}"]`)!.closest('li') as HTMLElement;
 
-  it('the gallery lists the hidden widgets and « + » puts one back on the page — never Statistics at the Gardener formula (SMA-448, R1)', async () => {
+  // SMA-437, lot V3-07, P1 (A-16) — what the list changes, the PAGE shows:
+  // the list writes the layout the grid draws, the Edit mode's own state.
+  it('▲ in the list moves the widget on the page too — the focus stays on ▲, and the region says the new place', async () => {
     await openPanel();
-    // Round 1 (G9): MUI renders the open temporary Drawer as role="dialog";
-    // since round 1 it also carries an accessible name (E5).
-    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+    const up = within(panelRow('gardens')).getByRole('button', { name: 'Move “Gardens” up' });
+    up.focus();
 
-    expect(within(gallery).getByText('Harvest')).toBeInTheDocument();
-    expect(within(gallery).queryByText('Statistics')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add Statistics' })).toBeNull();
+    fireEvent.click(up);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Harvest' }));
-
-    await waitFor(() => expect(renderedKeys()).toContain('harvest'));
-    expect(renderedKeys()).not.toContain('stats');
+    await waitFor(() => expect(renderedKeys().slice(0, 2)).toEqual(['gardens', 'weather']));
+    expect(document.activeElement).toBe(within(panelRow('gardens')).getByRole('button', { name: 'Move “Gardens” up' }));
+    expect(panelSaid().textContent).toBe('“Gardens” moves to 1st place.');
   });
 
-  // SMA-448, lot F1, S5 — the gallery offers the widgets of the FORMULA, as the
-  // served capabilities list them: a hidden block they do not permit is never
-  // offered back, whatever the layout carries.
-  it('offers in the gallery only the widgets the served capabilities permit — never a hidden block they do not', async () => {
+  it('the switch shows a hidden widget on the page AT ITS PLACE, and hides it again — its row never moves', async () => {
+    const blocks = presetFor('gardener');
+    blocks.find((block) => block.key === 'tips')!.hidden = true;
+    servePreferences('gardener', blocks);
+    await openPanel();
+    expect(renderedKeys()).not.toContain('tips');
+
+    fireEvent.click(within(panelRow('tips')).getByRole('switch', { name: 'Show — Tips' }));
+
+    await waitFor(() => expect(renderedKeys()).toEqual(['weather', 'gardens', 'tips', 'month', 'todo', 'counters']));
+    expect(panelSaid().textContent).toBe('“Tips” shown.');
+
+    fireEvent.click(within(panelRow('tips')).getByRole('switch', { name: 'Show — Tips' }));
+
+    await waitFor(() => expect(renderedKeys()).not.toContain('tips'));
+    expect(panelSaid().textContent).toBe('“Tips” hidden.');
+    const list = within(screen.getByRole('dialog', { name: 'Customize' })).getByRole('list', { name: 'Your widgets' });
+    expect(within(list).getAllByRole('listitem').indexOf(panelRow('tips'))).toBe(2);
+  });
+
+  it('a size chosen in the list is the widget’s size on the page — the Weather from Medium to Large, two rows', async () => {
+    await openPanel();
+    expect(rulesFor(slotOf('weather'))).toContain('grid-row:span 1');
+
+    fireEvent.click(within(within(panelRow('weather')).getByRole('group', { name: 'Size of “Weather”' })).getByRole('button', { name: 'Large' }));
+
+    await waitFor(() => expect(rulesFor(slotOf('weather'))).toContain('grid-row:span 2'));
+    expect(panelSaid().textContent).toBe('“Weather” set to Large.');
+  });
+
+  it('what the Edit mode changes, the list shows: a widget hidden on the page is switched off in the list, at its place — one state (§ 4.9)', async () => {
+    renderPage();
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).toBeEnabled());
+    fireEvent.click(edit);
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide Tips' }));
+    await waitFor(() => expect(renderedKeys()).not.toContain('tips'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    await screen.findByRole('dialog', { name: 'Customize' });
+
+    expect(within(panelRow('tips')).getByRole('switch', { name: 'Show — Tips' })).not.toBeChecked();
+    const list = within(screen.getByRole('dialog', { name: 'Customize' })).getByRole('list', { name: 'Your widgets' });
+    expect(within(list).getAllByRole('listitem').indexOf(panelRow('tips'))).toBe(2);
+  });
+
+  // SMA-448, lot F1, S5 — the panel offers the widgets of the FORMULA, as the
+  // served capabilities list them: a block they do not permit is never
+  // offered, whatever the layout carries — and never moved, never dropped.
+  it('lists only the widgets the served capabilities permit — never a block they do not (R1)', async () => {
     servePreferences('gardener', [
       ...presetFor('gardener'),
       { key: 'stats', size: 'large', hidden: true },
     ]);
 
     await openPanel();
-    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
 
-    expect(within(gallery).getByText('Harvest')).toBeInTheDocument();
-    expect(within(gallery).queryByText('Statistics')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add Statistics' })).toBeNull();
+    expect(within(panel).getByText('Harvest')).toBeInTheDocument();
+    expect(within(panel).queryByText('Statistics')).toBeNull();
+    expect(panel.querySelector('[data-panel-widget="stats"]')).toBeNull();
+    expect(within(panel).queryByRole('switch', { name: 'Show — Statistics' })).toBeNull();
   });
 
   // SMA-448, PR #297, fix round 1 (A1) — the panel chooses no formula any
@@ -1158,9 +1204,10 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
 
   // SMA-448, PR #293, fix round 1 — S5: while a switch is on the wire the
   // panel takes no gesture, so none can be made and then lost — its link to
-  // the choice, its reset and its « + » are disabled until the page stands at
-  // the new formula; the screen's own buttons with them.
-  it('while a switch is in flight the panel takes no gesture: its link, its reset and its « + » are disabled until the new formula stands', async () => {
+  // the choice, its list and its reset are disabled until the page stands at
+  // the new formula; the screen's own buttons with them. The list took the
+  // gallery's « + » over (SMA-437, lot V3-07, A-16).
+  it('while a switch is in flight the panel takes no gesture: its link, its list and its reset are disabled until the new formula stands', async () => {
     let release!: () => void;
     vi.mocked(changeFormula).mockImplementation(
       () =>
@@ -1178,7 +1225,9 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     const panel = panelUnderTheScreen();
     expect(within(panel).getByRole('button', { name: 'Change formula', hidden: true })).toBeDisabled();
     expect(within(panel).getByRole('button', { name: 'Reset to the Gardener level', hidden: true })).toBeDisabled();
-    expect(within(panel).getByRole('button', { name: 'Add Harvest', hidden: true })).toBeDisabled();
+    expect(within(panel).getByRole('switch', { name: 'Show — Harvest', hidden: true })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Move “Harvest” up', hidden: true })).toBeDisabled();
+    for (const pill of within(panel).getAllByRole('button', { name: 'Large', hidden: true })) expect(pill).toBeDisabled();
 
     servePreferences('expert');
     release();
@@ -1252,10 +1301,16 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(renderedKeys()).toHaveLength(6);
   });
 
-  it('the panel has no live region of its own any more; the screen’s is born empty and stays mounted, so what it then says is announced', async () => {
+  // SMA-437, lot V3-07 — the panel has ONE region again, its list's (A-6,
+  // A-16): born empty, polite. The refusal of a formula is still said on the
+  // choice screen, in the screen's own region.
+  it('the panel’s one region is its list’s, born empty; the screen’s is born empty and stays mounted, so what it then says is announced', async () => {
     await openPanel();
     const panel = screen.getByRole('dialog', { name: 'Customize' });
-    expect(within(panel).queryByRole('status')).toBeNull();
+    const own = panel.querySelectorAll('[data-customize-said]');
+    expect(own).toHaveLength(1);
+    expect(own[0]).toHaveAttribute('aria-live', 'polite');
+    expect(own[0]!.childNodes).toHaveLength(0);
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Change formula' }));
     const choice = await screen.findByRole('dialog', { name: 'Choose your formula' });
@@ -1318,291 +1373,16 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(await screen.findByText('Expert view')).toBeInTheDocument();
   });
 
-  it('says so when nothing is hidden', async () => {
-    servePreferences('expert');
-
+  // Rule 4 of the design contract (R5): a missing datum is an invitation,
+  // never a page blanche and never a misleading zero. The gallery said
+  // « Soon » on Harvest's thumbnail; the list says it under the row's name,
+  // where a hidden widget says « Hidden » (SMA-437, lot V3-07, A-16).
+  it('a hidden Harvest says « Coming soon » in the list, never a zero', async () => {
     await openPanel();
 
-    expect(screen.getByText('No hidden widget.')).toBeInTheDocument();
-  });
-
-  it('draws a MINIATURE of what a hidden widget holds (round 4, A8)', async () => {
-    // `A7Personnaliser.dc.html` fills its `.gal-th` with the widget's own
-    // headline — « 42,5 m² » over two occupancy bars for Statistics — so the
-    // card shows what is being put back rather than the widget's name twice.
-    // The row carried a bare 20 px icon beside that name and nothing else.
-    //
-    // The fixture is one 4 × 3 garden at 50 cm: 12 active cells make 3 m², and
-    // the plan is empty, so the occupancy bar sits at 0.
-    serveExpertWithStatisticsAndHarvestHidden();
-    await openPanel();
-    const gallery = screen.getByRole('dialog', { name: 'Customize' });
-
-    expect(within(gallery).getByText('3.0 m²')).toBeInTheDocument();
-
-    // A FILLED disc, not a bare glyph: `.plus { width: 36px; height: 36px;
-    // border-radius: 50%; background: var(--prim) }`.
-    const add = within(gallery).getByRole('button', { name: 'Add Statistics' });
-    const rules = rulesFor(add).replace(/\s+/g, '');
-    expect(rules).toContain('width:36px');
-    expect(rules).toContain('height:36px');
-  });
-
-  it('writes the Statistics thumbnail in hectares beyond 10 000 m², as the widget does (SMA-437, arbitrage 5)', async () => {
-    // 101 × 100 cells of 1 m: 10 100 m² — beyond 10 000, so « 1.01 ha ».
-    vi.mocked(fetchDashboardData).mockResolvedValue(
-      dashboardWith([garden('g1', 'Domaine', { width: 101, height: 100, cellSize: '1m' })])
-    );
-    serveExpertWithStatisticsAndHarvestHidden();
-
-    await openPanel();
-    const gallery = screen.getByRole('dialog', { name: 'Customize' });
-
-    const value = await within(gallery).findByText('1.01 ha');
-    expect(value.textContent).toBe('1.01\u00a0ha');
-  });
-
-  it('counts the Counters thumbnail through the widget’s own filter (C4)', async () => {
-    // ROUND 5 (C4). The branch read `totals.varietyCount` unconditionally, so a
-    // user who had narrowed the widget to one garden and then hidden it was
-    // offered a thumbnail counting every garden: the card in the gallery said
-    // something the widget it stands for does not say.
-    const blocks = presetFor('gardener');
-    const counters = blocks.find((block) => block.key === 'counters')!;
-    counters.hidden = true;
-    counters.options = { garden: 'g2' };
-    servePreferences('gardener', blocks);
-
-    const variety = (
-      plantId: string,
-      commonName: string,
-      gardenIds: string[]
-    ): DashboardVarietyData => ({
-      plantId,
-      scientificName: 'Ocimum basilicum',
-      commonName,
-      plantType: 'Herb',
-      isEdible: true,
-      imageUrl: null,
-      imageAttribution: null,
-      wateringNeedLevel: null,
-      minToleratedTempC: null,
-      pruningMonths: null,
-      sowingPeriod: null,
-      harvestPeriod: null,
-      sunlightHoursMin: null,
-      sunlightHoursMax: null,
-      floweringSeason: null,
-      harvestSeason: null,
-      count: 1,
-      cells: 1,
-      gardenIds,
-    });
-
-    vi.mocked(fetchDashboardData).mockResolvedValue({
-      gardens: [garden('g1', 'Terrasse'), garden('g2', 'Balcon')],
-      varieties: [
-        variety('p-1', 'Basil', ['g1']),
-        variety('p-2', 'Thyme', ['g2']),
-        variety('p-3', 'Sage', ['g1']),
-      ],
-      totals: {
-        gardenCount: 2,
-        placementCount: 3,
-        varietyCount: 3,
-        catalogPlantCount: 536,
-      },
-    });
-
-    await openPanel();
-    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
-
-    expect(gallery.getByText('Counts by variety')).toBeInTheDocument();
-    // ONE variety in « Balcon », not the three the aggregate holds.
-    expect(gallery.getByText('1')).toBeInTheDocument();
-    expect(gallery.queryByText('3')).toBeNull();
-  });
-
-  it('counts the Tips thumbnail through the widget’s own derivation (C4, PR 4b/5)', async () => {
-    // Same rule again: the figure comes from `gardenAdvice`, the function the
-    // widget's chip reads, on the page's own `gardenViews`. A shade lover in
-    // full sun on an oriented garden is ONE tip; a sun lover beside it in full
-    // sun is none — the thumbnail prints 1, never « 2 plants ».
-    const blocks = presetFor('gardener');
-    blocks.find((block) => block.key === 'tips')!.hidden = true;
-    servePreferences('gardener', blocks);
-
-    const sunny = (plantId: string, commonName: string, min: number, max: number) =>
-      varietyFixture({ plantId, scientificName: plantId, commonName, sunlightHoursMin: min, sunlightHoursMax: max });
-    vi.mocked(fetchDashboardData).mockResolvedValue({
-      gardens: [
-        garden('g1', 'Terrasse', {
-          config: { orientation: 'S', gardenType: null, lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
-          placements: [
-            placement({ id: 'h', plantId: 'hydrangea', startRow: 0, startCol: 0 }),
-            placement({ id: 't', plantId: 'tomato', startRow: 0, startCol: 1 }),
-          ],
-          placementCount: 2,
-          varietyCount: 2,
-        }),
-      ],
-      varieties: [sunny('hydrangea', 'Hydrangea', 4, 6), sunny('tomato', 'Tomato', 8, 12)],
-      totals: { gardenCount: 1, placementCount: 2, varietyCount: 2, catalogPlantCount: 536 },
-    });
-
-    await openPanel();
-    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
-
-    expect(gallery.getByText('Tips')).toBeInTheDocument();
-    expect(gallery.getByText('1 tip')).toBeInTheDocument();
-    expect(gallery.queryByText('2 tips')).toBeNull();
-  });
-
-  it('counts the This-month thumbnail through the widget’s own derivation (C4, PR 4a/5)', async () => {
-    // The same rule as the Counters card above: the figure comes from
-    // `monthCalendar`, the function the widget itself counts with, so a hidden
-    // « Ce mois-ci » cannot be offered a number it would not print.
-    const blocks = presetFor('gardener');
-    blocks.find((block) => block.key === 'month')!.hidden = true;
-    servePreferences('gardener', blocks);
-
-    // Two varieties pruned THIS month — the frozen instant's, which the widget
-    // reads too (SMA-434) — and one pruned six months away: the figure must
-    // be 2, never 3.
-    freezeDate();
-    const MONTHS = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ];
-    const now = new Date(FROZEN_NOW).getMonth();
-    const pruned = (plantId: string, commonName: string, monthIndex: number): DashboardVarietyData => ({
-      plantId,
-      scientificName: plantId,
-      commonName,
-      plantType: 'Herb',
-      isEdible: true,
-      imageUrl: null,
-      imageAttribution: null,
-      wateringNeedLevel: null,
-      minToleratedTempC: null,
-      pruningMonths: MONTHS[monthIndex % 12]!,
-      sowingPeriod: null,
-      harvestPeriod: null,
-      sunlightHoursMin: null,
-      sunlightHoursMax: null,
-      floweringSeason: null,
-      harvestSeason: null,
-      count: 1,
-      cells: 1,
-      gardenIds: ['g1'],
-    });
-
-    vi.mocked(fetchDashboardData).mockResolvedValue({
-      gardens: [garden('g1', 'Terrasse')],
-      varieties: [
-        pruned('thyme', 'Thyme', now),
-        pruned('rosemary', 'Rosemary', now),
-        pruned('zinnia', 'Zinnia', now + 6),
-      ],
-      totals: { gardenCount: 1, placementCount: 3, varietyCount: 3, catalogPlantCount: 536 },
-    });
-
-    await openPanel();
-    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
-
-    expect(gallery.getByText('This month')).toBeInTheDocument();
-    // The two due THIS month — not the three varieties the aggregate holds,
-    // which is the figure a thumbnail deriving its own count would have shown.
-    expect(gallery.getByText('2 to prune')).toBeInTheDocument();
-    expect(gallery.queryByText('3 to prune')).toBeNull();
-  });
-
-  it('falls back to every garden when the filtered one is gone (C4)', async () => {
-    // The same fallback the widget and its options panel make, in the same
-    // order: a filter naming a deleted garden resolves to « all » rather than
-    // counting nothing (round 1, E8). Three readers of one contract now, still
-    // one owner.
-    const blocks = presetFor('gardener');
-    const counters = blocks.find((block) => block.key === 'counters')!;
-    counters.hidden = true;
-    counters.options = { garden: 'gone' };
-    servePreferences('gardener', blocks);
-
-    vi.mocked(fetchDashboardData).mockResolvedValue({
-      gardens: [garden('g1', 'Terrasse')],
-      varieties: [
-        {
-          plantId: 'p-1',
-          scientificName: 'Ocimum basilicum',
-          commonName: 'Basil',
-          plantType: 'Herb',
-          isEdible: true,
-          imageUrl: null,
-          imageAttribution: null,
-          wateringNeedLevel: null,
-          minToleratedTempC: null,
-          pruningMonths: null,
-          sowingPeriod: null,
-          harvestPeriod: null,
-          sunlightHoursMin: null,
-          sunlightHoursMax: null,
-          floweringSeason: null,
-          harvestSeason: null,
-          count: 1,
-          cells: 1,
-          gardenIds: ['g1'],
-        },
-      ],
-      totals: {
-        gardenCount: 1,
-        placementCount: 1,
-        varietyCount: 1,
-        catalogPlantCount: 536,
-      },
-    });
-
-    await openPanel();
-    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
-
-    expect(gallery.getByText('1')).toBeInTheDocument();
-  });
-
-  it('exposes the thumbnail’s figure to assistive technology, and hides only the ornament (round 6, #4-5 / #5-4)', async () => {
-    // « 3.0 m² » or « Soon » is the one fact of the row that decides whether
-    // adding the widget is worth doing now — it existed nowhere a screen reader
-    // could reach, because the whole thumbnail was `aria-hidden`. The glyph and
-    // the bars are decorative and stay hidden; the sentence is content.
-    serveExpertWithStatisticsAndHarvestHidden();
-    await openPanel();
-    const gallery = screen.getByRole('dialog', { name: 'Customize' });
-
-    const value = within(gallery).getByText('3.0 m²');
-    expect(value.closest('[aria-hidden="true"]')).toBeNull();
-    const soon = within(gallery).getByText('Soon');
-    expect(soon.closest('[aria-hidden="true"]')).toBeNull();
-
-    const thumbnail = value.parentElement!;
-    const glyph = thumbnail.querySelector('svg')!.parentElement!;
-    expect(glyph).toHaveAttribute('aria-hidden', 'true');
-    // Statistics draws two occupancy bars on a two-garden aggregate; here the
-    // fixture holds one garden, so one bar.
-    const bars = [...thumbnail.children].filter(
-      (child) => child !== glyph && child !== value
-    );
-    expect(bars.length).toBeGreaterThan(0);
-    for (const bar of bars) expect(bar).toHaveAttribute('aria-hidden', 'true');
-  });
-
-  it('says « soon » where a widget has no figure yet, never a zero', async () => {
-    // Rule 4 of the design contract: a missing datum is an invitation, never a
-    // page blanche and never a misleading zero. Five of the eight widgets are
-    // fed by no endpoint before PR 3/5 and PR 4/5, and Harvest is one of them.
-    await openPanel();
-    const gallery = screen.getByRole('dialog', { name: 'Customize' });
-
-    expect(within(gallery).getByText('Harvest')).toBeInTheDocument();
-    expect(within(gallery).getByText('Soon')).toBeInTheDocument();
-    expect(within(gallery).queryByText('0 m²')).toBeNull();
+    expect(panelRow('harvest')).toHaveTextContent('Coming soon');
+    expect(within(panelRow('harvest')).getByRole('switch', { name: 'Show — Harvest' })).not.toBeChecked();
+    expect(panelRow('harvest')).not.toHaveTextContent(/\b0\b/);
   });
 
   it('mentions no price, no quota and no plan anywhere on the page', async () => {

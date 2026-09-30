@@ -17,7 +17,8 @@ import {
 /**
  * How long the hook waits after the LAST change before writing (SMA-336).
  * A resize or a reorder comes in bursts — a drag ends with one drop but the
- * gallery and the size handle are clicked repeatedly — and every burst must
+ * Customize list's switches, sizes and ▲ ▼ and the size handle are clicked
+ * repeatedly — and every burst must
  * cost one PUT, not one per click. Short enough that the discreet « saved »
  * indicator still reads as a consequence of the gesture.
  */

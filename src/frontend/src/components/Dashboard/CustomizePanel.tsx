@@ -1,22 +1,29 @@
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { arrayMove } from '@dnd-kit/sortable';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import ButtonBase from '@mui/material/ButtonBase';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
+import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
+import ReorderableList from './ReorderableList';
 import { BLOCK_ICONS } from './blockIcons';
-import { permitsBlock } from '../../constants/dashboardCapabilities';
+import { permitsBlock, sizesFor } from '../../constants/dashboardCapabilities';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
-import type {
-  DashboardBlock,
-  DashboardBlockKey,
-  DashboardLevel,
-  FormulaCapabilities,
-  GalleryPreview,
+import { useDashboardTokens } from '../../theme/useDashboardTokens';
+import {
+  NON_HIDABLE_BLOCK,
+  type DashboardBlock,
+  type DashboardBlockKey,
+  type DashboardLevel,
+  type DashboardSize,
+  type FormulaCapabilities,
 } from '../../types/Dashboard';
 
 /** Stable id: the drawer names itself by its heading. */
@@ -27,19 +34,18 @@ interface Props {
   level: DashboardLevel;
   /**
    * What the formula permits, as served (SMA-448, S5); null until the layout
-   * is read. The gallery offers only the widgets it lists.
+   * is read. The list offers only the widgets it lists, in only the sizes it
+   * serves each of them.
    */
   capabilities: FormulaCapabilities | null;
-  /** Every block - the gallery reads the hidden ones. */
+  /** Every block of the layout, in the page's order — hidden ones included. */
   blocks: DashboardBlock[];
   /**
    * A switch of formula is in flight (SMA-448, PR #293, fix round 1, S5): the
-   * link to the choice, the reset and the « + » take no gesture until the
+   * link to the choice, the list and the reset take no gesture until the
    * page stands at one formula again — none can be made, then lost.
    */
   switching: boolean;
-  /** A hidden widget's headline figure, or null when it has none yet. */
-  preview?: (key: DashboardBlockKey) => GalleryPreview | null;
   onClose: () => void;
   /**
    * « Changer de formule » (SMA-448, PR #297, fix round 1, A1): opens the
@@ -49,18 +55,27 @@ interface Props {
    */
   onChangeFormula: (event: React.MouseEvent<HTMLElement>) => void;
   onReset: () => void;
-  onShow: (key: DashboardBlockKey) => void;
+  /** The blocks in their new order — the write the Edit mode's drop makes. */
+  onReorder: (blocks: DashboardBlock[]) => void;
+  /** A widget shown or hidden — the Edit mode's « − », both ways. */
+  onVisibilityChange: (key: DashboardBlockKey, hidden: boolean) => void;
+  /** A widget's size, chosen — where the Edit mode's corner handle steps. */
+  onSizeChange: (key: DashboardBlockKey, size: DashboardSize) => void;
 }
 
 /**
- * SMA-336 - the Customize panel (_spec.md 8): the formula the page is on,
- * named, with the way to the choice screen (SMA-448, PR #297, fix round 1,
- * A1 — the three level cards the panel had, which switched the account's
- * formula since lot F1, are gone: the formula changes in ONE place), the
- * note that says what a level does and does not decide, the reset, and the
- * gallery of hidden widgets. Nothing else - no plan, no quota, no upsell:
- * the frozen design carries no mention of a price or a limit anywhere, and
- * neither does this panel.
+ * SMA-336 — the Customize panel. SMA-437, lot V3-07 (contract A-16, decided
+ * by Alexandre on 28/09: « deux lignes par widget (A) »): the formula the page
+ * is on, named, with the way to the choice screen (SMA-448, PR #297, fix
+ * round 1, A1 — the formula changes in ONE place), then EVERY widget of the
+ * formula in one reorderable list, in the page's order: the handle and ▲ ▼
+ * of `ReorderableList`, the widget's glyph and name, the switch that shows or
+ * hides it — the lock on Gardens, which is never hidden (V9) — and, on a
+ * second line, the sizes the formula serves it. A hidden widget keeps its
+ * place in the list, as it keeps its place in the grid: the list IS the
+ * gallery, which is gone. What the list changes is the page's own state —
+ * the one the Edit mode writes (§ 4.9: « les deux surfaces écrivent le même
+ * état »). Nothing else — no plan, no quota, no upsell.
  */
 export default function CustomizePanel({
   open,
@@ -68,19 +83,57 @@ export default function CustomizePanel({
   capabilities,
   blocks,
   switching,
-  preview,
   onClose,
   onChangeFormula,
   onReset,
-  onShow,
+  onReorder,
+  onVisibilityChange,
+  onSizeChange,
 }: Props) {
   const { t } = useTranslation();
-  // The gallery offers what the FORMULA has (SMA-448, S5 — R1): a hidden block
-  // the served capabilities do not list is never offered back, whatever the
-  // layout carries; nothing is offered before they are read.
-  const hidden = blocks.filter(
-    (block) => block.hidden && capabilities !== null && permitsBlock(capabilities, block.key)
-  );
+  const tk = useDashboardTokens();
+  // The widgets of the FORMULA (SMA-448, S5 — R1), in the page's order, the
+  // hidden ones at their place: a block the served capabilities do not list
+  // is never offered, whatever the layout carries; none before they are read.
+  const listed = blocks.filter((block) => capabilities !== null && permitsBlock(capabilities, block.key));
+
+  // The one live region of the panel — the rule of #278 and S2 of PR #288: a
+  // region is announced when text CHANGES inside it, not when it is inserted
+  // already filled. So it is mounted with the panel, born empty, and its text
+  // is written into it by its ref — never rendered by React, never set in an
+  // effect. What the list says of a move comes here too (`onAnnounce`).
+  const regionRef = useRef<HTMLDivElement | null>(null);
+  const say = useCallback((text: string) => {
+    if (regionRef.current) regionRef.current.textContent = text;
+  }, []);
+
+  // A row picked up at the keyboard: Escape then CANCELS the drag and must
+  // not close the drawer under it (the options panel's rule, pre-flight C.9).
+  // The drawer's handler runs before the sensor's, on the render the drag
+  // started in, so the drawer reads the drag as still under way.
+  const [dragging, setDragging] = useState(false);
+
+  const nameOf = (key: DashboardBlockKey) => t(`dashboard.blocks.${key}.title`);
+  const placeOf = (index: number) => t('dashboard.panel.place', { count: index + 1, ordinal: true });
+
+  /** A move in the list: the formula's widgets permuted, any other block left at its index — the grid's rule for the hidden ones. */
+  const move = (from: number, to: number) => {
+    const moved = arrayMove(listed, from, to);
+    const inList = new Set(listed);
+    let next = 0;
+    onReorder(blocks.map((block) => (inList.has(block) ? moved[next++]! : block)));
+  };
+
+  const setShown = (block: DashboardBlock, shown: boolean) => {
+    onVisibilityChange(block.key, !shown);
+    say(t(shown ? 'dashboard.panel.shownSaid' : 'dashboard.panel.hiddenSaid', { widget: nameOf(block.key) }));
+  };
+
+  const setSize = (block: DashboardBlock, size: DashboardSize) => {
+    if (size === block.size) return;
+    onSizeChange(block.key, size);
+    say(t('dashboard.panel.sizedSaid', { widget: nameOf(block.key), size: t(`dashboard.sizes.${size}`) }));
+  };
 
   const sectionTitleSx = {
     fontSize: `${DASHBOARD_TYPE.title}px`,
@@ -88,6 +141,112 @@ export default function CustomizePanel({
     letterSpacing: DASHBOARD_TYPE.titleLetterSpacing,
     textTransform: 'uppercase' as const,
     color: 'text.secondary',
+  };
+  const noteSx = { fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.45, color: 'text.secondary' } as const;
+
+  /** The first line of a row: the glyph, the name and what it says of the widget, the switch — or the lock. */
+  const renderRow = (block: DashboardBlock) => {
+    const Icon = BLOCK_ICONS[block.key];
+    const name = nameOf(block.key);
+    const locked = block.key === NON_HIDABLE_BLOCK;
+    // Under the name (`.wl-n small`): « toujours affiché » on Gardens, what a
+    // hidden widget is — « Bientôt disponible » for Harvest, which has no data
+    // yet (R5) —, nothing on a widget shown.
+    const sub = locked
+      ? t('dashboard.panel.always')
+      : block.hidden
+        ? t(block.key === 'harvest' ? 'dashboard.soon' : 'dashboard.panel.hiddenRow')
+        : null;
+    return (
+      <>
+        <Icon aria-hidden sx={{ fontSize: 20, flexShrink: 0, color: block.hidden ? 'text.secondary' : 'primary.main' }} />
+        <Box data-panel-widget={block.key} sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            component="span"
+            sx={{
+              display: 'block',
+              fontSize: DASHBOARD_TYPE.secondary,
+              fontWeight: 600,
+              lineHeight: 1.3,
+              color: block.hidden ? 'text.secondary' : 'text.primary',
+            }}
+          >
+            {name}
+          </Typography>
+          {sub && (
+            <Typography component="span" sx={{ ...noteSx, display: 'block', lineHeight: 1.3, mt: '1px' }}>
+              {sub}
+            </Typography>
+          )}
+        </Box>
+        {locked ? (
+          // As the Edit mode's lock (`SortableWidget`): a graphic WITH a text
+          // alternative — assistive technology may ignore a bare `aria-label`.
+          // As wide as the switch, so ▲ ▼ stay in one column down the list.
+          <Box
+            role="img"
+            aria-label={t('dashboard.editMode.locked', { widget: name })}
+            sx={{ width: 58, flexShrink: 0, display: 'inline-flex', justifyContent: 'center', color: 'text.secondary' }}
+          >
+            <LockOutlinedIcon aria-hidden sx={{ fontSize: 18 }} />
+          </Box>
+        ) : (
+          <Switch
+            checked={!block.hidden}
+            disabled={switching}
+            onChange={(event) => setShown(block, event.target.checked)}
+            slotProps={{ input: { role: 'switch', 'aria-label': t('dashboard.panel.show', { widget: name }) } }}
+            sx={{ flexShrink: 0 }}
+          />
+        )}
+      </>
+    );
+  };
+
+  /** The second line: the sizes the formula serves this widget, or its one size, said. */
+  const renderSizes = (block: DashboardBlock) => {
+    const sizes = capabilities === null ? null : sizesFor(block.key, capabilities);
+    const name = nameOf(block.key);
+    if (sizes === null || sizes.length === 1) {
+      return (
+        <Typography sx={noteSx}>
+          {t('dashboard.panel.onlySize', { size: t(`dashboard.sizes.${sizes?.[0] ?? block.size}`) })}
+        </Typography>
+      );
+    }
+    return (
+      <Box role="group" aria-label={t('dashboard.panel.sizeGroup', { widget: name })} sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+        {sizes.map((size) => {
+          const pressed = size === block.size;
+          return (
+            // A pill of 28 px (`.sgb`): the chips' 13 px (V11's chip
+            // exception), the chosen one filled in green.
+            <ButtonBase
+              key={size}
+              data-pill
+              aria-pressed={pressed}
+              disabled={switching}
+              onClick={() => setSize(block, size)}
+              sx={{
+                height: 28,
+                px: '8px',
+                borderRadius: '14px',
+                border: '1px solid',
+                borderColor: pressed ? 'primary.main' : tk.chipBorder,
+                backgroundColor: pressed ? 'primary.main' : 'transparent',
+                color: pressed ? 'primary.contrastText' : 'text.primary',
+                fontSize: DASHBOARD_TYPE.chip,
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '2px' },
+              }}
+            >
+              {t(`dashboard.sizes.${size}`)}
+            </ButtonBase>
+          );
+        })}
+      </Box>
+    );
   };
 
   return (
@@ -97,6 +256,7 @@ export default function CustomizePanel({
       anchor="right"
       open={open}
       onClose={onClose}
+      disableEscapeKeyDown={dragging}
       slotProps={{
         paper: {
           'aria-labelledby': TITLE_ID,
@@ -128,8 +288,10 @@ export default function CustomizePanel({
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* « Formule », the word of the screen (V31) — V3-07 [P, validée
+              avec la planche] where the section said « Niveau ». */}
           <Typography sx={sectionTitleSx}>
-            {t('dashboard.panel.levelSection')}
+            {t('dashboard.panel.formulaSection')}
           </Typography>
           {/* SMA-448, PR #297, fix round 1 (A1) — Alexandre, 27/09: « Pourquoi
               on peut quand même switch de formule depuis le menu
@@ -179,202 +341,67 @@ export default function CustomizePanel({
               {t('dashboard.formulaChooser.title')}
             </Button>
           </Box>
-          <Typography
-            sx={{
-              fontSize: `${DASHBOARD_TYPE.secondary}px`,
-              color: 'text.secondary',
-            }}
-          >
-            {t('dashboard.panel.note')}
+          {/* The note F20 rewritten (contract § 1.2, § 7.3; A-16): the formula
+              decides what is available, the panel what is on the page. */}
+          <Typography sx={noteSx}>
+            {t('dashboard.panel.note', { level: t(`dashboard.levels.${level}.name`) })}
           </Typography>
+        </Box>
+
+        <Divider />
+
+        <Box data-panel-widgets sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Typography sx={sectionTitleSx}>
+            {t('dashboard.panel.widgetsSection')}
+          </Typography>
+          <Typography sx={noteSx}>{t('dashboard.panel.help')}</Typography>
+          <ReorderableList
+            items={listed}
+            getId={(block) => block.key}
+            getName={(block) => nameOf(block.key)}
+            placeOf={placeOf}
+            label={t('dashboard.panel.widgetsSection')}
+            onMove={move}
+            onAnnounce={say}
+            onDraggingChange={setDragging}
+            disabled={switching}
+            renderRow={renderRow}
+            renderBelow={renderSizes}
+          />
+          {/* No children: React never renders its text, so a re-render never
+              rewrites what `say` wrote. The note's tint once it says
+              something (`.live:not(:empty)`), nothing while it is empty. */}
+          <Box
+            ref={regionRef}
+            role="status"
+            aria-live="polite"
+            data-customize-said
+            sx={{
+              ...noteSx,
+              color: 'text.primary',
+              '&:not(:empty)': { mt: '-6px', backgroundColor: 'surfaceSubtle', borderRadius: '8px', p: '8px 10px' },
+            }}
+          />
           {/* A GLYPH before the label (round 5, A10-12). `A7Personnaliser.dc.html`
               draws this control as `<div class="lnk">` opening on an 18 px
               `<svg class="ic">` whose path is `RestartAltOutlined`, matched
               attribute for attribute against `@mui/icons-material`. It is the
               same rule as A10-11 on the page header and A2 on the widget
-              titles: in these artboards a control that acts carries a mark. */}
+              titles: in these artboards a control that acts carries a mark.
+              Under the list since V3-07 (`.obs`, `align-self: flex-start`), at
+              the panel's 14 px (V11). */}
           <Button
             variant="outlined"
             size="small"
             startIcon={<RestartAltOutlinedIcon />}
             onClick={onReset}
             disabled={switching}
+            sx={{ alignSelf: 'flex-start', fontSize: `${DASHBOARD_TYPE.secondary}px` }}
           >
             {t('dashboard.panel.reset', {
               level: t(`dashboard.levels.${level}.name`),
             })}
           </Button>
-        </Box>
-
-        <Divider />
-
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <Typography sx={sectionTitleSx}>
-            {t('dashboard.panel.gallerySection')}
-          </Typography>
-          <Typography
-            sx={{
-              fontSize: `${DASHBOARD_TYPE.secondary}px`,
-              color: 'text.secondary',
-            }}
-          >
-            {t('dashboard.panel.galleryHint')}
-          </Typography>
-          {hidden.length === 0 ? (
-            <Typography
-              sx={{
-                fontSize: `${DASHBOARD_TYPE.secondary}px`,
-                color: 'text.secondary',
-              }}
-            >
-              {t('dashboard.panel.galleryEmpty')}
-            </Typography>
-          ) : (
-            hidden.map((block) => {
-              const Icon = BLOCK_ICONS[block.key];
-              const name = t(`dashboard.blocks.${block.key}.title`);
-              const shown = preview?.(block.key) ?? null;
-              return (
-                <Box
-                  key={block.key}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    // `.gal { gap: 14px; border-radius: 12px; padding: 12px 14px }`
-                    gap: '14px',
-                    p: '12px 14px',
-                    borderRadius: '12px',
-                    border: '1px solid',
-                    borderColor: 'borderSubtle',
-                  }}
-                >
-                  {/* THE THUMBNAIL (round 4, A8) — `.gal-th`, verbatim:
-                      `width: 116px; height: 70px; border-radius: 8px; border:
-                      1px solid var(--card-bd); background: var(--surface);
-                      padding: 9px 10px; display: flex; flex-direction: column;
-                      gap: 5px; overflow: hidden`.
-
-                      The row carried a bare 20 px icon beside the widget's
-                      name, so eight hidden widgets read as eight lines of text
-                      and the gallery showed nothing of what it was offering. */}
-                  {/* NOT `aria-hidden` as a whole (round 6, Extension #4-5 /
-                      #5-4): the headline — « 3.0 m² » or « Soon » — is the one
-                      fact of the row that decides whether adding the widget is
-                      worth doing now, and it exists nowhere else in the row. A
-                      screen-reader user read the widget name and « Hidden » and
-                      nothing more. The FRAME stays: only the glyph and the bars
-                      are decorative, and they are marked so below. */}
-                  <Box
-                    sx={{
-                      width: 116,
-                      height: 70,
-                      flexShrink: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '5px',
-                      p: '9px 10px',
-                      borderRadius: '8px',
-                      border: '1px solid',
-                      borderColor: 'borderSubtle',
-                      backgroundColor: 'surfaceSubtle',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <Box aria-hidden sx={{ display: 'flex', color: 'primary.main' }}>
-                      <Icon sx={{ fontSize: 13 }} />
-                    </Box>
-                    {/* `.gal-th .v { font-size: 15px; font-weight: 800 }` — the
-                        widget's own headline when it has one. Five of the eight
-                        widgets have no data at all until PR 3/5 and PR 4/5, and
-                        an empty box would be the « page blanche » rule 4
-                        forbids: they say « soon » in the same place, which is
-                        the word the Gardens table already uses for its WEATHER
-                        and HARVEST cells. */}
-                    <Typography
-                      sx={{
-                        fontSize: `${DASHBOARD_TYPE.body}px`,
-                        fontWeight: 800,
-                        lineHeight: 1.1,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        ...(shown ? null : { color: 'text.secondary' }),
-                      }}
-                    >
-                      {shown ? shown.value : t('dashboard.panel.gallerySoon')}
-                    </Typography>
-                    {/* `.gal-th .b { height: 5px; border-radius: 3px }` over
-                        `--track`, filled with `--prim`. */}
-                    {(shown?.bars ?? []).map((percent, index) => (
-                      <Box
-                        key={index}
-                        aria-hidden
-                        sx={{
-                          height: 5,
-                          borderRadius: '3px',
-                          backgroundColor: 'action.hover',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: `${Math.max(0, Math.min(100, percent))}%`,
-                            height: '100%',
-                            borderRadius: '3px',
-                            backgroundColor: 'primary.main',
-                          }}
-                        />
-                      </Box>
-                    ))}
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      sx={{
-                        fontSize: `${DASHBOARD_TYPE.body}px`,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {name}
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: `${DASHBOARD_TYPE.secondary}px`,
-                        color: 'text.secondary',
-                      }}
-                    >
-                      {t('dashboard.panel.hidden')}
-                    </Typography>
-                  </Box>
-                  {/* `.plus { margin-left: auto; width: 36px; height: 36px;
-                      border-radius: 50%; background: var(--prim); color:
-                      var(--on-prim) }` — a filled green disc, not the bare
-                      glyph the panel had. */}
-                  <IconButton
-                    onClick={() => onShow(block.key)}
-                    disabled={switching}
-                    aria-label={t('dashboard.panel.add', { widget: name })}
-                    sx={{
-                      ml: 'auto',
-                      flexShrink: 0,
-                      width: 36,
-                      height: 36,
-                      backgroundColor: 'primary.main',
-                      color: 'primary.contrastText',
-                      '&:hover': { backgroundColor: 'primary.dark' },
-                      // The disc says it takes no gesture, as MUI's disabled
-                      // buttons do — not a live green over a dead click.
-                      '&.Mui-disabled': {
-                        backgroundColor: 'action.disabledBackground',
-                        color: 'action.disabled',
-                      },
-                    }}
-                  >
-                    <AddRoundedIcon sx={{ fontSize: 20 }} />
-                  </IconButton>
-                </Box>
-              );
-            })
-          )}
         </Box>
       </Box>
     </Drawer>
