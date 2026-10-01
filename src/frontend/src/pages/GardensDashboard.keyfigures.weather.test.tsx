@@ -152,11 +152,18 @@ const widget = (key: string) => {
   return node as HTMLElement;
 };
 
+/**
+ * The To-do widget's city invitation, in the form its size draws: the row (a),
+ * or — in Large, beside its tasks — the card (b) at the foot of its zone
+ * (SMA-437, lot V3-06, contract A-22).
+ */
+const TODO_INVITE = '[data-todo-invite], [data-invite-card]';
+
 /** What the To-do widget shows: its count (its chip; none drawn is none), its weather note, its city invitation. */
 const todoWidget = () => ({
   count: numberIn(widget('todo').querySelector('[data-todo-chip]')?.textContent ?? null),
   note: widget('todo').querySelector('[data-todo-weather-note]') !== null,
-  invite: widget('todo').querySelector('[data-todo-invite]') !== null,
+  invite: widget('todo').querySelector(TODO_INVITE) !== null,
 });
 
 /** What the Tips widget shows: its count chip and its weather note. */
@@ -243,7 +250,7 @@ async function pageIn(
     await waitFor(() => expect(weatherColumn().located).toBe(3));
   }
   if (state === 'no city') {
-    await waitFor(() => expect(widget('todo').querySelector('[data-todo-invite]')).not.toBeNull());
+    await waitFor(() => expect(widget('todo').querySelector(TODO_INVITE)).not.toBeNull());
   }
   if (state === 'error, nothing kept') {
     await waitFor(() => expect(widget('todo').querySelector('[data-todo-weather-note]')).not.toBeNull());

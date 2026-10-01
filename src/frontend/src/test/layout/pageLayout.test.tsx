@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
 import type { ChoiceMeasure, DialogMeasure, EdgeCardMeasure, GardensMeasure, NoviceMeasure, PageGridMeasure, PageMeasure, PanelFocus, PanelMeasure, PanelText, PlannerLimitMeasure, PlantingMeasure, TitleMeasure, WeatherMeasure } from './pageHarness';
-import { CHOICE_SCENES, GARDENS_LIST_KINDS, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, gardensSceneData, weatherCitySceneData, type GardensListKind, type WeatherCityScene } from './scenes';
+import { CHOICE_SCENES, GARDENS_LIST_KINDS, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, edgesSceneData, gardensSceneData, weatherCitySceneData, type GardensListKind, type WeatherCityScene } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
 import { capabilitiesFor, presetFor } from '../fixtures/formulas';
@@ -42,10 +42,10 @@ import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
  * itself.
  *
  * SMA-437, lot V3-06: THE EDGES OF THE PAGE — the title « Mes Jardins », and
- * Tips in Large with its invitation stuck at the foot of its zone or in the
- * middle of the card, at the five widths, by day and by night, in French and
- * in English — in the Weather group's hook too, once the drawer's Chromes
- * have closed.
+ * Tips and To-do in Large with their invitation stuck at the foot of their
+ * zone, or Tips' in the middle of the card, at the five widths, by day and by
+ * night, in French and in English — in the Weather group's hook too, once
+ * the drawer's Chromes have closed.
  *
  * Chrome as the scenes' suite finds it: without it the suite is SKIPPED on a
  * workstation and FAILS on CI.
@@ -1697,20 +1697,21 @@ const EDGE_RUNS: EdgeRun[] = (['light', 'dark'] as const).flatMap((theme) =>
   (['fr', 'en'] as const).map((lang) => ({ id: `${theme}/${lang}`, theme, lang }))
 );
 
+/** WCAG 2.4.11: the zone's controls focused in turn — how many, and the ones the foot still hid wholly. */
+interface FocusUnderFoot {
+  focused: number;
+  hidden: string[];
+}
+
 /**
  * What one run of the edges measured: the page's title (E1); Tips in Large
  * (E3) — the `full` scene at rest and with its zone scrolled to its end, the
- * `empty` scene.
+ * `empty` scene —; To-do in Large (E4) — the `full` scene, the same two ways.
  */
 interface EdgeMeasure {
   title: TitleMeasure;
-  tips: {
-    rest: EdgeCardMeasure;
-    end: EdgeCardMeasure;
-    empty: EdgeCardMeasure;
-    /** WCAG 2.4.11: the zone's controls focused in turn — how many, and the ones the foot still hid wholly. */
-    focus: { focused: number; hidden: string[] };
-  };
+  tips: { rest: EdgeCardMeasure; end: EdgeCardMeasure; empty: EdgeCardMeasure; focus: FocusUnderFoot };
+  todo: { rest: EdgeCardMeasure; end: EdgeCardMeasure; focus: FocusUnderFoot };
 }
 
 /** The edges of the page, by viewport then by run. */
@@ -1721,12 +1722,21 @@ let edgeProbe: EdgeCardMeasure | null = null;
 
 /**
  * Every run of one viewport, in one Chrome: the Expert's page, its title
- * read; then the edges scenes with Tips in Large — `full` at rest and its
- * zone scrolled to its end, `empty` —; at 1 280 px, the probe of the foot.
+ * read; then the edges scenes with Tips and To-do in Large — `full`, each
+ * card at rest, its zone scrolled to its end, its controls focused in turn;
+ * `empty`, Tips —; at 1 280 px, the probe of the foot.
  */
 async function runEdgesView(view: PageView): Promise<Map<string, EdgeMeasure>> {
   const session = await openPage(CHROME!, weatherOutDir, { label: `edges-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
   const edges = (key: 'tips' | 'todo') => session.evaluate<EdgeCardMeasure>(`window.__page.measureEdges(${JSON.stringify(key)})`);
+  /** A card of the `full` scene: at rest, its zone scrolled to its end, its controls focused in turn. */
+  const full = async (key: 'tips' | 'todo') => {
+    const rest = await edges(key);
+    await call(session, `scrollZoneToEnd(${JSON.stringify(key)})`);
+    const end = await edges(key);
+    const focus = await session.evaluate<FocusUnderFoot>(`window.__page.focusUnderFoot(${JSON.stringify(key)})`);
+    return { rest, end, focus };
+  };
   try {
     const byRun = new Map<string, EdgeMeasure>();
     for (const run of EDGE_RUNS) {
@@ -1734,13 +1744,11 @@ async function runEdgesView(view: PageView): Promise<Map<string, EdgeMeasure>> {
       await session.navigate(page);
       const title = await session.evaluate<TitleMeasure>('window.__page.measureTitle()');
       await session.navigate(`${page}&edges=full`);
-      const rest = await edges('tips');
-      await call(session, 'scrollZoneToEnd("tips")');
-      const end = await edges('tips');
-      const focus = await session.evaluate<{ focused: number; hidden: string[] }>('window.__page.focusUnderFoot("tips")');
+      const tips = await full('tips');
+      const todo = await full('todo');
       await session.navigate(`${page}&edges=empty`);
       const empty = await edges('tips');
-      byRun.set(run.id, { title, tips: { rest, end, empty, focus } });
+      byRun.set(run.id, { title, tips: { ...tips, empty }, todo });
     }
     if (view.width === 1280) {
       await session.navigate('level=expert&theme=light&lang=fr&edges=full');
@@ -2255,11 +2263,12 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
 
   // SMA-437, lot V3-06 (A-21 to A-25; V3-06 § 6) — THE EDGES OF THE PAGE, as
   // the app mounts them, at the five widths, by day and by night, in French
-  // and in English: the title « Mes Jardins » (A-24); Tips in Large, its
-  // invitation stuck at the foot of its zone — at rest, and with the zone
-  // scrolled to its end — or in the middle of the card, and the contrast of
-  // its every text (A-21, A-23). Measured in this group's own hook, once the
-  // drawer's Chromes have closed — no bound of its own.
+  // and in English: the title « Mes Jardins » (A-24); Tips and To-do in
+  // Large, their invitation stuck at the foot of their zone — at rest, and
+  // with the zone scrolled to its end — or, for Tips, in the middle of the
+  // card; the contrast of its every text; the focus kept above it (A-21 to
+  // A-23, A-26). Measured in this group's own hook, once the drawer's Chromes
+  // have closed — no bound of its own.
   describe('the edges of the page, as the app mounts them (SMA-437, lot V3-06 — A-21 to A-25)', () => {
     const RUN_IDS = EDGE_RUNS.map((run) => run.id);
     const edgesOf = (viewId: string, runId: string): EdgeMeasure => {
@@ -2312,14 +2321,28 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
       texts
         .filter((text) => text.background === 'unreadable' || text.ratio < (text.large ? 3 : 4.5))
         .map((text) => `${text.label} ${text.color} on ${text.background}: ${text.ratio}:1`);
-    /** Clean as every card of the page: no overlap, nothing cut for good, nothing spilled, nothing beyond, no ellipsis, every text at 14 px or more — the chips at 13 (V11). */
+    /**
+     * What the product names and may cut, as the scenes' harness admits it:
+     * a widget's title before its chip, a garden's name in its group's header
+     * (`A3Expert.dc.html`, `.tips-gh b` — nowrap, ellipsis). Any other
+     * ellipsis is a fault — the invitation's own texts wrap, never cut.
+     */
+    const ADMITTED_CUTS = new Set([
+      'Conseils',
+      'Tips',
+      'À faire aujourd’hui',
+      'To do today',
+      ...edgesSceneData('full').data.gardens.map((garden) => garden.name),
+    ]);
+    /** Clean as every card of the page: no overlap, nothing cut for good, nothing spilled, nothing beyond, no ellipsis but the admitted ones. */
     const cardFaults = (measured: EdgeCardMeasure) => ({
       ...defects(measured),
       hardClipped: measured.hardClipped,
-      ellipsized: measured.ellipsized.map((cut) => cut.text),
-      smallFonts: measured.smallFonts.filter((font) => font.px < (font.chip ? 13 : 14)).map((font) => `${font.label} ${font.px} px`),
+      ellipsized: measured.ellipsized.map((cut) => cut.text.replace(/^"|"$/g, '')).filter((text) => !ADMITTED_CUTS.has(text)),
     });
-    const cardClean = { ...clean, hardClipped: 0, ellipsized: [], smallFonts: [] };
+    const cardClean = { ...clean, hardClipped: 0, ellipsized: [] };
+    /** The invitation's texts under 14 px (V11) — none: its title is 16, its body and its gesture 14. */
+    const smallTexts = (measured: EdgeCardMeasure) => (measured.invite?.texts ?? []).filter((text) => text.px < 14).map((text) => `${text.label} ${text.px} px`);
 
     it('ran every viewport to its end: four runs each — by day and by night, in French and in English —, twenty in all; in Inter, at the viewport it claims', () => {
       expect([...edgeFailures.entries()].map(([id, reason]) => `${id}: ${String(reason)}`)).toEqual([]);
@@ -2330,9 +2353,10 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
           const { title, tips } = edgesOf(view.id, id);
           expect(title.viewport, `${view.id} ${id}`).toBe(view.width);
           expect(title.fontLoaded, `${view.id} ${id}: Inter not loaded`).toBe(true);
-          for (const [state, measured] of [['rest', tips.rest], ['end', tips.end], ['empty', tips.empty]] as const) {
-            expect(measured.viewport, `${view.id} ${id} tips ${state}`).toBe(view.width);
-            expect(measured.fontLoaded, `${view.id} ${id} tips ${state}: Inter not loaded`).toBe(true);
+          const { todo } = edgesOf(view.id, id);
+          for (const [state, measured] of [['tips rest', tips.rest], ['tips end', tips.end], ['tips empty', tips.empty], ['todo rest', todo.rest], ['todo end', todo.end]] as const) {
+            expect(measured.viewport, `${view.id} ${id} ${state}`).toBe(view.width);
+            expect(measured.fontLoaded, `${view.id} ${id} ${state}: Inter not loaded`).toBe(true);
           }
         }
       }
@@ -2357,26 +2381,52 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
         });
         expect(invite.texts[0]?.label, label).toContain(run.lang === 'fr' ? 'Sans l’orientation de « Balcon sud »' : 'Without the orientation of “Balcon sud”');
         expect({ rest: cardFaults(rest), end: cardFaults(end) }, label).toEqual({ rest: cardClean, end: cardClean });
+        expect(smallTexts(rest), label).toEqual([]);
       }
     });
 
-    it('the zone scrolls at rest wherever the card is pinned, from 600 px, in this scene — the case the foot exists for, seen at every such width —, never on a phone, where the Large card takes its height and the foot follows the last group in the flow', () => {
-      const scrolling = new Set<string>();
-      for (const view of WEATHER_VIEWS) {
-        for (const run of EDGE_RUNS) {
-          const { zone, invite, lastGroupBottom } = edgesOf(view.id, run.id).tips.rest;
-          const label = `${view.id} ${run.id}: the zone ${zone?.scrollH} px of content for ${zone?.clientH}`;
-          const scrolls = zone !== null && zone.scrollH > zone.clientH + 1;
-          if (view.width < 600) {
-            expect(scrolls, label).toBe(false);
-            expect(invite!.rect.y, label).toBeGreaterThanOrEqual(lastGroupBottom! - 0.5);
-          } else {
-            expect(scrolls, label).toBe(true);
-            scrolling.add(view.id);
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: To-do in Large names Balcon sud in ONE card (b) at the foot of its zone — the zone’s last child, seen at its bottom at rest and after the last group once scrolled to its end —, on the same ground as Tips’ foot; the card clean both ways; by day and by night, in French and in English (A-22)', (viewId) => {
+      for (const run of EDGE_RUNS) {
+        const { rest, end } = edgesOf(viewId, run.id).todo;
+        const label = `${viewId} ${run.id}`;
+        expect({ rest: footFaults(rest, 'rest'), end: footFaults(end, 'end') }, label).toEqual({ rest: [], end: [] });
+        const invite = rest.invite!;
+        const ground = GROUND[run.theme];
+        expect(
+          { position: invite.position, bottom: invite.bottom, backgroundColor: invite.backgroundColor, backgroundImage: invite.backgroundImage, backdropFilter: invite.backdropFilter },
+          label
+        ).toEqual({
+          position: 'sticky',
+          bottom: '0px',
+          backgroundColor: ground.colour,
+          backgroundImage: `linear-gradient(${ground.tint}, ${ground.tint})`,
+          backdropFilter: 'blur(7px)',
+        });
+        expect(invite.texts[0]?.label, label).toContain(run.lang === 'fr' ? 'Sans la météo de Balcon sud, ses arrosages' : 'Without the weather of Balcon sud, its water');
+        expect({ rest: cardFaults(rest), end: cardFaults(end) }, label).toEqual({ rest: cardClean, end: cardClean });
+        expect(smallTexts(rest), label).toEqual([]);
+      }
+    });
+
+    it('both zones scroll at rest wherever the card is pinned, from 600 px, in this scene — the case the foot exists for, seen at every such width —, never on a phone, where the Large card takes its height and the foot follows the last group in the flow', () => {
+      for (const key of ['tips', 'todo'] as const) {
+        const scrolling = new Set<string>();
+        for (const view of WEATHER_VIEWS) {
+          for (const run of EDGE_RUNS) {
+            const { zone, invite, lastGroupBottom } = edgesOf(view.id, run.id)[key].rest;
+            const label = `${key} ${view.id} ${run.id}: the zone ${zone?.scrollH} px of content for ${zone?.clientH}`;
+            const scrolls = zone !== null && zone.scrollH > zone.clientH + 1;
+            if (view.width < 600) {
+              expect(scrolls, label).toBe(false);
+              expect(invite!.rect.y, label).toBeGreaterThanOrEqual(lastGroupBottom! - 0.5);
+            } else {
+              expect(scrolls, label).toBe(true);
+              scrolling.add(view.id);
+            }
           }
         }
+        expect([...scrolling], key).toEqual(['600x1024', '1024x768', '1280x800']);
       }
-      expect([...scrolling]).toEqual(['600x1024', '1024x768', '1280x800']);
     });
 
     it.each(WEATHER_VIEWS.map((view) => view.id))('%s: Tips with nothing to say names its three gardens in ONE card (b) in the MIDDLE of the card — 520 px at most, centred in the space above the foot —, the card clean; by day and by night, in French and in English (A-23)', (viewId) => {
@@ -2390,13 +2440,14 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
         expect({ across: tenth(Math.abs(left - right)) <= 1, down: tenth(Math.abs(top - bottom)) <= 1 }, `${label}: ${JSON.stringify(empty.middle)}`).toEqual({ across: true, down: true });
         expect(empty.invite!.texts[0]?.label, label).toContain(run.lang === 'fr' ? 'Sans l’orientation de « Terrasse », « Balcon' : 'Without the orientation of “Terrasse”, “Balc');
         expect(cardFaults(empty), label).toEqual(cardClean);
+        expect(smallTexts(empty), label).toEqual([]);
       }
     });
 
-    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: every text of the invitation — its title, its body, its gesture — reads at 4.5:1 or more on what is painted behind it: the foot over the card at 92 %, the middle card on its ground; by day and by night (A-21 [P])', (viewId) => {
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: every text of the invitation — its title, its body, its gesture — reads at 4.5:1 or more on what is painted behind it: the two feet over the card at 92 %, the middle card on its ground; by day and by night (A-21 [P])', (viewId) => {
       for (const run of EDGE_RUNS) {
-        const { rest, empty } = edgesOf(viewId, run.id).tips;
-        for (const [form, measured] of [['foot', rest], ['middle', empty]] as const) {
+        const { tips, todo } = edgesOf(viewId, run.id);
+        for (const [form, measured] of [['tips foot', tips.rest], ['tips middle', tips.empty], ['todo foot', todo.rest]] as const) {
           const texts = measured.invite?.texts ?? [];
           const label = `${viewId} ${run.id} ${form}`;
           expect(texts.length, label).toBe(3);
@@ -2410,12 +2461,14 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
     // the zone had its own, a « Voir la case » under the foot took the focus
     // and stayed wholly hidden — it was « in view » of the zone, which did
     // not move.
-    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: a control of the zone focused at the keyboard is never wholly hidden under the foot — the zone’s scroll-padding brings it above (WCAG 2.4.11)', (viewId) => {
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: a control of the zone focused at the keyboard — a link of Tips, a checkbox of To-do — is never wholly hidden under the foot: the zone’s scroll-padding brings it above (WCAG 2.4.11)', (viewId) => {
       for (const run of EDGE_RUNS) {
-        const { focus } = edgesOf(viewId, run.id).tips;
-        const label = `${viewId} ${run.id}`;
-        expect(focus.focused, label).toBeGreaterThan(0);
-        expect(focus.hidden, label).toEqual([]);
+        for (const key of ['tips', 'todo'] as const) {
+          const { focus } = edgesOf(viewId, run.id)[key];
+          const label = `${viewId} ${run.id} ${key}`;
+          expect(focus.focused, label).toBeGreaterThan(0);
+          expect(focus.hidden, label).toEqual([]);
+        }
       }
     });
 

@@ -80,8 +80,8 @@ import { gridCellsOf, measureCard, ownText, visible, wrappedTexts, type CardMeas
  * waiting six seconds.
  *
  * SMA-437, lot V3-06, step E1: THE PAGE'S TITLE — `measureTitle()` reads its
- * computed size, line height and weight, and the lines its words take. Step
- * E3: THE EDGES OF A LARGE CARD — `edges=full|empty` serves the scene's
+ * computed size, line height and weight, and the lines its words take. Steps
+ * E3 and E4: THE EDGES OF A LARGE CARD — `edges=full|empty` serves the scene's
  * gardens and weather with Tips and To-do in Large; `measureEdges(key)` reads
  * the card, its zone that scrolls, its invitation stuck at the foot of the
  * zone or in the middle of the card, and every text's contrast on that
@@ -1187,8 +1187,8 @@ const page = {
   },
 
   /**
-   * SMA-437, lot V3-06, step E3 (A-21 to A-23, A-25) — the edges of a Large
-   * card, `tips` (`todo` in E4): the card, its zone, its invitation and its
+   * SMA-437, lot V3-06, steps E3 and E4 (A-21 to A-23, A-25) — the edges of a
+   * Large card, `tips` or `todo`: the card, its zone, its invitation and its
    * texts' contrast, as the engine draws them.
    */
   measureEdges(key: 'tips' | 'todo'): EdgeCardMeasure {
@@ -1240,7 +1240,8 @@ const page = {
     const foot = zone?.querySelector<HTMLElement>(':scope > [data-invite-card="foot"]');
     if (!zone || !foot) throw new Error(`The ${key} widget draws no zone with a foot.`);
     zone.scrollTop = 0;
-    const controls = [...zone.querySelectorAll<HTMLElement>('a[href], button')].filter((control) => !foot.contains(control));
+    // The links and buttons of Tips, the checkboxes of To-do.
+    const controls = [...zone.querySelectorAll<HTMLElement>('a[href], button, input')].filter((control) => !foot.contains(control));
     const hidden: string[] = [];
     for (const control of controls) {
       control.focus();

@@ -875,6 +875,8 @@
         "weatherUnavailable": "Météo indisponible — les arrosages ne sont pas planifiés pour l’instant.",
         "noWeather_one": "Sans la météo de {{gardens}}, ses arrosages ne sont pas planifiés — ",
         "noWeather_other": "Sans la météo de {{gardens}}, leurs arrosages ne sont pas planifiés — ",
+        "noWeatherTitle_one": "Sans la météo de {{gardens}}, ses arrosages ne sont pas planifiés",
+        "noWeatherTitle_other": "Sans la météo de {{gardens}}, leurs arrosages ne sont pas planifiés",
         "addCity": "Ajouter une ville →",
         "loadError": "Impossible de charger les tâches du jour."
       },

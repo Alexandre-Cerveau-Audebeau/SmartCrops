@@ -1195,18 +1195,34 @@ export function weatherCitySceneData(kind: WeatherCityScene): WeatherCitySceneDa
  * de la v3 entre dans le harnais comme une scène […] le pied collant ») —
  * what the page launcher's `fetch` serves the REAL page so Tips and To-do,
  * in Large, draw their invitation in its new forms:
- * - `full` — the scenes' three gardens, Balcon sud without an orientation and
- *   without a city: Tips groups Terrasse and Potager du fond and names Balcon
- *   sud in the foot stuck at the bottom of its zone (A-21); To-do lists its
- *   tasks and Balcon sud has no weather (A-22);
- * - `empty` — the same three gardens, none oriented, none located: no tip and
- *   no garden checked, Tips' invitation in the middle of the card (A-23).
+ * - `full` — the five gardens of the page, Balcon sud without an orientation
+ *   and without a city, every other one in Écully: Tips groups the four
+ *   others and names Balcon sud in the foot stuck at the bottom of its zone
+ *   (A-21); To-do lists the tasks of the four and names Balcon sud in its
+ *   own (A-22) — five gardens, so that both zones scroll where the card is
+ *   pinned, the case the foot exists for (E4: with the three gardens of the
+ *   scenes, the To-do zone held its tasks whole at every width);
+ * - `empty` — the scenes' three gardens, none oriented, none located: no tip
+ *   and no garden checked, Tips' invitation in the middle of the card (A-23).
  */
 export type EdgesScene = 'full' | 'empty';
 export const EDGES_SCENES: readonly EdgesScene[] = ['full', 'empty'];
 
 export function edgesSceneData(kind: EdgesScene): { data: DashboardData; weather: DashboardWeatherData } {
-  if (kind === 'full') return { data, weather: weatherPartial() };
+  if (kind === 'full') {
+    const list = [...FIVE];
+    return {
+      data: dashboardFixture(list, { varieties }),
+      weather: weatherFixture(
+        [ecully],
+        list.map((garden) =>
+          garden.id === balcon.id
+            ? linkFixture({ gardenId: garden.id, locationKey: null, source: null })
+            : linkFixture({ gardenId: garden.id, locationKey: ecully.key, source: 'profile' })
+        )
+      ),
+    };
+  }
   const unoriented = gardens.map((garden) => ({ ...garden, config: { ...garden.config, orientation: null } }));
   return {
     data: dashboardFixture(unoriented, { varieties, totals: data.totals }),
