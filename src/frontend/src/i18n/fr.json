@@ -2366,7 +2366,7 @@
     },
     "terms": {
       "title": "Conditions générales d'utilisation (CGU)",
-      "updatedDate": "22 septembre 2026",
+      "updatedDate": "1er octobre 2026",
       "s01": {
         "title": "Objet",
         "body": "Les présentes CGU encadrent l'utilisation de **SmartCrops** (le « Service »), application web de gestion de jardins virtuels : bibliothèque de plantes, planification de jardin et fonctionnalités associées. L'utilisation du Service vaut acceptation des présentes CGU."
@@ -2374,8 +2374,18 @@
       "s02": {
         "title": "Accès au Service",
         "items": {
-          "free": "Le Service est **gratuit**. La consultation de la bibliothèque est libre ; certaines fonctionnalités (création de jardins, profil, suggestions) nécessitent un compte.",
+          "free": "Le Service est **gratuit**. La consultation de la bibliothèque est libre ; certaines fonctionnalités (création de jardins, profil, suggestions) nécessitent un compte. Les trois formules décrites à l'article « Formules » sont **toutes gratuites (0 €)** : aucun paiement ne vous est demandé. Si une formule payante est un jour proposée, **aucune formule ne deviendra payante sans votre accord explicite**.",
           "asIs": "Le Service est un **projet personnel en développement actif** : il est fourni « en l'état », sans engagement de disponibilité, de pérennité ni de niveau de service. Des fonctionnalités peuvent évoluer, être ajoutées ou retirées."
+        }
+      },
+      "formulas": {
+        "title": "Formules",
+        "items": {
+          "intro": "Le Service propose trois formules — **Novice**, **Jardinier** et **Expert** — qui déterminent le nombre de jardins que vous pouvez créer, la taille maximale de chaque jardin et la présentation de votre page « Mes Jardins ». Vous choisissez votre formule à votre première visite de cette page, puis vous pouvez en changer à tout moment depuis celle-ci.",
+          "limits": "**Novice** : jusqu'à **3 jardins**, chacun jusqu'à **20 × 20 cases**. **Jardinier** : jusqu'à **10 jardins**, chacun jusqu'à **50 × 50 cases**. **Expert** : jardins en **nombre illimité**, chacun jusqu'à **100 × 100 cases**.",
+          "applied": "Ces limites sont appliquées par le Service : au-delà du nombre de jardins permis, la création d'un nouveau jardin est refusée ; au-delà de la taille permise, l'agrandissement d'un plan est refusé. Le message vous indique la limite en cause.",
+          "protection": "**Changer de formule ne supprime jamais un jardin, ni un plan, ni une plante placée.** Une formule trop petite pour vos jardins ne peut pas être choisie, et le Service vous dit pourquoi. La formule sur laquelle vous êtes vous reste acquise, même si vos jardins dépassent ses limites : vous gardez tout, et vous ne pouvez simplement plus ajouter de jardin ni agrandir un plan au-delà de ces limites (le réduire reste possible).",
+          "switch": "Vous pouvez changer de formule à tout moment, dans les deux sens. La disposition de votre tableau de bord est conservée pour chaque formule que vous quittez et vous est rendue lorsque vous y revenez. Les principales fonctionnalités comprises dans chaque formule sont présentées sur l'écran de choix et peuvent évoluer avec le Service (voir « Accès au Service »). Les données qu'enregistrent les formules sont décrites dans la Politique de confidentialité."
         }
       },
       "s03": {
@@ -2416,7 +2426,7 @@
       },
       "s09": {
         "title": "Modification des CGU",
-        "body": "Les CGU peuvent être modifiées pour suivre l'évolution du Service. La version applicable est celle en ligne, datée en tête de page. En cas de modification substantielle, une information sera affichée ; la poursuite de l'utilisation vaut acceptation."
+        "body": "Les CGU peuvent être modifiées pour suivre l'évolution du Service. La version applicable est celle en ligne, datée en tête de page : la date indique la dernière modification. En cas de modification substantielle, une information est affichée dans l'application — ainsi, lors de l'introduction des formules, sur l'écran de choix de formule présenté une fois à chaque compte, à sa première visite de la page « Mes Jardins » ; la poursuite de l'utilisation vaut acceptation."
       },
       "s10": {
         "title": "Droit applicable",

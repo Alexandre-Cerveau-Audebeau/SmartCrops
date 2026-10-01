@@ -2366,7 +2366,7 @@
     },
     "terms": {
       "title": "Terms of Use",
-      "updatedDate": "September 22, 2026",
+      "updatedDate": "October 1, 2026",
       "s01": {
         "title": "Purpose",
         "body": "These Terms of Use govern the use of **SmartCrops** (the “Service”), a web application for managing virtual gardens: plant library, garden planning and related features. Using the Service constitutes acceptance of these Terms."
@@ -2374,8 +2374,18 @@
       "s02": {
         "title": "Access to the Service",
         "items": {
-          "free": "The Service is **free of charge**. Browsing the library is open to everyone; some features (garden creation, profile, suggestions) require an account.",
+          "free": "The Service is **free of charge**. Browsing the library is open to everyone; some features (garden creation, profile, suggestions) require an account. The three formulas described in the “Formulas” section are **all free (€0)**: no payment is asked of you. Should a paid formula ever be offered, **no formula will become paid without your explicit agreement**.",
           "asIs": "The Service is a **personal project under active development**: it is provided “as is”, with no commitment of availability, continuity or service level. Features may evolve, be added or removed."
+        }
+      },
+      "formulas": {
+        "title": "Formulas",
+        "items": {
+          "intro": "The Service offers three formulas — **Novice**, **Gardener** and **Expert** — which determine how many gardens you can create, the maximum size of each garden and the presentation of your “My Gardens” page. You choose your formula on your first visit to that page, and you can then change it at any time from there.",
+          "limits": "**Novice**: up to **3 gardens**, each up to **20 × 20 cells**. **Gardener**: up to **10 gardens**, each up to **50 × 50 cells**. **Expert**: an **unlimited number** of gardens, each up to **100 × 100 cells**.",
+          "applied": "These limits are enforced by the Service: beyond the permitted number of gardens, creating a new garden is refused; beyond the permitted size, enlarging a plan is refused. The message tells you which limit applies.",
+          "protection": "**Changing formula never deletes a garden, a plan or a placed plant.** A formula that is too small for your gardens cannot be chosen, and the Service tells you why. The formula you are on remains yours, even if your gardens exceed its limits: you keep everything, and you simply can no longer add a garden or enlarge a plan beyond those limits (shrinking it remains possible).",
+          "switch": "You can change formula at any time, in either direction. Your dashboard layout is kept for each formula you leave and given back to you when you return to it. The main features included in each formula are presented on the choice screen and may evolve with the Service (see “Access to the Service”). The data the formulas record is described in the Privacy Policy."
         }
       },
       "s03": {
@@ -2416,7 +2426,7 @@
       },
       "s09": {
         "title": "Changes to the Terms",
-        "body": "These Terms may be amended to follow the evolution of the Service. The applicable version is the one online, dated at the top of the page. In case of substantial change, a notice will be displayed; continued use constitutes acceptance."
+        "body": "These Terms may be amended to follow the evolution of the Service. The applicable version is the one online, dated at the top of the page: the date shows the latest change. In case of substantial change, a notice is displayed in the application — for instance, when the formulas were introduced, on the formula choice screen shown once to every account, on its first visit to the “My Gardens” page; continued use constitutes acceptance."
       },
       "s10": {
         "title": "Governing law",
