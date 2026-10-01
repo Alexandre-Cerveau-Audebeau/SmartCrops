@@ -1298,6 +1298,8 @@
       "sectionDimensions": "DIMENSIONS",
       "sectionOrientation": "ORIENTATION",
       "sectionGardenType": "GARDEN TYPE",
+      "sectionLocation": "LOCATION",
+      "locationChange": "Change the location",
       "orientationPrompt": "Which way does the garden face?",
       "orientationNote": "Stored for future per-cell exposure calculations.",
       "compassLabel": "Compass — the garden faces {{orientation}}",
@@ -1311,7 +1313,7 @@
         "indoor": "Indoor"
       },
       "hemisphere": "HEMISPHERE",
-      "hemisphereHelp": "Manual estimate — a future geolocation API will pre-fill it from your latitude.",
+      "hemisphereHelp": "Filled in from the garden's city; without a city, choose it here.",
       "hemisphereNorth": "Northern",
       "hemisphereSouth": "Southern",
       "latitudeBand": "LATITUDE BAND",

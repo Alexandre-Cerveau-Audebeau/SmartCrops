@@ -1298,6 +1298,8 @@
       "sectionDimensions": "DIMENSIONS",
       "sectionOrientation": "ORIENTATION",
       "sectionGardenType": "TYPE DE JARDIN",
+      "sectionLocation": "LOCALISATION",
+      "locationChange": "Modifier la localisation",
       "orientationPrompt": "Vers où le jardin est-il tourné ?",
       "orientationNote": "Enregistré pour les futurs calculs d'exposition par case.",
       "compassLabel": "Boussole — le jardin est orienté {{orientation}}",
@@ -1311,7 +1313,7 @@
         "indoor": "Intérieur"
       },
       "hemisphere": "HÉMISPHÈRE",
-      "hemisphereHelp": "Estimation manuelle — une future API de géolocalisation la remplira depuis votre latitude.",
+      "hemisphereHelp": "Rempli d'après la ville du jardin\u00a0; sans ville, choisissez-le ici.",
       "hemisphereNorth": "Nord",
       "hemisphereSouth": "Sud",
       "latitudeBand": "BANDE DE LATITUDE",

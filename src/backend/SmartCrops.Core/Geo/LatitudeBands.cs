@@ -1,16 +1,16 @@
 namespace SmartCrops.Core.Geo;
 
 /// <summary>
-/// SMA-336 PR 3a/5 — the two exposure inputs a latitude can PRE-FILL:
+/// SMA-336 PR 3a/5 — the two exposure inputs a latitude DERIVES:
 /// <c>Garden.Hemisphere</c> (« N » / « S ») and <c>Garden.LatitudeBand</c>
 /// (« low » / « mid » / « high »). Pure, so the rule is testable at its exact
 /// bounds and reusable by any writer of a location.
 ///
-/// <para>The writer applies it ONLY where the garden carries no value yet —
-/// a hemisphere or a band the user set by hand is never overwritten. This is
-/// what the config dialog announced for the exposure engine's inputs:
-/// « a future geolocation API will pre-fill both from the user's real
-/// latitude without changing the stored contract ».</para>
+/// <para>The city is authoritative (SMA-454, fix round 1 — Alexandre's
+/// decision of 01/10/2026): a garden's own city, set, ALWAYS writes both,
+/// over values set by hand; cleared, the account's city writes them when it
+/// has one. The stored contract does not change: the exposure engine reads
+/// the two columns as before.</para>
 ///
 /// <para>The bounds are ARBITRARY and recorded as such: 23.5° is the
 /// tropics' edge, the natural end of « low » (the band's own label says

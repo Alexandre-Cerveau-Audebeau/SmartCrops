@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 import GardenConfigDialog from './GardenConfigDialog';
@@ -60,6 +60,20 @@ describe('GardenConfigDialog (SMA-17, §12)', () => {
     for (const label of ['Balcony', 'Terrace', 'Open ground', 'Greenhouse', 'Indoor']) {
       expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
     }
+  });
+
+  // SMA-454, fix round 1, R3 — the hemisphere's help says what is true now:
+  // the garden's city fills it in (no « future geolocation API »), and the
+  // choice here is for a garden without one.
+  it('says where the hemisphere comes from — the garden’s city, and a choice here without one —, in English and in French (SMA-454, fix round 1, R3)', async () => {
+    renderDialog();
+    expect(screen.getByText("Filled in from the garden's city; without a city, choose it here.")).toBeInTheDocument();
+    cleanup();
+
+    await i18n.changeLanguage('fr');
+    renderDialog();
+    // The French no-break space before « ; » is matched by \s.
+    expect(screen.getByText(/^Rempli d'après la ville du jardin\s; sans ville, choisissez-le ici\.$/)).toBeInTheDocument();
   });
 
   it('reveals the lightSchedule zone only when Indoor is selected', () => {
@@ -248,6 +262,107 @@ describe('GardenConfigDialog (SMA-17, §12)', () => {
       gardenType: 'greenhouse',
       hemisphere: 'S',
       latitudeBand: 'high',
+    });
+  });
+
+  // SMA-454 — the garden's city: the dialog draws the LOCATION label around
+  // what the planner hands it (the place and the door to the dashboard's
+  // location dialog), and knows nothing of the network.
+  it('carries the LOCATION section it is handed, between the orientation and the hemisphere — and none without it (SMA-454)', () => {
+    renderDialog();
+    expect(document.querySelector('[data-config-location]')).toBeNull();
+    expect(screen.queryByText('LOCATION')).toBeNull();
+    cleanup();
+
+    renderDialog({ locationSection: <p>The place, and its door</p> });
+
+    const section = document.querySelector<HTMLElement>('[data-config-location]');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByRole('heading', { level: 3, name: 'LOCATION' })).toBeInTheDocument();
+    expect(within(section!).getByText('The place, and its door')).toBeInTheDocument();
+    const orientation = screen.getByRole('heading', { level: 3, name: 'ORIENTATION' });
+    expect(orientation.compareDocumentPosition(section!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section!.compareDocumentPosition(screen.getByText('HEMISPHERE')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // SMA-454, fix round 1 — THE CITY IS AUTHORITATIVE: a city set from that
+  // section is written at once, and the server writes the hemisphere and the
+  // band from its latitude, always; the planner re-reads the garden, hands the
+  // dialog the stored values and bumps `locatedSeq` as the re-read lands.
+  describe('what a city set from LOCATION writes (SMA-454)', () => {
+    const props = {
+      open: true,
+      isFirstSetup: false,
+      initialWidth: 10,
+      initialHeight: 8,
+      initialCellSize: '50cm',
+      onCancel: () => {},
+    };
+    const stored: GardenConfig = { ...EMPTY_CONFIG, hemisphere: 'N', latitudeBand: 'mid' };
+
+    it('after a city write, shows the hemisphere and the band re-read — over a value chosen here', () => {
+      const onConfirm = vi.fn();
+      const { rerender } = render(
+        <GardenConfigDialog {...props} onConfirm={onConfirm} initialConfig={stored} locatedSeq={0} />
+      );
+      expect(screen.getByRole('radio', { name: 'Northern' })).toBeChecked();
+      // The band, chosen HERE.
+      fireEvent.click(screen.getByRole('radio', { name: 'High' }));
+
+      rerender(
+        <GardenConfigDialog
+          {...props}
+          onConfirm={onConfirm}
+          initialConfig={{ ...stored, hemisphere: 'S', latitudeBand: 'low' }}
+          locatedSeq={1}
+        />
+      );
+
+      expect(screen.getByRole('radio', { name: 'Southern' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Low' })).toBeChecked();
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(savedConfig(onConfirm)).toMatchObject({ hemisphere: 'S', latitudeBand: 'low' });
+    });
+
+    it('a city that re-reads the values already stored still puts them back over a hand choice — the write says so, not a change of value', () => {
+      const onConfirm = vi.fn();
+      const { rerender } = render(
+        <GardenConfigDialog {...props} onConfirm={onConfirm} initialConfig={stored} locatedSeq={0} />
+      );
+      // Chosen HERE: the south and the sub-polar band.
+      fireEvent.click(screen.getByRole('radio', { name: 'Southern' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'High' }));
+
+      // Lyon on a « N » / « mid » garden: the re-read brings what was stored.
+      rerender(
+        <GardenConfigDialog {...props} onConfirm={onConfirm} initialConfig={{ ...stored }} locatedSeq={1} />
+      );
+
+      expect(screen.getByRole('radio', { name: 'Northern' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Mid' })).toBeChecked();
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(savedConfig(onConfirm)).toMatchObject({ hemisphere: 'N', latitudeBand: 'mid' });
+    });
+
+    it('without a city write, never moves what it shows: a stored hemisphere or band that changes under it is not adopted', () => {
+      const onConfirm = vi.fn();
+      const { rerender } = render(
+        <GardenConfigDialog {...props} onConfirm={onConfirm} initialConfig={stored} locatedSeq={0} />
+      );
+
+      rerender(
+        <GardenConfigDialog
+          {...props}
+          onConfirm={onConfirm}
+          initialConfig={{ ...stored, hemisphere: 'S', latitudeBand: 'low' }}
+          locatedSeq={0}
+        />
+      );
+
+      expect(screen.getByRole('radio', { name: 'Northern' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Mid' })).toBeChecked();
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(savedConfig(onConfirm)).toMatchObject({ hemisphere: 'N', latitudeBand: 'mid' });
     });
   });
 });
