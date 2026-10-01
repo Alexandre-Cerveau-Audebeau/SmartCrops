@@ -97,11 +97,23 @@ services:
       # GET /api/auth/me (user.isAdmin), not a front whitelist. The former
       # VITE_ADMIN_EMAILS var was removed; configure AdminSeed__Emails on the api
       # service instead.
-    # SMA-455 — the ONE port still published on every interface, for tests on
-    # real phones (http://<this PC's address>:3000). It serves the site AND,
-    # through the Vite proxy, the api: on a public network, stop the stack.
+    # SMA-455 — loopback by default, like the other three (see db): 3000
+    # serves the site AND, through the Vite proxy, the api, so published on
+    # every interface it exposed both to any device of a public network.
+    # Open it only for a test on a real phone, at
+    # http://<this PC's address>:3000, then close it. In PowerShell, at the
+    # root of the repo:
+    #   open:  $env:DEV_WEB_BIND = "0.0.0.0"; docker compose up -d
+    #   close: Remove-Item Env:DEV_WEB_BIND; docker compose up -d
+    #   check: netstat -ano | findstr ":3000"
+    #          closed: loopback only (127.0.0.1:3000, maybe [::1]:3000);
+    #          open: 0.0.0.0:3000.
+    # Closing the window does NOT close the port: the container keeps its
+    # binding, across stop/start too, until a `docker compose up -d` run
+    # without DEV_WEB_BIND recreates it. 5173 is the port Vite listens on
+    # inside the container (Dockerfile).
     ports:
-      - "3000:5173"
+      - "${DEV_WEB_BIND:-127.0.0.1}:3000:5173"
     depends_on:
       - api
 
