@@ -832,7 +832,9 @@ export default function GardensDashboard() {
             refreshing={gardensRefreshing}
             loadError={gardensError}
             onRetry={refetch}
-            onCreate={() => setCreateDialogOpen(true)}
+            // SMA-437, review of the v3, M2 — the band's door ends the Edit mode
+            // first, as the Gardens widget's and the header's do.
+            onCreate={createFromWidget}
           />
         );
       default:
