@@ -1254,7 +1254,7 @@
     "googleAccount": "Your account uses Google sign-in. Password management is not available.",
     "dangerZone": "Danger zone",
     "exportTitle": "Export your data",
-    "exportBody": "Download everything the service holds about you — profile, gardens, layouts, placement notes and plant suggestions — as a JSON file (GDPR right to portability).",
+    "exportBody": "Download your data — profile (including your formula), gardens, layouts, placement notes and plant suggestions — as a JSON file (GDPR right to portability).",
     "exportButton": "Download my data",
     "exportError": "Failed to export your data. Please try again.",
     "deleteTitle": "Delete your account",

@@ -1254,7 +1254,7 @@
     "googleAccount": "Votre compte utilise la connexion Google. La gestion du mot de passe n'est pas disponible.",
     "dangerZone": "Zone de danger",
     "exportTitle": "Exporter vos données",
-    "exportBody": "Téléchargez tout ce que le service détient sur vous — profil, jardins, plans, notes de placement et suggestions de plantes — dans un fichier JSON (droit RGPD à la portabilité).",
+    "exportBody": "Téléchargez vos données — profil (dont votre formule), jardins, plans, notes de placement et suggestions de plantes — dans un fichier JSON (droit RGPD à la portabilité).",
     "exportButton": "Télécharger mes données",
     "exportError": "Impossible d'exporter vos données. Veuillez réessayer.",
     "deleteTitle": "Supprimer votre compte",

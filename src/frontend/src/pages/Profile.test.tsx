@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { deferred } from '../test/responses';
 import type { AuthUser } from '../types/Auth';
 
 // importOriginal (R3): the real module also exports the DELETE_TIMEOUT /
@@ -31,7 +32,7 @@ vi.mock('../services/authApi', () => ({
 
 import Profile from './Profile';
 import { fetchMe, logout } from '../services/authApi';
-import { DELETE_FAILED, DELETE_TIMEOUT, deleteAccount, exportAccountData } from '../services/profileApi';
+import { DELETE_FAILED, DELETE_TIMEOUT, deleteAccount, exportAccountData, fetchProfile } from '../services/profileApi';
 
 beforeEach(() => {
   localStorage.clear();
@@ -234,5 +235,53 @@ describe('Danger zone (SMA-341)', () => {
       clickSpy.mockRestore();
       vi.unstubAllGlobals();
     }
+  });
+});
+
+// SMA-448 — the export's promise, said truthfully (Alexandre, 30/09, the
+// answer to question 2 of the final text of the Terms and the policy): the
+// export holds the profile — its formula included —, the gardens, the plans,
+// the placement notes and the suggestions; never « everything the service
+// holds about you », since the policy says the dashboard layout is not in it.
+// The profile HELD, then landed inside `act` (SMA-452 § 12): the section is
+// drawn once it lands, and not before.
+describe('the export’s promise (SMA-448)', () => {
+  async function renderLanded(language: 'en' | 'fr') {
+    localStorage.setItem('smartcrops-language', language);
+    const profile = deferred<Awaited<ReturnType<typeof fetchProfile>>>();
+    vi.mocked(fetchProfile).mockReturnValueOnce(profile.promise);
+    renderProfileAs(baseUser);
+    await act(async () =>
+      profile.resolve({
+        email: 'user@example.com',
+        displayName: 'User',
+        firstName: null,
+        lastName: null,
+        city: null,
+        hasPassword: true,
+      })
+    );
+  }
+
+  it('names what the export holds — the formula included — and never « everything the service holds about you »', async () => {
+    await renderLanded('en');
+
+    expect(
+      screen.getByText(
+        'Download your data — profile (including your formula), gardens, layouts, placement notes and plant suggestions — as a JSON file (GDPR right to portability).'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/everything the service holds about you/)).toBeNull();
+  });
+
+  it('en français : dit ce que l’export contient — la formule comprise —, jamais « tout ce que le service détient sur vous »', async () => {
+    await renderLanded('fr');
+
+    expect(
+      screen.getByText(
+        'Téléchargez vos données — profil (dont votre formule), jardins, plans, notes de placement et suggestions de plantes — dans un fichier JSON (droit RGPD à la portabilité).'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/tout ce que le service détient sur vous/)).toBeNull();
   });
 });
