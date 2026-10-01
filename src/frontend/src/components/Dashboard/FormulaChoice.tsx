@@ -1,10 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import Link from '@mui/material/Link';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
+import { visuallyHidden } from '@mui/utils';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import GridOnOutlinedIcon from '@mui/icons-material/GridOnOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -13,6 +17,7 @@ import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
 import ReconnectButton from '../ReconnectButton';
 import { formulaRefusalText } from './formulaRefusal';
 import { useFormulas } from '../../hooks/useFormulas';
+import { useLiveRegion } from '../../hooks/useLiveRegion';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../theme/useDashboardTokens';
 import type {
@@ -106,6 +111,18 @@ export default function FormulaChoice({ titleId, mandatory, switching, refusal, 
     titleRef.current?.focus({ preventScroll: true });
   }, []);
 
+  // SMA-437, the complete review of the v3, M5 — the screen's loading
+  // region is `useLiveRegion()`'s: mounted with the screen, born EMPTY, its
+  // sentence written by its ref once it is there. The one before was
+  // inserted with its text — a region born filled is not announced — and
+  // taken away with the skeletons. On screen while the offers load
+  // (`visible`); emptied when they land or fail — a removal, not announced
+  // —; said again on « Réessayer ». The effect writes the DOM, never a state.
+  const { announce, regionProps } = useLiveRegion<HTMLElement>({ visible: true });
+  useEffect(() => {
+    announce(loading ? t('dashboard.choice.loading') : '');
+  }, [announce, loading, t]);
+
   const nameOf = (level: DashboardLevel) => t(`dashboard.levels.${level}.name`);
 
   return (
@@ -123,18 +140,48 @@ export default function FormulaChoice({ titleId, mandatory, switching, refusal, 
         <Typography sx={{ mt: '10px', fontSize: { xs: 15, sm: 17 }, lineHeight: 1.55, color: 'text.primary', maxWidth: 760 }}>
           {t('dashboard.choice.lead')}
         </Typography>
+        {/* SMA-448 — the notice article 10 of the Terms promises, on the
+            screen shown once (the final text of the Terms and the policy,
+            § 4.1): in the header, so it is read while the offers load and
+            on an error too; « les lire » opens the Terms in a new tab, the
+            mandatory choice — no close, no Escape — left in view. In the
+            lead's colour, no longer the secondary grey (PR #306, fix round
+            1, L1 — Alexandre, 01/10: « Oui on peut la rendre plus visible,
+            ça me va bien »); the link as it was. */}
+        {mandatory && (
+          <Typography
+            data-formula-choice-terms
+            sx={{ mt: '8px', fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.5, color: 'text.primary', maxWidth: 760 }}
+          >
+            {t('dashboard.choice.termsNotice')}{' '}
+            <Link component={RouterLink} to="/terms" target="_blank" rel="noopener noreferrer">
+              {t('dashboard.choice.termsLink')}
+              <Box component="span" sx={visuallyHidden}>
+                {' '}
+                {t('dashboard.choice.termsNewTab')}
+              </Box>
+            </Link>
+          </Typography>
+        )}
+        {/* The loading region (M5), in the header: kept mounted, it adds no
+            gap to the column — the three « Choisir » keep their place above
+            the fold (A2). No children: React never renders its text, so a
+            re-render never rewrites what `announce` wrote. */}
+        <Typography
+          {...regionProps}
+          data-formula-choice-status
+          sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary', '&:not(:empty)': { mt: '16px' } }}
+        />
       </Box>
 
       {loading && (
-        <Box data-formula-choice-loading sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <Typography role="status" sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary' }}>
-            {t('dashboard.choice.loading')}
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' }, gap: `${DASHBOARD_SPACING.gutter}px` }}>
-            {[0, 1, 2].map((index) => (
-              <Skeleton key={index} variant="rounded" height={320} sx={{ borderRadius: '14px' }} />
-            ))}
-          </Box>
+        <Box
+          data-formula-choice-loading
+          sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' }, gap: `${DASHBOARD_SPACING.gutter}px` }}
+        >
+          {[0, 1, 2].map((index) => (
+            <Skeleton key={index} variant="rounded" height={320} sx={{ borderRadius: '14px' }} />
+          ))}
         </Box>
       )}
 
@@ -272,6 +319,10 @@ interface OfferCardProps {
 function OfferCard({ formula, previous, availability, isCurrent, isRecommended, switching, onChoose, nameOf }: OfferCardProps) {
   const { t } = useTranslation();
   const tk = useDashboardTokens();
+  // SMA-437, the complete review of the v3, M10: `primary.dark` at night
+  // read 3.41:1 on a card and 2.96:1 on an unavailable one — `primary.light`
+  // there, as `CompactActionBar` does.
+  const night = useTheme().palette.mode === 'dark';
   const name = nameOf(formula.key);
   const blocked = !availability.available;
   const kept = isCurrent && availability.reasons.length > 0;
@@ -368,7 +419,7 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
         <Typography component="span" sx={{ fontSize: 34, lineHeight: 1.05, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
           {t('dashboard.choice.price')}
         </Typography>
-        <Typography component="span" sx={{ fontSize: 16, fontWeight: 800, color: 'primary.dark' }}>
+        <Typography component="span" sx={{ fontSize: 16, fontWeight: 800, color: night ? 'primary.light' : 'primary.dark' }}>
           {t('dashboard.choice.priceFree')}
         </Typography>
       </Box>
@@ -545,6 +596,9 @@ interface ComparisonProps {
 
 function Comparison({ catalog, nameOf }: ComparisonProps) {
   const { t } = useTranslation();
+  // M10 (the complete review): a « Oui » in `primary.dark` read 3.41:1 on the
+  // table and 2.96:1 on its even rows at night — `primary.light` there.
+  const night = useTheme().palette.mode === 'dark';
 
   /** The rows: the two limits from the catalogue, then the ten of V3-01, as the language says them — each cell with its meaning. */
   const rows: Array<{ key: string; label: string; cells: Array<{ text: string; tone: Tone }> }> = [
@@ -578,7 +632,7 @@ function Comparison({ catalog, nameOf }: ComparisonProps) {
     fontSize: `${DASHBOARD_TYPE.secondary}px`,
     lineHeight: 1.45,
     fontWeight: tone === 'neutral' ? 500 : 700,
-    color: tone === 'yes' ? 'primary.dark' : tone === 'no' ? 'text.secondary' : 'text.primary',
+    color: tone === 'yes' ? (night ? 'primary.light' : 'primary.dark') : tone === 'no' ? 'text.secondary' : 'text.primary',
   });
 
   return (

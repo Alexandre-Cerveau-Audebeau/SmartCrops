@@ -51,6 +51,6 @@
     "vitest": "^4.1.11"
   },
   "overrides": {
-    "brace-expansion@1.x": "1.1.17"
+    "brace-expansion@1.x": "1.1.21"
   }
 }
