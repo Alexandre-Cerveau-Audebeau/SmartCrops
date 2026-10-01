@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageGridMeasure, PageMeasure, PanelFocus, PanelMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
+import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageGridMeasure, PageMeasure, PanelFocus, PanelMeasure, PlannerLimitMeasure, PlantingMeasure, ScrollMeasure, WeatherMeasure } from './pageHarness';
 import { CHOICE_SCENES, GARDENS_LIST_KINDS, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, gardensSceneData, weatherCitySceneData, type GardensListKind, type WeatherCityScene } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
@@ -40,6 +40,12 @@ import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
  * note and « Réinitialiser » under it, read just after a switch and six
  * seconds later on the page's simulated timers — the button never moves by
  * itself.
+ *
+ * SMA-448, PR #306, fix round 1, D2: THE CHOICE SCREEN'S ONE SCROLL — what
+ * scrolls while it is open, the page under it locked, and the page given
+ * back, where it stood, once the screen is gone — at its four doors: the
+ * mandatory screen, the chip, the Customize panel left open under it, and
+ * « Voir les formules » of a refused creation.
  *
  * Chrome as the scenes' suite finds it: without it the suite is SKIPPED on a
  * workstation and FAILS on CI.
@@ -305,6 +311,29 @@ const choiceRunOf = (id: string): ChoiceRun & { vw: number; viewId: string } => 
 
 const OFFERS_DRAWN = 'document.querySelectorAll("[data-formula-offer]").length === 3';
 
+/** The choice screen gone: MUI unmounts its root once the closing transition is over. */
+const SCREEN_GONE = '!document.querySelector("[data-formula-choice-dialog]")';
+
+/**
+ * PR #306, fix round 1, D2 — the page scrolled a little before the chip is
+ * pressed: 16 px, under the 27.7 px at which the compact bar comes down on a
+ * desktop (measured), so the chip stays clear of every bar and pressable —
+ * and closing gives the focus back to it.
+ */
+const SCROLLED_BEFORE_CHIP = 16;
+
+/** The screen as it closes (D2): reopened from the chip on a page scrolled a little, closed by its button; mandatory, closed by the first choice. */
+interface ChoiceClosing {
+  chip: { clear: boolean; before: ScrollMeasure; open: ScrollMeasure; closed: ScrollMeasure };
+  mandatory: { open: ScrollMeasure; closed: ScrollMeasure };
+  /** From the Customize panel's link, the panel left open under the screen: open; the screen gone, the panel still there; the panel closed too. */
+  panel: { open: ScrollMeasure; closed: ScrollMeasure; panelClosed: ScrollMeasure };
+  /** From « Voir les formules » of a creation the formula refused — the creation dialog closing as the screen opens: open, then closed by its button. */
+  create: { open: ScrollMeasure; closed: ScrollMeasure };
+}
+/** The closings, by view — one run each: what scrolls follows neither the theme nor the language. */
+const choiceClosings = new Map<string, ChoiceClosing>();
+
 /** Every scene of every run of one viewport, in one Chrome: the screen by itself on an account that never chose, from the chip otherwise. */
 async function runChoiceView(view: ChoiceView): Promise<Map<string, Map<string, ChoiceMeasure>>> {
   const session = await openPage(CHROME!, outDir, { label: `choice-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
@@ -321,10 +350,96 @@ async function runChoiceView(view: ChoiceView): Promise<Map<string, Map<string, 
       }
       byRun.set(run.id, byScene);
     }
+    // D2 — the screen as it closes, once per view, after its scenes: its
+    // failure recorded on its own, the scenes measured above kept.
+    try {
+      choiceClosings.set(view.id, await runChoiceClosing(session, view.runs[0]!));
+    } catch (error) {
+      failures.set(`choice-closing-${view.id}`, error);
+    }
     return byRun;
   } finally {
     await session.close();
   }
+}
+
+/**
+ * PR #306, fix round 1, D2 — the choice screen as it CLOSES. Reopened from
+ * the chip on a page scrolled a little — the chip pressed where a reader can
+ * press it —, then closed by its button; and mandatory, closed by the first
+ * choice, which the page stamps as the server does. What scrolls before,
+ * with the screen open, and once it is gone.
+ */
+async function runChoiceClosing(session: PageSession, run: ChoiceRun): Promise<ChoiceClosing> {
+  const scrollNow = () => session.evaluate<ScrollMeasure>('window.__page.measureScroll()');
+
+  await session.navigate(`choice=choice-change&theme=${run.theme}&lang=${run.lang}`);
+  await scroll(session, SCROLLED_BEFORE_CHIP);
+  const clear = await session.evaluate<boolean>('window.__page.hit("[data-level-chip]")');
+  const before = await scrollNow();
+  await call(session, 'click("[data-level-chip]")');
+  await session.waitFor(OFFERS_DRAWN, 'the three offers, from the chip');
+  await settle(session);
+  const open = await scrollNow();
+  await call(session, 'click("[data-formula-choice-close]")');
+  await session.waitFor(SCREEN_GONE, 'the screen gone, closed by its button');
+  await settle(session);
+  const closed = await scrollNow();
+
+  await session.navigate(`choice=choice-first&theme=${run.theme}&lang=${run.lang}`);
+  await session.waitFor(OFFERS_DRAWN, 'the three offers of the mandatory screen');
+  await settle(session);
+  const mandatoryOpen = await scrollNow();
+  await call(session, `click(${JSON.stringify('[data-formula-offer="gardener"] > button')})`);
+  await session.waitFor(SCREEN_GONE, 'the mandatory screen gone, on the first choice');
+  await settle(session);
+  const mandatoryClosed = await scrollNow();
+
+  // PR #306, fix round 1, R2 — the two doors where an overlay of the page is
+  // there as the screen opens, each holding MUI's own lock (neither passes
+  // `disableScrollLock`): the Customize panel, left open under the screen;
+  // and « Voir les formules » of a refused creation, which closes the
+  // creation dialog as it opens the screen. The page scrolled a little first.
+  await session.navigate(`choice=choice-change&theme=${run.theme}&lang=${run.lang}`);
+  await scroll(session, SCROLLED_BEFORE_CHIP);
+  await openPanel(session);
+  await call(session, 'click("[data-panel-change-formula]")');
+  await session.waitFor(OFFERS_DRAWN, 'the three offers, from the panel');
+  await settle(session);
+  const panelOpen = await scrollNow();
+  await call(session, 'click("[data-formula-choice-close]")');
+  await session.waitFor(SCREEN_GONE, 'the screen gone, the panel still open');
+  await settle(session);
+  const panelScreenGone = await scrollNow();
+  // The focus is back on the panel's link: Escape closes the panel.
+  await session.press('Escape');
+  await session.waitFor('!document.querySelector("[data-panel-widgets]")', 'the panel closed');
+  await settle(session);
+  const panelClosed = await scrollNow();
+
+  await session.navigate(`level=gardener&theme=${run.theme}&lang=${run.lang}&create=limit`);
+  await scroll(session, SCROLLED_BEFORE_CHIP);
+  await call(session, 'click("[data-create-garden]")');
+  await session.waitFor('document.querySelector("[data-create-name] input")', 'the creation dialog');
+  await call(session, 'fill("[data-create-name] input", "Quatrième jardin")');
+  await session.waitFor('!document.querySelector("[data-create-submit]").disabled', 'the submit button live');
+  await call(session, 'click("[data-create-submit]")');
+  await session.waitFor('document.querySelector("[data-create-refusal]")', 'the refusal said');
+  await call(session, 'click("[data-create-refusal] button")');
+  await session.waitFor(OFFERS_DRAWN, 'the three offers, from « Voir les formules »');
+  await settle(session);
+  const createOpen = await scrollNow();
+  await call(session, 'click("[data-formula-choice-close]")');
+  await session.waitFor(SCREEN_GONE, 'the screen gone, opened by « Voir les formules »');
+  await settle(session);
+  const createClosed = await scrollNow();
+
+  return {
+    chip: { clear, before, open, closed },
+    mandatory: { open: mandatoryOpen, closed: mandatoryClosed },
+    panel: { open: panelOpen, closed: panelScreenGone, panelClosed },
+    create: { open: createOpen, closed: createClosed },
+  };
 }
 
 /** The creation refused by the formula's limit, then by a session that expired, in one Chrome. */
@@ -1253,6 +1368,84 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
           .filter((button) => button.top < 0 || button.bottom > fold);
         expect(below, `${id} ${name}: the fold at ${fold} px, the panel at ${screen.rect.y}, the buttons at ${JSON.stringify(screen.offers.map((offer) => offer.button.rect))}`).toEqual([]);
       }
+    });
+
+    // SMA-448, PR #306, fix round 1 (L1, Alexandre 01/10: « Oui on peut la
+    // rendre plus visible, ça me va bien »): the line of the Terms in the
+    // colour of the lead it follows — no longer the secondary grey, in
+    // which a visual pass once missed it —, « les lire » as it was. Read on
+    // what is painted behind it, by day and by night, on every screen that
+    // draws it.
+    it('the line of the Terms on every mandatory screen: in the colour of the lead it follows, by day and by night, read at 4.5:1 or more — and none from the chip (L1)', () => {
+      const LEADS = { fr: 'Trois façons de jardiner avec SmartCrops.', en: 'Three ways to garden with SmartCrops.' } as const;
+      for (const run of CHOICE_RUNS) {
+        for (const scene of CHOICE_SCENES) {
+          const { terms } = choiceOf(run.id, scene.name);
+          const label = `${run.id} ${scene.name}`;
+          if (scene.opened === 'chip') {
+            expect(terms, label).toBeNull();
+            continue;
+          }
+          if (!terms) throw new Error(`${label}: no line of the Terms on the mandatory screen`);
+          expect(terms.lead?.text, `${label}: the lead`).toMatch(LEADS[run.lang]);
+          expect(terms.color, `${label}: the line, against the lead`).toBe(terms.lead?.color);
+          expect(terms.ratio, `${label}: ${terms.color} on ${terms.background}`).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    });
+
+    // SMA-448, PR #306, fix round 1 (D2, Alexandre's visual pass 01/10: « il
+    // y a 2 scrollbars sur le côté de l'écran quand ce dialog container
+    // s'ouvre […] on peut voir la page de fond scroller quand on scrolle plus
+    // bas que le maximum ou plus haut que le max »): while the screen is
+    // open, ONE thing scrolls — its container —, the page under it does not,
+    // and a wheel at either end of the screen stays there. In every
+    // situation: the first visit and the others mandatory, and the chip.
+    it.each(CHOICE_RUNS.map((run) => run.id))('%s: one scroll while the screen is open — its container, the wheel held at its ends —, the page under it locked, in every situation (D2)', (id) => {
+      for (const name of SCENE_NAMES) {
+        const { scroll } = choiceOf(id, name);
+        const label = `${id} ${name}: ${JSON.stringify(scroll)}`;
+        // Never a pass on nothing: the page under the screen is taller than the window.
+        expect(scroll.page.maxScroll, label).toBeGreaterThan(0);
+        expect([...(scroll.page.scrollable ? ['the page'] : []), ...scroll.screen.map((scroller) => scroller.label)], label).toEqual(['MuiDialog-container']);
+        expect(scroll.page.overflowY, label).toBe('hidden');
+        expect(scroll.screen[0]?.overscroll, label).toBe('contain');
+      }
+    });
+
+    it.each(CHOICE_VIEWS.map((view) => view.id))('%s: the page given back once the screen is gone — scrollable again, where it stood: reopened from the chip on a page scrolled a little and closed by its button; mandatory, closed by the first choice (D2)', (viewId) => {
+      const closing = choiceClosings.get(viewId);
+      if (!closing) throw new Error(`No closing of the choice screen at ${viewId}: ${String(failures.get(`choice-closing-${viewId}`) ?? failures.get(`choice-${viewId}`) ?? 'not run')}`);
+      const { chip, mandatory } = closing;
+      // The chip pressed where a reader can press it: the page scrolled, nothing drawn over the chip.
+      expect({ clear: chip.clear, scrollY: chip.before.page.scrollY, scrollable: chip.before.page.scrollable }, `${viewId} before the chip`).toEqual({ clear: true, scrollY: SCROLLED_BEFORE_CHIP, scrollable: true });
+      // Open: locked, where it stood.
+      expect({ scrollable: chip.open.page.scrollable, scrollY: chip.open.page.scrollY }, `${viewId} from the chip, open`).toEqual({ scrollable: false, scrollY: SCROLLED_BEFORE_CHIP });
+      expect(mandatory.open.page.scrollable, `${viewId} mandatory, open`).toBe(false);
+      // Gone: the page scrolls again, from where it stood.
+      const given = (measure: ScrollMeasure) => ({ overflowY: measure.page.overflowY, scrollable: measure.page.scrollable, scrollY: measure.page.scrollY, screen: measure.screen });
+      expect(given(chip.closed), `${viewId} from the chip, closed`).toEqual({ overflowY: 'scroll', scrollable: true, scrollY: SCROLLED_BEFORE_CHIP, screen: [] });
+      expect(given(mandatory.closed), `${viewId} mandatory, closed by the first choice`).toEqual({ overflowY: 'scroll', scrollable: true, scrollY: 0, screen: [] });
+    });
+
+    // PR #306, fix round 1, R2 — the screen's own lock meets MUI's: the
+    // Customize panel and the creation dialog lock the page themselves (they
+    // do not pass `disableScrollLock`). Over the panel left open, the screen
+    // must give the page back to the panel's lock — still locked — and the
+    // panel, once closed, to the reader; from « Voir les formules », the page
+    // comes back once the screen is gone. Where it stood, each time.
+    it.each(CHOICE_VIEWS.map((view) => view.id))('%s: the two doors where another overlay holds the page — the Customize panel left open under the screen, and « Voir les formules » of a refused creation —: one scroll while the screen is open, the page given back where it stood once the last overlay is gone (D2)', (viewId) => {
+      const closing = choiceClosings.get(viewId);
+      if (!closing) throw new Error(`No closing of the choice screen at ${viewId}: ${String(failures.get(`choice-closing-${viewId}`) ?? failures.get(`choice-${viewId}`) ?? 'not run')}`);
+      const { panel, create } = closing;
+      const state = (measure: ScrollMeasure) => ({ overflowY: measure.page.overflowY, scrollable: measure.page.scrollable, scrollY: measure.page.scrollY, screen: measure.screen });
+      const OPEN = { overflowY: 'hidden', scrollable: false, scrollY: SCROLLED_BEFORE_CHIP, screen: [{ label: 'MuiDialog-container', overscroll: 'contain' }] };
+      const GIVEN_BACK = { overflowY: 'scroll', scrollable: true, scrollY: SCROLLED_BEFORE_CHIP, screen: [] };
+      expect(state(panel.open), `${viewId} from the panel, open`).toEqual(OPEN);
+      expect(state(panel.closed), `${viewId} from the panel, the screen gone, the panel still open`).toEqual({ ...OPEN, screen: [] });
+      expect(state(panel.panelClosed), `${viewId} from the panel, the panel closed too`).toEqual(GIVEN_BACK);
+      expect(state(create.open), `${viewId} from « Voir les formules », open`).toEqual(OPEN);
+      expect(state(create.closed), `${viewId} from « Voir les formules », closed`).toEqual(GIVEN_BACK);
     });
 
     // SMA-448, PR #297, fix round 1 (S3 — GitHub G2): the tone of a cell of

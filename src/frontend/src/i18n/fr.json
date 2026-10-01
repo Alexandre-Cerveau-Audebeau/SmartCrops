@@ -356,6 +356,9 @@
     "choice": {
       "title": "Choisissez votre formule",
       "lead": "Trois façons de jardiner avec SmartCrops. Toutes sont gratuites pour le moment, et vous pourrez en changer à tout moment.",
+      "termsNotice": "Nos conditions d’utilisation et notre politique de confidentialité évoluent avec les formules —",
+      "termsLink": "les lire",
+      "termsNewTab": "(nouvel onglet)",
       "welcome": "Bienvenue. Avant d’ouvrir vos jardins, choisissez la formule qui vous ressemble. Vous pourrez en changer quand vous voudrez, dans les deux sens, sans rien perdre.",
       "existing_one": "Vous avez {{count}} jardin. Votre formule actuelle est présélectionnée : gardez-la en un clic, ou choisissez-en une autre. Rien ne sera supprimé.",
       "existing_other": "Vous avez {{count}} jardins. Votre formule actuelle est présélectionnée : gardez-la en un clic, ou choisissez-en une autre. Rien ne sera supprimé.",
@@ -397,7 +400,7 @@
           "Le plan de chaque jardin, en aperçu",
           "La météo du jour, sur chaque carte",
           "La tâche du jour, sur chaque carte",
-          "Le nombre de plantes et la surface de chaque jardin"
+          "Le nombre de plantes et la taille de chaque jardin"
         ],
         "gardener": [
           "Un tableau de bord de widgets, que vous composez",
@@ -484,7 +487,7 @@
             "label": "Déplacer et agrandir ses widgets",
             "novice": "Non — il n’y a rien à régler",
             "gardener": "Oui — trois tailles",
-            "expert": "Oui — trois tailles"
+            "expert": "Oui — trois tailles, et la Pleine largeur"
           },
           "widgets": {
             "label": "Ajouter ou retirer des widgets",
@@ -1254,7 +1257,7 @@
     "googleAccount": "Votre compte utilise la connexion Google. La gestion du mot de passe n'est pas disponible.",
     "dangerZone": "Zone de danger",
     "exportTitle": "Exporter vos données",
-    "exportBody": "Téléchargez tout ce que le service détient sur vous — profil, jardins, plans, notes de placement et suggestions de plantes — dans un fichier JSON (droit RGPD à la portabilité).",
+    "exportBody": "Téléchargez vos données — profil (dont votre formule), jardins, plans, notes de placement et suggestions de plantes — dans un fichier JSON (droit RGPD à la portabilité).",
     "exportButton": "Télécharger mes données",
     "exportError": "Impossible d'exporter vos données. Veuillez réessayer.",
     "deleteTitle": "Supprimer votre compte",
@@ -2153,11 +2156,11 @@
   "legal": {
     "layout": {
       "lastUpdated": "Dernière mise à jour :",
-      "updatedDate": "22 septembre 2026",
       "courtesy": "Version originale française — en cas de divergence avec la traduction, la version française fait foi."
     },
     "mentions": {
       "title": "Mentions légales",
+      "updatedDate": "22 septembre 2026",
       "subtitle": "Loi n° 2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN)",
       "s01": {
         "title": "Éditeur du site",
@@ -2192,6 +2195,7 @@
     },
     "privacy": {
       "title": "Politique de confidentialité",
+      "updatedDate": "1er octobre 2026",
       "s01": {
         "title": "Qui est responsable du traitement ?",
         "body": "Le responsable du traitement des données personnelles collectées sur **SmartCrops** est l'éditeur du site : **Alexandre Cerveau Audebeau**, joignable à **contact@smartcrops.fr**. **SmartCrops** est un projet personnel, gratuit et sans finalité commerciale."
@@ -2224,10 +2228,16 @@
             "purpose": "Personnalisation du compte",
             "basis": "Exécution du contrat"
           },
+          "formula": {
+            "name": "Formule et disposition du tableau de bord",
+            "data": "Votre formule (Novice, Jardinier ou Expert) et la date de votre dernier choix ; disposition de la page « Mes Jardins » (ordre, taille, visibilité et réglages des widgets — par exemple les chiffres clés affichés, le nombre de jardins affichés et leur tri, le jardin filtré dans les compteurs), conservée pour la formule en cours et pour chaque formule quittée",
+            "purpose": "Appliquer les limites et la présentation de votre formule ; vous présenter l'écran de choix une fois, à votre première visite ; vous rendre votre tableau de bord tel que vous l'avez composé, y compris lorsque vous revenez à une formule",
+            "basis": "Exécution du contrat"
+          },
           "content": {
             "name": "Contenus créés",
-            "data": "Jardins (nom, description, plan, plantes placées), notes, suggestions de plantes",
-            "purpose": "Fourniture du service (sauvegarde et affichage de vos jardins)",
+            "data": "Jardins (nom, description, plan, plantes placées, date de votre dernière ouverture de chaque jardin, rang de chacun dans votre ordre personnalisé si vous en définissez un), notes, suggestions de plantes",
+            "purpose": "Fourniture du service (sauvegarde et affichage de vos jardins ; tri de vos jardins par dernière ouverture ou dans votre ordre personnalisé)",
             "basis": "Exécution du contrat"
           },
           "location": {
@@ -2290,6 +2300,7 @@
         "intro": "Durées de conservation :",
         "items": {
           "account": "**Compte et contenus associés** — durée de vie du compte ; suppression effective dans un délai de 30 jours après suppression du compte.",
+          "formula": "**Formule, date du choix et dispositions du tableau de bord** — durée de vie du compte ; effacées avec lui, dans les mêmes conditions que le compte et ses contenus. Une disposition mise de côté pour une formule que vous avez quittée est conservée tant que votre compte existe, pour vous la rendre si vous revenez à cette formule. La date de dernière ouverture d'un jardin et son rang dans votre ordre personnalisé sont conservés jusqu'à la suppression de ce jardin ou du compte, puis effacés dans les mêmes conditions.",
           "location": "**Localisation des jardins et du profil** — jusqu'à son retrait, la suppression du jardin ou du compte. Les prévisions météo reçues du fournisseur restent en mémoire du serveur au plus 60 minutes et ne sont jamais enregistrées en base de données.",
           "logs": "**Journaux techniques** — 12 mois maximum.",
           "contact": "**Messages de contact** — 12 mois après le dernier échange."
@@ -2302,7 +2313,7 @@
       "s07": {
         "title": "Quels sont vos droits ?",
         "p1": "Conformément au RGPD et à la loi Informatique et Libertés, vous disposez des droits suivants sur vos données : **accès**, **rectification**, **effacement**, **limitation du traitement**, **opposition**, **portabilité**, ainsi que du droit de définir des directives post-mortem.",
-        "p2": "**Pour exercer ces droits** : la **suppression de votre compte** et l'**export de vos données** (profil, jardins, plans, notes et suggestions de plantes, au format JSON) s'effectuent directement depuis l'application, sur votre page Profil. Vous pouvez également supprimer vous-même vos contenus (jardins) depuis l'application. Pour les autres droits (accès, rectification, limitation, opposition, directives post-mortem) : écrivez à **contact@smartcrops.fr** depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée) ; réponse sous un mois.",
+        "p2": "**Pour exercer ces droits** : la **suppression de votre compte** et l'**export de vos données** (profil — dont votre formule et la date de votre choix —, jardins — dont la date de dernière ouverture et le rang de chacun —, plans, notes et suggestions de plantes, au format JSON ; la disposition de votre tableau de bord, réglages de ses widgets compris, n'y figure pas) s'effectuent directement depuis l'application, sur votre page Profil. Vous pouvez également supprimer vous-même vos contenus (jardins) depuis l'application. Pour les autres droits (accès, rectification, limitation, opposition, directives post-mortem) : écrivez à **contact@smartcrops.fr** depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée) ; réponse sous un mois.",
         "p3": "Si vous estimez que vos droits ne sont pas respectés, vous pouvez introduire une réclamation auprès de la **CNIL** (www.cnil.fr)."
       },
       "s08": {
@@ -2365,6 +2376,7 @@
     },
     "terms": {
       "title": "Conditions générales d'utilisation (CGU)",
+      "updatedDate": "1er octobre 2026",
       "s01": {
         "title": "Objet",
         "body": "Les présentes CGU encadrent l'utilisation de **SmartCrops** (le « Service »), application web de gestion de jardins virtuels : bibliothèque de plantes, planification de jardin et fonctionnalités associées. L'utilisation du Service vaut acceptation des présentes CGU."
@@ -2372,8 +2384,18 @@
       "s02": {
         "title": "Accès au Service",
         "items": {
-          "free": "Le Service est **gratuit**. La consultation de la bibliothèque est libre ; certaines fonctionnalités (création de jardins, profil, suggestions) nécessitent un compte.",
+          "free": "Le Service est **gratuit**. La consultation de la bibliothèque est libre ; certaines fonctionnalités (création de jardins, profil, suggestions) nécessitent un compte. Les trois formules décrites à l'article « Formules » sont **toutes gratuites (0 €)** : aucun paiement ne vous est demandé. Si une formule payante est un jour proposée, **aucune formule ne deviendra payante sans votre accord explicite**.",
           "asIs": "Le Service est un **projet personnel en développement actif** : il est fourni « en l'état », sans engagement de disponibilité, de pérennité ni de niveau de service. Des fonctionnalités peuvent évoluer, être ajoutées ou retirées."
+        }
+      },
+      "formulas": {
+        "title": "Formules",
+        "items": {
+          "intro": "Le Service propose trois formules — **Novice**, **Jardinier** et **Expert** — qui déterminent le nombre de jardins que vous pouvez créer, la taille maximale de chaque jardin et la présentation de votre page « Mes Jardins ». Vous choisissez votre formule à votre première visite de cette page, puis vous pouvez en changer à tout moment depuis celle-ci.",
+          "limits": "**Novice** : jusqu'à **3 jardins**, chacun jusqu'à **20 × 20 cases**. **Jardinier** : jusqu'à **10 jardins**, chacun jusqu'à **50 × 50 cases**. **Expert** : jardins en **nombre illimité**, chacun jusqu'à **100 × 100 cases**.",
+          "applied": "Ces limites sont appliquées par le Service : au-delà du nombre de jardins permis, la création d'un nouveau jardin est refusée ; au-delà de la taille permise, l'agrandissement d'un plan est refusé. Le message vous indique la limite en cause.",
+          "protection": "**Changer de formule ne supprime jamais un jardin, ni un plan, ni une plante placée.** Une formule trop petite pour vos jardins ne peut pas être choisie, et le Service vous dit pourquoi. La formule sur laquelle vous êtes vous reste acquise, même si vos jardins dépassent ses limites : vous gardez tout, et vous ne pouvez simplement plus ajouter de jardin ni agrandir un plan au-delà de ces limites (le réduire reste possible).",
+          "switch": "Vous pouvez changer de formule à tout moment, dans les deux sens. La disposition de votre tableau de bord est conservée pour chaque formule que vous quittez et vous est rendue lorsque vous y revenez. Les principales fonctionnalités comprises dans chaque formule sont présentées sur l'écran de choix et peuvent évoluer avec le Service (voir « Accès au Service »). Les données qu'enregistrent les formules sont décrites dans la Politique de confidentialité."
         }
       },
       "s03": {
@@ -2414,7 +2436,7 @@
       },
       "s09": {
         "title": "Modification des CGU",
-        "body": "Les CGU peuvent être modifiées pour suivre l'évolution du Service. La version applicable est celle en ligne, datée en tête de page. En cas de modification substantielle, une information sera affichée ; la poursuite de l'utilisation vaut acceptation."
+        "body": "Les CGU peuvent être modifiées pour suivre l'évolution du Service. La version applicable est celle en ligne, datée en tête de page : la date indique la dernière modification. En cas de modification substantielle, une information est affichée dans l'application — ainsi, lors de l'introduction des formules, sur l'écran de choix de formule présenté une fois à chaque compte, à sa première visite de la page « Mes Jardins » ; la poursuite de l'utilisation vaut acceptation."
       },
       "s10": {
         "title": "Droit applicable",

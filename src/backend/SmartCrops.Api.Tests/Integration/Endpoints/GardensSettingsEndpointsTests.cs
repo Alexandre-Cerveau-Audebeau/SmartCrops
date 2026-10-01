@@ -290,6 +290,61 @@ public class GardensSettingsEndpointsTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    // ── DELETE /api/gardens/{id} — the opening and the place go with the garden ──
+
+    /// <summary>
+    /// SMA-448, the final text of the Terms and the policy, § 5.2, T2: the
+    /// policy says that the date a garden was last opened and its rank in the
+    /// custom order « are kept until that garden or the account is deleted,
+    /// then erased » — two columns of the garden's row, which goes with it
+    /// (<c>GardensController.DeleteGarden</c>). No test of
+    /// <c>DELETE /api/gardens/{id}</c> existed on develop. The garden opened
+    /// and ranked, deleted by its account: 204, its row gone; the account's
+    /// other garden, ranked too, stays as it was.
+    /// </summary>
+    [Fact]
+    public async Task DeleteGarden_Own_Returns204_TheRowGoes_WithItsOpeningAndPlace()
+    {
+        var userId = await SeedUserAsync("expert");
+        var gardenId = await SeedGardenAsync(userId, "Terrasse");
+        var other = await SeedGardenAsync(userId, "Balcon");
+        var opened = new DateTime(2026, 9, 20, 18, 45, 0, DateTimeKind.Utc);
+        await SetAsync(gardenId, lastOpenedAt: opened, sortOrder: 0);
+        await SetAsync(other, sortOrder: 1);
+        AuthAs(userId);
+        Assert.Equal(new Row(opened, Before, 0), await ReadRowAsync(gardenId));
+
+        var response = await Client.DeleteAsync($"/api/gardens/{gardenId}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.False(await GardenExistsAsync(gardenId), "the garden's row — its opening and its place in it — should be gone");
+        var rows = await ReadRowsAsync(userId);
+        Assert.Equal([other], rows.Keys);
+        Assert.Equal(new Row(null, Before, 1), rows[other]);
+    }
+
+    /// <summary>
+    /// The other half of T2: a garden of another account answers 404 — the
+    /// gardens' routes never say 403, which would name it — and nothing of
+    /// it is deleted, its opening and its place included.
+    /// </summary>
+    [Fact]
+    public async Task DeleteGarden_AnotherUsersGarden_Returns404_AndDeletesNothing()
+    {
+        var mine = await SeedUserAsync("expert");
+        var theirs = await SeedUserAsync("expert");
+        var theirGarden = await SeedGardenAsync(theirs, "Their plot");
+        var opened = new DateTime(2026, 9, 20, 18, 45, 0, DateTimeKind.Utc);
+        await SetAsync(theirGarden, lastOpenedAt: opened, sortOrder: 3);
+        AuthAs(mine);
+
+        var response = await Client.DeleteAsync($"/api/gardens/{theirGarden}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.True(await GardenExistsAsync(theirGarden));
+        Assert.Equal(new Row(opened, Before, 3), await ReadRowAsync(theirGarden));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private void AuthAs(string userId) =>
@@ -356,6 +411,14 @@ public class GardensSettingsEndpointsTests : IntegrationTestBase
     }
 
     private sealed record Row(DateTime? LastOpenedAt, DateTime UpdatedAt, int? SortOrder);
+
+    /// <summary>Whether a row with this id is in the table at all — whoever owns it.</summary>
+    private async Task<bool> GardenExistsAsync(Guid gardenId)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        return await db.Gardens.AsNoTracking().AnyAsync(g => g.Id == gardenId);
+    }
 
     private async Task<Row> ReadRowAsync(Guid gardenId)
     {

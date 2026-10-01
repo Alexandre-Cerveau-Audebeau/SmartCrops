@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
@@ -30,6 +30,9 @@ interface Props {
   onChoose: (level: DashboardLevel) => void;
 }
 
+/** The two axes the screen locks on <html> — each given back as it stood (PR #306, fix round 1, D2). */
+const PAGE_AXES = ['overflow-x', 'overflow-y'] as const;
+
 /**
  * SMA-448, lot F3, step L5 — THE CHOICE OF FORMULA behind the chip (V3-01;
  * contract v3 § 4.2), in place of the provisional dialog of lot F2 (N3),
@@ -54,6 +57,33 @@ export default function FormulaChooserDialog({ open, mandatory, switching, refus
   // No way out while mandatory, and none while a switch is on the wire (S5).
   const locked = mandatory || switching;
 
+  // PR #306, fix round 1, D2 (Alexandre's visual pass, 01/10: « il y a 2
+  // scrollbars sur le côté de l'écran quand ce dialog container s'ouvre »)
+  // — the screen LOCKS THE PAGE under it itself. `scroll="body"` makes its
+  // container scroll; `disableScrollLock` (the overlays' rule,
+  // `docs/coding-guidelines.md`: nothing shifts on open) left the page
+  // scrolling under it, its bar kept by `html { overflow-y: scroll }` — two
+  // bars, and the wheel past the screen's end scrolled the page. MUI's lock
+  // is decided by the first overlay of the page (`ModalManager.mount`): the
+  // Customize panel and the creation dialog take it, the chip and the
+  // mandatory screen never did. So a style written on <html> as the screen
+  // opens, given back EXACTLY as it closes or unmounts — over the panel left
+  // open under it, or the creation dialog « Voir les formules » closes, what
+  // stood before stands after. The reserved gutter (`scrollbar-gutter:
+  // stable`) keeps the width: nothing moves behind. A style, no state.
+  useEffect(() => {
+    if (!open) return;
+    const style = document.documentElement.style;
+    const before = PAGE_AXES.map((axis) => ({ axis, value: style.getPropertyValue(axis), priority: style.getPropertyPriority(axis) }));
+    for (const axis of PAGE_AXES) style.setProperty(axis, 'hidden');
+    return () => {
+      for (const { axis, value, priority } of before) {
+        if (value) style.setProperty(axis, value, priority);
+        else style.removeProperty(axis);
+      }
+    };
+  }, [open]);
+
   return (
     <Dialog
       open={open}
@@ -76,6 +106,9 @@ export default function FormulaChooserDialog({ open, mandatory, switching, refus
             ? { bgcolor: 'background.default' }
             : { bgcolor: tk.scrim, backdropFilter: 'blur(2.5px)', WebkitBackdropFilter: 'blur(2.5px)' },
         },
+        // D2 — the one scroll of the screen keeps the wheel at its ends:
+        // never passed on to the page under it.
+        container: { sx: { overscrollBehavior: 'contain' } },
         paper: {
           sx: {
             // The panel descends enough to let « Mes Jardins » and the chip

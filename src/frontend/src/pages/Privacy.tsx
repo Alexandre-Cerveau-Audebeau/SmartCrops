@@ -10,6 +10,7 @@ const DATA_ROW_KEYS = [
   'account',
   'google',
   'profile',
+  'formula',
   'content',
   'location',
   'session',
@@ -32,13 +33,15 @@ const COOKIE_ROW_KEYS = [
  * §4.3). SMA-441: section 03 « Localisation de vos jardins » (the garden /
  * profile location and the WeatherAPI.com processor), inserted right after the
  * data table — the i18n keys s03…s10 keep their names and are displayed one
- * number later.
+ * number later. SMA-448: the formulas — the row « Formule et disposition du
+ * tableau de bord » after the profile's, and their retention point after the
+ * account's.
  */
 export default function Privacy() {
   const { t } = useTranslation();
 
   return (
-    <LegalPageLayout title={t('legal.privacy.title')}>
+    <LegalPageLayout title={t('legal.privacy.title')} updatedDate={t('legal.privacy.updatedDate')}>
       <LegalSection number="01" title={t('legal.privacy.s01.title')}>
         <LegalParagraph text={t('legal.privacy.s01.body')} />
       </LegalSection>
@@ -99,6 +102,7 @@ export default function Privacy() {
         <LegalList
           items={[
             t('legal.privacy.s05.items.account'),
+            t('legal.privacy.s05.items.formula'),
             t('legal.privacy.s05.items.location'),
             t('legal.privacy.s05.items.logs'),
             t('legal.privacy.s05.items.contact'),
