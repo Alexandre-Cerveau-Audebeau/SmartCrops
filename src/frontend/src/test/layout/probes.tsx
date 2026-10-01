@@ -75,8 +75,26 @@ type ZoneProbe = 'zone-past-card' | 'zone-fold' | 'x-hidden-y-auto' | 'x-auto-y-
  */
 type TrackProbe = 'pinned-overflow' | 'wide-short';
 
+/**
+ * SMA-437, lot V3-06, step E2 (contract A-25) — the probe of a foot STUCK AT
+ * THE BOTTOM of a zone, the form of the Tips and To-do invitations in Large
+ * (`position: sticky; bottom: 0`, A-21, A-22): opaque, it hides what scrolls
+ * under it, as the month axis stuck at the top of the calendar does — what
+ * it covers is not an overlap, what it leaves uncovered is still read.
+ *
+ * `sticky-foot`: the same 200 px card, a zone that fits it and scrolls, a foot
+ * of 40 px as its last child. At rest the foot covers the zone's last 40 px:
+ * one line runs under it whole, another STRADDLES its top edge — half seen,
+ * half covered — and a second text is laid over the seen half, on purpose.
+ * The instrument must report that overlap, above the foot, and no other: the
+ * line under the foot is covered, not overlapped. Read as a column stuck to
+ * the right — `top` alone said « vertical » — the straddling line and the
+ * text over it were hidden WHOLE, and the overlap went unseen.
+ */
+type StickyProbe = 'sticky-foot';
+
 export interface ProbeScene extends LayoutScene {
-  probe: ZoneProbe | TrackProbe;
+  probe: ZoneProbe | TrackProbe | StickyProbe;
 }
 
 export const PROBE_SCENES: ProbeScene[] = [
@@ -87,6 +105,7 @@ export const PROBE_SCENES: ProbeScene[] = [
   { name: 'probe-card-scrolls', key: 'tips', size: 'medium', weather: 'all', probe: 'card-scrolls' },
   { name: 'probe-pinned-overflow', key: 'tips', size: 'small', weather: 'all', probe: 'pinned-overflow' },
   { name: 'probe-wide-short', key: 'tips', size: 'wide', weather: 'all', probe: 'wide-short' },
+  { name: 'probe-sticky-foot', key: 'tips', size: 'medium', weather: 'all', probe: 'sticky-foot' },
 ];
 
 /**
@@ -182,6 +201,7 @@ const spacer = (height: number) => <div aria-hidden style={{ height }} />;
  */
 export function probeWidget(scene: ProbeScene): ReactNode {
   if (scene.probe === 'pinned-overflow' || scene.probe === 'wide-short') return trackProbe(scene.probe);
+  if (scene.probe === 'sticky-foot') return stickyFootProbe();
   const zone = ZONES[scene.probe];
   return (
     <div
@@ -205,6 +225,59 @@ export function probeWidget(scene: ProbeScene): ReactNode {
         {spacer(130)}
         {line('past-fold', 'Past the fold of the zone')}
         {spacer(60)}
+      </div>
+    </div>
+  );
+}
+
+/** The foot of the sticky probe: 40 px, opaque — what the invitations' foot is to the tips that scroll under it. */
+const FOOT = 40;
+/** The zone of the sticky probe fits the card's content box: 200 px less the padding and the border, on both sides. */
+const STICKY_ZONE = CARD_HEIGHT - 2 * PADDING - 2;
+
+/**
+ * The card of the sticky probe (SMA-437, lot V3-06, E2): the widgets' frame,
+ * a zone of {@link STICKY_ZONE} px that scrolls, holding — from its top — a
+ * line, then the line that STRADDLES the foot's top edge at rest (its top 10
+ * px above it), the text laid over that line's seen half (2 px higher, one
+ * line tall), a line wholly under the foot, more lines past the fold, and
+ * the foot, stuck at the zone's bottom, its last child.
+ */
+function stickyFootProbe(): ReactNode {
+  const footTop = STICKY_ZONE - FOOT;
+  return (
+    <div
+      data-widget="probe"
+      style={{
+        height: CARD_HEIGHT,
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        padding: PADDING,
+        border: '1px solid #cccccc',
+        borderRadius: 12,
+        background: '#ffffff',
+        fontFamily: 'Inter, sans-serif',
+      }}
+    >
+      <div data-probe-zone style={{ position: 'relative', height: STICKY_ZONE, overflowY: 'auto' }}>
+        {line('first', 'The first line of the zone')}
+        {spacer(footTop - 10 - LINE)}
+        {line('straddle', 'Straddling the foot')}
+        <p
+          data-probe-line="overlay"
+          style={{ position: 'absolute', top: footTop - 12, left: 0, margin: 0, height: LINE, lineHeight: `${LINE}px`, fontSize: 14, whiteSpace: 'nowrap' }}
+        >
+          Overlay over the straddling line
+        </p>
+        {line('under', 'Wholly under the foot')}
+        {spacer(130)}
+        {line('past-fold', 'Past the fold of the zone')}
+        <div
+          data-probe-foot
+          style={{ position: 'sticky', bottom: 0, height: FOOT, boxSizing: 'border-box', padding: '10px 0', background: '#ffffff' }}
+        >
+          {line('foot', 'The foot')}
+        </div>
       </div>
     </div>
   );

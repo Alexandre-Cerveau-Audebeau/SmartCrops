@@ -1469,6 +1469,26 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       }
     });
 
+    it('reads a foot stuck at the BOTTOM of a zone as it reads the axis stuck at the top: what it covers is hidden, what it leaves is seen — the one overlap above it is reported (SMA-437, lot V3-06, A-25)', () => {
+      // The probe: a zone whose last child is a 40 px foot, `position:
+      // sticky; bottom: 0` — the invitations' foot in Large (A-21, A-22). At
+      // rest a line runs wholly under it, another straddles its top edge, and
+      // a text is laid over the straddling line's seen half, on purpose. Read
+      // as a column stuck to the right — `top` alone meant « vertical » — the
+      // straddling line and the text over it were hidden whole, and that
+      // overlap went unseen; the line under the foot is covered, never an
+      // overlap of the foot's own text.
+      for (const run of RUNS) {
+        const probe = probeOf(run, 'probe-sticky-foot');
+        const seen = probe.overlaps
+          .filter((o) => Math.min(o.w, o.h) >= VISIBLE_OVERLAP_PX)
+          .map((o) => [o.a, o.b].sort().join(' ∩ '));
+        expect(seen, run.id).toEqual(['"Overlay over the straddling line" ∩ "Straddling the foot"']);
+        // Nothing of it is lost: the zone scrolls, the foot follows its fold.
+        expect(probe.hardClipped, run.id).toBe(0);
+      }
+    });
+
     it('measures the CSS rule the scenes rely on: `overflow-y: auto` declared alone computes `overflow-x` to `auto` in the engine (#12)', () => {
       // Every scrolling zone of the widgets declares `overflowY: 'auto'` and
       // nothing for the other axis. CSS Overflow 3 computes that axis to
