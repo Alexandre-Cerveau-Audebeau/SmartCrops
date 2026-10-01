@@ -208,6 +208,55 @@ public class FormulaSwitchTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// SMA-448 — « Changer de formule ne supprime jamais un jardin, ni un plan,
+    /// ni une plante placée » (the Terms, article 03; the final text of the
+    /// Terms and the policy, § 5.2, T3). The refusal moves nothing
+    /// (<see cref="PutCurrent_AFormulaTooSmall_Returns409_ProblemJson_WithItsReasons_AndMovesNothing"/>,
+    /// which does not count the gardens); the switch that GOES THROUGH was
+    /// proven for the layouts alone. An Expert with two gardens of 15 × 15 —
+    /// what the Novice holds —, each with a plan and placed plants, one
+    /// opened, both ranked (by their own routes): Expert → Gardener → Novice
+    /// → Expert, each switch 204, and after each the gardens read back from
+    /// the database are those of the start — the rows, the geometry, the cell
+    /// size, the plan, the placements, the opening, the place, the last
+    /// modification.
+    /// </summary>
+    [Fact]
+    public async Task PutCurrent_ASwitchDownAndBack_LeavesEveryGardenPlanAndPlacement_AsItWas()
+    {
+        var userId = await SeedUserAsync("expert");
+        var plant = await SeedPlantAsync();
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        await SeedGardenAsync(userId, first, 15, 15);
+        await SeedGardenAsync(userId, second, 15, 15);
+        await SeedPlacementAsync(first, plant, 0, 0, "by the door");
+        await SeedPlacementAsync(first, plant, 4, 6, null);
+        await SeedPlacementAsync(second, plant, 14, 14, "the far corner");
+        AuthAs(userId);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PostAsync($"/api/gardens/{first}/open", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync("/api/gardens/order", new { ids = new[] { second, first } })).StatusCode);
+        var expertLayout = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. DashboardPresets.For("expert").Select(b => new SaveDashboardBlockRequest(b.Key, b.Size, b.Hidden, null))]);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(PreferencesUrl, expertLayout)).StatusCode);
+
+        var start = await GardensAsync(userId);
+        Assert.Equal(new[] { first, second }.Order(), start.Select(g => g.Id).Order());
+        Assert.Equal(3, start.Sum(g => g.PlacementCount));
+        Assert.All(start, g => Assert.Equal(((int?)15, (int?)15, "50cm"), (g.LayoutWidth, g.LayoutHeight, g.CellSize)));
+        Assert.NotNull(start.Single(g => g.Id == first).LastOpenedAt);
+        Assert.Equal(((int?)1, (int?)0), (start.Single(g => g.Id == first).SortOrder, start.Single(g => g.Id == second).SortOrder));
+
+        foreach (var formula in new[] { "gardener", "novice", "expert" })
+        {
+            Assert.Equal(HttpStatusCode.NoContent, (await SwitchAsync(formula)).StatusCode);
+            Assert.Equal(formula, (await AccountAsync(userId)).Formula);
+            Assert.Equal(start, await GardensAsync(userId));
+        }
+    }
+
+    /// <summary>
     /// « Votre formule — conservée » (Alexandre, 22/09 18:02): the formula an
     /// account is on stays its own even beyond its limits — choosing it again
     /// (« Garder Jardinier ») is accepted, stamps the deliberate choice, and
@@ -367,6 +416,71 @@ public class FormulaSwitchTests : IntegrationTestBase
             CellSize = "50cm",
         });
         await db.SaveChangesAsync();
+    }
+
+    private async Task<Guid> SeedPlantAsync()
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = new Plant { Id = Guid.NewGuid(), ScientificName = $"Plant {Guid.NewGuid():N}", PlantTypeId = 1 };
+        db.Plants.Add(plant);
+        await db.SaveChangesAsync();
+        return plant.Id;
+    }
+
+    private async Task SeedPlacementAsync(Guid gardenId, Guid plantId, int row, int col, string? notes)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        db.GardenPlacements.Add(new GardenPlacement
+        {
+            Id = Guid.NewGuid(),
+            GardenId = gardenId,
+            PlantId = plantId,
+            StartRow = row,
+            StartCol = col,
+            SpanRows = 1,
+            SpanCols = 1,
+            Notes = notes,
+            PlacedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>A garden as stored, its placements included — a value, so two reads compare whole.</summary>
+    private sealed record GardenRow(
+        Guid Id,
+        string Name,
+        int? LayoutWidth,
+        int? LayoutHeight,
+        string? CellSize,
+        string? CellsJson,
+        DateTime UpdatedAt,
+        DateTime? LastOpenedAt,
+        int? SortOrder,
+        int PlacementCount,
+        string Placements);
+
+    /// <summary>The account's gardens read from the database, by id, each with its placements by id.</summary>
+    private async Task<List<GardenRow>> GardensAsync(string userId)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var gardens = await db.Gardens.AsNoTracking().Include(g => g.Placements)
+            .Where(g => g.UserId == userId).OrderBy(g => g.Id).ToListAsync();
+        return gardens.Select(g => new GardenRow(
+            g.Id,
+            g.Name,
+            g.LayoutWidth,
+            g.LayoutHeight,
+            g.CellSize,
+            g.CellsJson,
+            g.UpdatedAt,
+            g.LastOpenedAt,
+            g.SortOrder,
+            g.Placements.Count,
+            string.Join(" | ", g.Placements.OrderBy(p => p.Id).Select(p =>
+                $"{p.Id} {p.PlantId} {p.StartRow},{p.StartCol} {p.SpanRows}x{p.SpanCols} {p.Notes} {p.PlacedAt:O}")))).ToList();
     }
 
     private async Task<(string Formula, DateTime? ChosenAt)> AccountAsync(string userId)

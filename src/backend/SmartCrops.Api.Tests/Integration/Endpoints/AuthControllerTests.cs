@@ -10,6 +10,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartCrops.Api.Controllers;
+using SmartCrops.Api.DTOs;
+using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -1318,5 +1320,172 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal(JsonValueKind.Null, inheriting.GetProperty("latitude").ValueKind);
         Assert.Equal(JsonValueKind.Null, inheriting.GetProperty("longitude").ValueKind);
         Assert.Equal(JsonValueKind.Null, inheriting.GetProperty("locationResolvedAt").ValueKind);
+    }
+
+    // ── SMA-448: the dashboard layouts in the policy — erased with the account, left out of the export ──
+
+    /// <summary>The Expert's four chosen key figures — a setting of the layout, recognisable in any document.</summary>
+    private static readonly string[] ChosenFigures = ["cities", "free", "tips", "surface"];
+
+    /// <summary>The Expert preset, its key figures band carrying <see cref="ChosenFigures"/>.</summary>
+    private static SaveDashboardPreferencesRequest ExpertLayoutWithFigures() => new(
+        DashboardLayout.Levels.Expert,
+        [.. DashboardPresets.For("expert").Select(b => new SaveDashboardBlockRequest(
+            b.Key,
+            b.Size,
+            b.Hidden,
+            b.Key == "keyfigures" ? new() { ["figures"] = JsonSerializer.SerializeToElement(ChosenFigures) } : null))]);
+
+    /// <summary>The Gardener preset, its Gardens widget showing 8 gardens (<c>options.count</c>).</summary>
+    private static SaveDashboardPreferencesRequest GardenerLayoutWithCount() => new(
+        DashboardLayout.Levels.Gardener,
+        [.. DashboardPresets.For("gardener").Select(b => new SaveDashboardBlockRequest(
+            b.Key,
+            b.Size,
+            b.Hidden,
+            b.Key == "gardens" ? new() { ["count"] = JsonSerializer.SerializeToElement(8) } : null))]);
+
+    private Task<HttpResponseMessage> SwitchFormulaAsync(string formula) =>
+        Client.PutAsJsonAsync("/api/formulas/current", new { formula });
+
+    private Task<HttpResponseMessage> SaveLayoutAsync(SaveDashboardPreferencesRequest layout) =>
+        Client.PutAsJsonAsync("/api/dashboard/preferences", layout);
+
+    /// <summary>
+    /// An account's layouts through the real routes: at the Expert formula,
+    /// a layout of its own (<see cref="ExpertLayoutWithFigures"/>); then at
+    /// the Gardener's, another (<see cref="GardenerLayoutWithCount"/>) — the
+    /// switch puts the Expert's in the archive. One current row, one archived.
+    /// </summary>
+    private async Task GiveACurrentAndAnArchivedLayoutAsync(string userId)
+    {
+        AuthAs(userId);
+        Assert.Equal(HttpStatusCode.NoContent, (await SwitchFormulaAsync("expert")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SaveLayoutAsync(ExpertLayoutWithFigures())).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SwitchFormulaAsync("gardener")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SaveLayoutAsync(GardenerLayoutWithCount())).StatusCode);
+    }
+
+    /// <summary>The layouts as stored: the current rows of the account, and the archived rows by id with their formula and document.</summary>
+    private async Task<(List<string?> Current, Dictionary<Guid, (string Formula, string LayoutJson)> Archived)> LayoutRowsAsync(string userId)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var current = await db.UserDashboardPreferences.AsNoTracking()
+            .Where(p => p.UserId == userId).Select(p => p.LayoutJson).ToListAsync();
+        var archived = await db.SavedDashboardLayouts.AsNoTracking()
+            .Where(l => l.UserId == userId).ToDictionaryAsync(l => l.Id, l => (l.Formula, l.LayoutJson));
+        return (current, archived);
+    }
+
+    /// <summary>
+    /// SMA-448 — « Formule, date du choix et dispositions du tableau de bord —
+    /// durée de vie du compte ; effacées avec lui » (the policy's point on
+    /// retention; the final text of the Terms and the policy, § 5.2, T1 —
+    /// asked by the draft and by Alexandre on 28/09). An account at the Expert
+    /// formula ranks and opens its garden and saves its layout, passes to the
+    /// Gardener's — the Expert's layout archived — and saves another; a
+    /// NEIGHBOUR has a current and an archived layout too. Deleted, the
+    /// account leaves none of its layout rows — the archived ones looked up by
+    /// their ids, so a row cut loose from its account would still be seen —,
+    /// nor its garden; the neighbour's rows are untouched, and prove the
+    /// reads see rows (the scoping rule of
+    /// <see cref="DeleteAccount_UserWithGardens_RemovesUserGardensAndPlacements"/>).
+    /// </summary>
+    [Fact]
+    public async Task DeleteAccount_WithACurrentAndAnArchivedLayout_RemovesBothLayouts_AndItsGardens()
+    {
+        var (email, userId) = await RegisterUserAsync();
+        var (_, neighbourId) = await RegisterUserAsync();
+        await GiveACurrentAndAnArchivedLayoutAsync(neighbourId);
+        var gardenId = await SeedGardenWithPlacementAsync(userId, "Ouvert et rangé");
+        AuthAs(userId);
+        Assert.Equal(HttpStatusCode.NoContent, (await SwitchFormulaAsync("expert")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync("/api/gardens/order", new { ids = new[] { gardenId } })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PostAsync($"/api/gardens/{gardenId}/open", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SaveLayoutAsync(ExpertLayoutWithFigures())).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SwitchFormulaAsync("gardener")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await SaveLayoutAsync(GardenerLayoutWithCount())).StatusCode);
+
+        // Before: the account's two rows, its garden opened and ranked; the neighbour's two rows.
+        var before = await LayoutRowsAsync(userId);
+        Assert.Single(before.Current);
+        Assert.Equal(["expert"], before.Archived.Values.Select(row => row.Formula));
+        var neighbourBefore = await LayoutRowsAsync(neighbourId);
+        Assert.Single(neighbourBefore.Current);
+        Assert.Equal(["expert"], neighbourBefore.Archived.Values.Select(row => row.Formula));
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var garden = await db.Gardens.AsNoTracking().SingleAsync(g => g.Id == gardenId);
+            Assert.NotNull(garden.LastOpenedAt);
+            Assert.Equal(0, garden.SortOrder);
+        }
+
+        var response = await DeleteAccountAsync(email);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Null(await FindUserAsync(email));
+        Assert.Empty((await LayoutRowsAsync(userId)).Current);
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var archivedIds = before.Archived.Keys.ToList();
+            Assert.Equal(0, await db.SavedDashboardLayouts.CountAsync(l => archivedIds.Contains(l.Id) || l.UserId == userId));
+            Assert.Equal(0, await db.Gardens.CountAsync(g => g.Id == gardenId || g.UserId == userId));
+            Assert.Equal(0, await db.GardenPlacements.CountAsync(p => p.GardenId == gardenId));
+        }
+        var neighbourAfter = await LayoutRowsAsync(neighbourId);
+        Assert.Equal(neighbourBefore.Current, neighbourAfter.Current);
+        Assert.Equal(neighbourBefore.Archived, neighbourAfter.Archived);
+    }
+
+    /// <summary>
+    /// SMA-448 — « la disposition de votre tableau de bord, réglages de ses
+    /// widgets compris, n'y figure pas » (the policy, the export's
+    /// parenthesis; the final text, § 5.2, T4), the absence proven WITH the
+    /// data present (SMA-448 #45, B): an account with a current layout — its
+    /// Gardens widget showing 8 gardens — and an archived one — its four
+    /// chosen key figures —, both asserted in the database first. The export
+    /// holds exactly its five top-level keys, and nothing of either layout:
+    /// no block, no « keyfigures », none of the figures, no count.
+    /// </summary>
+    [Fact]
+    public async Task ExportAccount_CarriesNoDashboardLayout_NeitherTheCurrentNorTheArchived()
+    {
+        var (_, userId) = await RegisterUserAsync();
+        await GiveACurrentAndAnArchivedLayoutAsync(userId);
+
+        var (current, archived) = await LayoutRowsAsync(userId);
+        using (var currentDocument = JsonDocument.Parse(Assert.Single(current)!))
+        {
+            var gardens = currentDocument.RootElement.GetProperty("blocks").EnumerateArray().Single(b => b.GetProperty("key").GetString() == "gardens");
+            Assert.Equal(8, gardens.GetProperty("options").GetProperty("count").GetInt32());
+        }
+        var (formula, archivedJson) = Assert.Single(archived.Values);
+        Assert.Equal("expert", formula);
+        using (var archivedDocument = JsonDocument.Parse(archivedJson))
+        {
+            var band = archivedDocument.RootElement.GetProperty("blocks").EnumerateArray().Single(b => b.GetProperty("key").GetString() == "keyfigures");
+            Assert.Equal(ChosenFigures, band.GetProperty("options").GetProperty("figures").EnumerateArray().Select(f => f.GetString()));
+        }
+        AuthAs(userId);
+
+        var response = await Client.GetAsync("/api/auth/account/export");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var raw = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(raw);
+        Assert.Equal(
+            ["exportedAt", "schemaVersion", "profile", "gardens", "suggestions"],
+            doc.RootElement.EnumerateObject().Select(property => property.Name));
+        // Ordinal: a layout's document writes its keys in lower camel case —
+        // « count », never the « Count » of « locationCountry » —, and they
+        // would show even escaped inside a string value.
+        string[] traces = ["blocks", "keyfigures", "figures", "count", .. ChosenFigures];
+        foreach (var trace in traces)
+        {
+            Assert.DoesNotContain(trace, raw, StringComparison.Ordinal);
+        }
     }
 }
