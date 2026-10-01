@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 import { catalogFor } from '../../test/fixtures/formulas';
 import { deferred } from '../../test/responses';
+import type { DashboardLevel, FormulasCatalog } from '../../types/Dashboard';
 
 vi.mock('../../services/formulasApi', () => ({ fetchFormulas: vi.fn() }));
 
@@ -238,5 +239,71 @@ describe('the line of the Terms on the choice screen (SMA-448)', () => {
     expect(link).toHaveAttribute('href', '/terms');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+});
+
+// SMA-437, the complete review of the v3 (« SMA-437 - revue complète de la
+// v3.md », § 7, point 1): the choice screen says what the formulas do. K1 —
+// the comparison gave the Expert « three sizes » while five of its widgets
+// take the Full width too (`DashboardCapabilities.cs`): its cells are read
+// beside the sizes the catalogue serves — the reference file the server is
+// tested against —, so a size given or taken away leaves this suite red
+// until the text follows. M8 — the Novice offer promised « the area of each
+// garden », while its card shows the garden's size in cells (« 10 × 8 ·
+// 50 cm », `NoviceGardenCard.tsx`) and never an area. The catalogue HELD,
+// then landed inside `act` (SMA-452 § 12).
+describe('the choice screen says what the formulas do (SMA-437 review, K1 and M8)', () => {
+  const catalogue = catalogFor('gardener', { gardenCount: 2 });
+
+  async function landCatalogue() {
+    const held = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(held.promise);
+    renderDialog();
+    await act(async () => held.resolve(catalogue));
+  }
+  const cellsOf = (screenOfChoice: HTMLElement, label: string) => {
+    const row = [...screenOfChoice.querySelectorAll('tbody tr')].find((candidate) => candidate.querySelector('th')?.textContent === label);
+    return row ? [...row.querySelectorAll('td')].map((cell) => cell.textContent) : ['no such row'];
+  };
+  const featuresOf = (level: DashboardLevel) =>
+    [...document.querySelectorAll(`[data-formula-offer="${level}"] [data-offer-features] li`)].map((line) => line.textContent);
+  /** The sizes the catalogue serves a formula's widgets — the Novice has none. */
+  const servedSizes = (level: DashboardLevel) => Object.values(catalogue.formulas.find((formula) => formula.key === level)!.sizes);
+
+  it('what the catalogue serves: the Gardener’s widgets take the three sizes and never the Full width; the Expert’s, the three sizes at most, and several the Full width too', () => {
+    expect(servedSizes('gardener').length).toBeGreaterThan(0);
+    expect(servedSizes('gardener').map((sizes) => sizes?.join(' '))).toEqual(servedSizes('gardener').map(() => 'small medium large'));
+    expect(servedSizes('expert').filter((sizes) => sizes?.includes('wide')).length).toBeGreaterThan(1);
+    expect(servedSizes('expert').flatMap((sizes) => sizes ?? []).filter((size) => size !== 'wide' && !['small', 'medium', 'large'].includes(size))).toEqual([]);
+  });
+
+  it('in English: the comparison says « three sizes » for the Gardener, « three sizes, and Full width » for the Expert; the Novice offer says the size of each garden, never an area', async () => {
+    await landCatalogue();
+
+    expect(cellsOf(dialog(), 'Move and resize widgets')).toEqual(['No — there is nothing to set', 'Yes — three sizes', 'Yes — three sizes, and Full width']);
+    expect(featuresOf('novice')).toEqual([
+      'A simple home page: one card per garden, nothing to set',
+      'Each garden’s plan, as a preview',
+      'Today’s weather, on each card',
+      'Today’s task, on each card',
+      'The number of plants and the size of each garden',
+    ]);
+    expect(dialog().querySelector('[data-formula-offer="novice"]')!.textContent).not.toMatch(/\barea\b/i);
+  });
+
+  it('en français : « trois tailles » pour le Jardinier, « trois tailles, et la Pleine largeur » pour l’Expert ; l’offre Novice dit la taille de chaque jardin, jamais une surface', async () => {
+    await i18n.changeLanguage('fr');
+    await landCatalogue();
+    const fr = screen.getByRole('dialog', { name: 'Choisissez votre formule' });
+
+    expect(cellsOf(fr, 'Déplacer et agrandir ses widgets')).toEqual(['Non — il n’y a rien à régler', 'Oui — trois tailles', 'Oui — trois tailles, et la Pleine largeur']);
+    expect(featuresOf('novice')).toEqual([
+      'Une page d’accueil simple : une carte par jardin, rien à régler',
+      'Le plan de chaque jardin, en aperçu',
+      'La météo du jour, sur chaque carte',
+      'La tâche du jour, sur chaque carte',
+      'Le nombre de plantes et la taille de chaque jardin',
+    ]);
+    expect(fr.querySelector('[data-formula-offer="novice"]')!.textContent).not.toMatch(/surface/i);
   });
 });

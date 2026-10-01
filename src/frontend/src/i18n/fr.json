@@ -400,7 +400,7 @@
           "Le plan de chaque jardin, en aperçu",
           "La météo du jour, sur chaque carte",
           "La tâche du jour, sur chaque carte",
-          "Le nombre de plantes et la surface de chaque jardin"
+          "Le nombre de plantes et la taille de chaque jardin"
         ],
         "gardener": [
           "Un tableau de bord de widgets, que vous composez",
@@ -487,7 +487,7 @@
             "label": "Déplacer et agrandir ses widgets",
             "novice": "Non — il n’y a rien à régler",
             "gardener": "Oui — trois tailles",
-            "expert": "Oui — trois tailles"
+            "expert": "Oui — trois tailles, et la Pleine largeur"
           },
           "widgets": {
             "label": "Ajouter ou retirer des widgets",
