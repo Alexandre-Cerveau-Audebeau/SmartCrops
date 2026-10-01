@@ -70,6 +70,15 @@ interface Props {
   maxRows?: number;
   /** Why the dimensions stop there, said under them — the formula's limit, or the garden kept beyond it. */
   limitNote?: string | null;
+  /**
+   * SMA-454 — the garden's city: a LOCATION section, between the separator
+   * and the hemisphere and latitude band the separator's comment keeps the
+   * room for. The planner hands its content in — the place, and the door to
+   * the dashboard's location dialog —, so this dialog knows nothing of the
+   * network (pre-flight of SMA-336 PR ③, § F.6). Like the danger zone, on the
+   * « Réglages » instance only.
+   */
+  locationSection?: ReactNode;
 }
 
 const CELL_SIZES = ['25cm', '50cm', '1m'];
@@ -208,6 +217,7 @@ function GardenConfigDialogInner({
   maxCols = DEFAULT_MAX_GRID,
   maxRows = DEFAULT_MAX_GRID,
   limitNote = null,
+  locationSection,
 }: Omit<Props, 'open'>) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -483,6 +493,15 @@ function GardenConfigDialogInner({
       {/* Full-width divider — separates the mockup ORIENTATION section from the
           code-only hemisphere/latitude controls (SMA-17 R3 layout). */}
       <Box sx={{ height: '1px', bgcolor: tk.divider, mb: 3 }} />
+
+      {/* LOCALISATION (SMA-454) — the garden's city, right before the
+          hemisphere and the band it pre-fills when they were never set. */}
+      {locationSection && (
+        <Box data-config-location sx={{ mb: 3 }}>
+          <SectionLabel tk={tk}>{t('planner.config.sectionLocation')}</SectionLabel>
+          {locationSection}
+        </Box>
+      )}
 
       {/* Hemisphere + latitude band (engraved SMA-17 amendment, not in the
           mockup): its OWN section below the divider, so it never pushes the

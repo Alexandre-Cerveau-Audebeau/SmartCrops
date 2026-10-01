@@ -1295,6 +1295,8 @@
       "sectionDimensions": "DIMENSIONS",
       "sectionOrientation": "ORIENTATION",
       "sectionGardenType": "TYPE DE JARDIN",
+      "sectionLocation": "LOCALISATION",
+      "locationChange": "Modifier la localisation",
       "orientationPrompt": "Vers où le jardin est-il tourné ?",
       "orientationNote": "Enregistré pour les futurs calculs d'exposition par case.",
       "compassLabel": "Boussole — le jardin est orienté {{orientation}}",

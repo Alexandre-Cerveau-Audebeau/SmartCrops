@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 import GardenConfigDialog from './GardenConfigDialog';
@@ -249,5 +249,25 @@ describe('GardenConfigDialog (SMA-17, §12)', () => {
       hemisphere: 'S',
       latitudeBand: 'high',
     });
+  });
+
+  // SMA-454 — the garden's city: the dialog draws the LOCATION label around
+  // what the planner hands it (the place and the door to the dashboard's
+  // location dialog), and knows nothing of the network.
+  it('carries the LOCATION section it is handed, between the orientation and the hemisphere — and none without it (SMA-454)', () => {
+    renderDialog();
+    expect(document.querySelector('[data-config-location]')).toBeNull();
+    expect(screen.queryByText('LOCATION')).toBeNull();
+    cleanup();
+
+    renderDialog({ locationSection: <p>The place, and its door</p> });
+
+    const section = document.querySelector<HTMLElement>('[data-config-location]');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByRole('heading', { level: 3, name: 'LOCATION' })).toBeInTheDocument();
+    expect(within(section!).getByText('The place, and its door')).toBeInTheDocument();
+    const orientation = screen.getByRole('heading', { level: 3, name: 'ORIENTATION' });
+    expect(orientation.compareDocumentPosition(section!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section!.compareDocumentPosition(screen.getByText('HEMISPHERE')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

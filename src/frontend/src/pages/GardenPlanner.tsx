@@ -44,6 +44,7 @@ import { PlanPrintView } from '../components/Garden/PlanPrintView';
 import GardenConfigDialog, {
   type DialogDimensions,
 } from '../components/Garden/GardenConfigDialog';
+import GardenLocationSection from '../components/Garden/GardenLocationSection';
 import GardenTemplatesDialog from '../components/Garden/GardenTemplatesDialog';
 import ReconnectButton from '../components/ReconnectButton';
 import RemovePlacementDialog from '../components/Garden/RemovePlacementDialog';
@@ -2373,6 +2374,13 @@ export default function GardenPlanner() {
         onConfirm={handleSettingsConfigConfirm}
         onCancel={() => setShowConfig(false)}
         onDeleteRequest={handleDeleteGardenRequest}
+        // SMA-454 — the garden's city in « Réglages »: the door to the
+        // dashboard's location dialog, on this garden.
+        locationSection={
+          id && garden ? (
+            <GardenLocationSection garden={{ id, name: garden.name }} />
+          ) : undefined
+        }
       />
 
       {/* Garden templates (SMA-18 lot 2) — from the header button at any
