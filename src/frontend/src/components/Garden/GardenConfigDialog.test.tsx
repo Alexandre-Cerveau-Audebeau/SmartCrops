@@ -270,4 +270,62 @@ describe('GardenConfigDialog (SMA-17, §12)', () => {
     expect(orientation.compareDocumentPosition(section!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(section!.compareDocumentPosition(screen.getByText('HEMISPHERE')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  // SMA-454 — a city set from that section is written at once, and the server
+  // pre-fills the hemisphere and the band it finds EMPTY from the latitude;
+  // the planner re-reads the garden and hands the dialog the stored values.
+  describe('what a city set from LOCATION pre-fills (SMA-454)', () => {
+    const props = {
+      open: true,
+      isFirstSetup: false,
+      initialWidth: 10,
+      initialHeight: 8,
+      initialCellSize: '50cm',
+      onCancel: () => {},
+    };
+
+    it('adopts the hemisphere and the band the server filled while it was open — for a field seeded EMPTY, never one chosen here', () => {
+      const onConfirm = vi.fn();
+      const { rerender } = render(
+        <GardenConfigDialog {...props} onConfirm={onConfirm} initialConfig={EMPTY_CONFIG} />
+      );
+      expect(screen.getByRole('radio', { name: 'Northern' })).toBeChecked();
+      // The band, chosen HERE.
+      fireEvent.click(screen.getByRole('radio', { name: 'High' }));
+
+      rerender(
+        <GardenConfigDialog
+          {...props}
+          onConfirm={onConfirm}
+          initialConfig={{ ...EMPTY_CONFIG, hemisphere: 'S', latitudeBand: 'low' }}
+        />
+      );
+
+      expect(screen.getByRole('radio', { name: 'Southern' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'High' })).toBeChecked();
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(savedConfig(onConfirm)).toMatchObject({ hemisphere: 'S', latitudeBand: 'high' });
+    });
+
+    it('never moves a value it was opened with: a stored hemisphere or band that changes under it is not adopted', () => {
+      const onConfirm = vi.fn();
+      const stored = { ...EMPTY_CONFIG, hemisphere: 'N', latitudeBand: 'mid' };
+      const { rerender } = render(
+        <GardenConfigDialog {...props} onConfirm={onConfirm} initialConfig={stored} />
+      );
+
+      rerender(
+        <GardenConfigDialog
+          {...props}
+          onConfirm={onConfirm}
+          initialConfig={{ ...stored, hemisphere: 'S', latitudeBand: 'low' }}
+        />
+      );
+
+      expect(screen.getByRole('radio', { name: 'Northern' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Mid' })).toBeChecked();
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(savedConfig(onConfirm)).toMatchObject({ hemisphere: 'N', latitudeBand: 'mid' });
+    });
+  });
 });

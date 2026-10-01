@@ -284,6 +284,46 @@ function GardenConfigDialogInner({
   const [latitudeBand, setLatitudeBand] = useState<string>(
     initialConfig.latitudeBand ?? 'mid'
   );
+  // SMA-454 — a city set from the LOCATION section is written at once, by its
+  // own dialog, and the server pre-fills the hemisphere and the band it finds
+  // EMPTY from the latitude (GardensController.PutLocation); the planner then
+  // re-reads the garden. A field this dialog seeded from an EMPTY stored value
+  // adopts what the re-read brings — unless it was chosen here: the server's
+  // own rule, a value set by hand is never overwritten. A value the dialog
+  // was opened with is never moved under the user. Adjusted during render on
+  // the stored values (react-hooks/set-state-in-effect forbids the effect
+  // variant).
+  const [storedExposure, setStoredExposure] = useState({
+    hemisphere: initialConfig.hemisphere,
+    latitudeBand: initialConfig.latitudeBand,
+  });
+  const [chosenExposure, setChosenExposure] = useState({
+    hemisphere: false,
+    latitudeBand: false,
+  });
+  if (
+    initialConfig.hemisphere !== storedExposure.hemisphere ||
+    initialConfig.latitudeBand !== storedExposure.latitudeBand
+  ) {
+    setStoredExposure({
+      hemisphere: initialConfig.hemisphere,
+      latitudeBand: initialConfig.latitudeBand,
+    });
+    if (
+      storedExposure.hemisphere === null &&
+      initialConfig.hemisphere !== null &&
+      !chosenExposure.hemisphere
+    ) {
+      setHemisphere(initialConfig.hemisphere);
+    }
+    if (
+      storedExposure.latitudeBand === null &&
+      initialConfig.latitudeBand !== null &&
+      !chosenExposure.latitudeBand
+    ) {
+      setLatitudeBand(initialConfig.latitudeBand);
+    }
+  }
 
   const realDimensions = useMemo(() => {
     const m = cellSizeToMeters(cellSize);
@@ -506,10 +546,11 @@ function GardenConfigDialogInner({
       {/* Hemisphere + latitude band (engraved SMA-17 amendment, not in the
           mockup): its OWN section below the divider, so it never pushes the
           compass down. MANUAL, OVERRIDABLE estimate — like the future per-cell
-          exposure override; the Phase-6 geolocation/weather API will PRE-FILL
-          both from the user's real latitude WITHOUT changing the stored contract
-          or the downstream engine (an "auto-filled from my location" mode slots
-          in later with no refactor). */}
+          exposure override. A garden's location PRE-FILLS both from its
+          latitude when they were never stored (SMA-336 PR 3a/5, PutLocation),
+          without changing the stored contract or the downstream engine; set
+          from the LOCATION section above, this open dialog adopts them
+          (SMA-454, the adjustment beside the state). */}
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <Box>
@@ -518,7 +559,10 @@ function GardenConfigDialogInner({
               tk={tk}
               ariaLabel={t('planner.config.hemisphere')}
               value={hemisphere}
-              onChange={setHemisphere}
+              onChange={(value) => {
+                setHemisphere(value);
+                setChosenExposure((chosen) => ({ ...chosen, hemisphere: true }));
+              }}
               options={[
                 { value: 'N', label: 'N', ariaLabel: t('planner.config.hemisphereNorth') },
                 { value: 'S', label: 'S', ariaLabel: t('planner.config.hemisphereSouth') },
@@ -534,7 +578,10 @@ function GardenConfigDialogInner({
               tk={tk}
               ariaLabel={t('planner.config.latitudeBand')}
               value={latitudeBand}
-              onChange={setLatitudeBand}
+              onChange={(value) => {
+                setLatitudeBand(value);
+                setChosenExposure((chosen) => ({ ...chosen, latitudeBand: true }));
+              }}
               options={[
                 { value: 'low', label: t('planner.config.latitudeLow') },
                 { value: 'mid', label: t('planner.config.latitudeMid') },

@@ -6,7 +6,7 @@ import { LanguageProvider } from '../contexts/LanguageContext';
 import type { GardenLayoutData } from '../services/gardenLayoutApi';
 import type { DashboardWeatherData } from '../types/DashboardWeather';
 import type { Garden } from '../types/Garden';
-import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
+import { linkFixture, locationFixture, pickFixture, weatherFixture } from '../test/fixtures/weather';
 import { deferred } from '../test/responses';
 
 vi.mock('../services/plantApi', () => ({ fetchPlants: vi.fn() }));
@@ -40,10 +40,16 @@ vi.mock('../services/weatherApi', () => ({
 }));
 
 import GardenPlanner from './GardenPlanner';
-import { fetchGarden } from '../services/gardenApi';
+import { LOCATION_SEARCH_DEBOUNCE_MS } from '../components/Dashboard/locationTools';
+import { fetchGarden, updateGarden } from '../services/gardenApi';
 import { fetchLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
-import { clearGardenLocation, fetchDashboardWeather } from '../services/weatherApi';
+import {
+  clearGardenLocation,
+  fetchDashboardWeather,
+  saveGardenLocation,
+  searchLocations,
+} from '../services/weatherApi';
 
 // SMA-454 — THE CITY OF A GARDEN, FROM ITS PLANNER: « Réglages » carries a
 // LOCATION section that says where the garden is and opens the dashboard's
@@ -128,11 +134,21 @@ beforeEach(async () => {
   localStorage.clear();
   localStorage.setItem('smartcrops-language', 'en');
   await i18n.changeLanguage('en');
+  // The answers a test queues with `…Once` are dropped here: `clearAllMocks`
+  // keeps them, and one a failed test left behind would answer the next
+  // test's page.
+  vi.mocked(fetchGarden).mockReset();
+  vi.mocked(updateGarden).mockReset();
+  vi.mocked(fetchDashboardWeather).mockReset();
+  vi.mocked(searchLocations).mockReset();
+  vi.mocked(saveGardenLocation).mockReset();
+  vi.mocked(clearGardenLocation).mockReset();
   vi.mocked(fetchGarden).mockResolvedValue(GARDEN);
   vi.mocked(fetchLayout).mockResolvedValue(LAYOUT);
   vi.mocked(fetchPlants).mockResolvedValue([]);
   vi.mocked(fetchDashboardWeather).mockResolvedValue(ownCity());
   vi.mocked(clearGardenLocation).mockResolvedValue(undefined);
+  vi.mocked(saveGardenLocation).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -140,6 +156,9 @@ afterEach(() => {
   // automatic cleanup (vitest's `sequence.hooks = 'stack'`); what it puts
   // back below stays in place until the tree that reads it is gone.
   cleanup();
+  // A test that simulated the clock gives the engine's back — after the
+  // unmount, which runs on the clock the test ran on.
+  vi.useRealTimers();
   vi.clearAllMocks();
   localStorage.clear();
 });
@@ -267,5 +286,106 @@ describe('the planner — the city of a garden in « Réglages » (SMA-454)', ()
 
     const locate = await screen.findByRole('dialog', { name: 'Localiser Terrasse' });
     expect(within(locate).getByRole('button', { name: 'Revenir à la ville du profil' })).toBeInTheDocument();
+  });
+});
+
+// SMA-454 — WHAT A CITY CHANGES BESIDE IT: `PUT /api/gardens/{id}/location`
+// pre-fills the hemisphere and the latitude band it finds EMPTY from the
+// latitude (GardensController.PutLocation). Set from « Réglages », where those
+// two fields are, the planner re-reads the garden, and the open dialog adopts
+// what the server filled in a field it seeded from an empty value — never one
+// chosen in it.
+describe('the planner — a city set from « Réglages » and the exposure it pre-fills (SMA-454)', () => {
+  /** Terrasse as a garden of before SMA-17's amendment: no hemisphere, no band stored. */
+  const UNSET: Garden = { ...GARDEN, hemisphere: null, latitudeBand: null };
+  const SYDNEY = pickFixture({ name: 'Sydney', region: 'New South Wales', country: 'Australia', latitude: -33.87, longitude: 151.21 });
+
+  it('the garden is re-read after the write: the hemisphere the server filled shows in the open dialog, a band chosen here is kept, and « Save » sends both', async () => {
+    const reread = deferred<Garden>();
+    vi.mocked(fetchGarden).mockResolvedValueOnce(UNSET).mockReturnValueOnce(reread.promise);
+    vi.mocked(searchLocations).mockResolvedValue([SYDNEY]);
+    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...UNSET, ...config, id, name, description }));
+    const settings = await openSettings();
+    await within(section()).findByText('Current place: Écully');
+    // Seeded from nothing: the dialog shows its defaults, Northern and Mid.
+    expect(within(settings).getByRole('radio', { name: 'Northern' })).toBeChecked();
+    // A band chosen HERE before the city is set.
+    fireEvent.click(within(settings).getByRole('radio', { name: 'High' }));
+    fireEvent.click(within(section()).getByRole('button', { name: 'Change the location' }));
+    const locate = await screen.findByRole('dialog', { name: 'Locate Terrasse' });
+    // The page is loaded: the simulated clock only now (SMA-452) — the search
+    // asks the server 400 ms after the last keystroke.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const field = within(locate).getByLabelText('City');
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: 'Sydney' } });
+    act(() => {
+      vi.advanceTimersByTime(LOCATION_SEARCH_DEBOUNCE_MS);
+    });
+    // The search's answer lands: its simulated response resolves on the microtask queue.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('option', { name: 'Sydney, New South Wales, Australia' }));
+    vi.useRealTimers();
+
+    fireEvent.click(within(locate).getByRole('button', { name: 'Use' }));
+
+    await waitFor(() => expect(fetchGarden).toHaveBeenCalledTimes(2));
+    expect(saveGardenLocation).toHaveBeenCalledWith('g1', SYDNEY);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Locate Terrasse' })).toBeNull());
+    // The re-read is still out: nothing has moved yet.
+    expect(within(settings).getByRole('radio', { name: 'Northern' })).toBeChecked();
+
+    await act(async () => reread.resolve({ ...UNSET, hemisphere: 'S', latitudeBand: 'mid' }));
+
+    expect(within(settings).getByRole('radio', { name: 'Southern' })).toBeChecked();
+    expect(within(settings).getByRole('radio', { name: 'High' })).toBeChecked();
+    fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateGarden).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(updateGarden).mock.calls[0]![3]).toMatchObject({ hemisphere: 'S', latitudeBand: 'high' });
+  });
+
+  it('a re-read still out never lands over a config save that answered after it — the saved garden stays', async () => {
+    const reread = deferred<Garden>();
+    vi.mocked(fetchGarden).mockResolvedValueOnce(UNSET).mockReturnValueOnce(reread.promise);
+    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...UNSET, ...config, id, name, description }));
+    const settings = await openSettings();
+    await within(section()).findByText('Current place: Écully');
+    fireEvent.click(within(section()).getByRole('button', { name: 'Change the location' }));
+    const locate = await screen.findByRole('dialog', { name: 'Locate Terrasse' });
+    fireEvent.click(within(locate).getByRole('button', { name: 'Back to the profile city' }));
+    await waitFor(() => expect(fetchGarden).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Locate Terrasse' })).toBeNull());
+
+    // The user saves « Réglages » while the re-read is out: Southern.
+    fireEvent.click(within(settings).getByRole('radio', { name: 'Southern' }));
+    fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // …then the re-read, sent BEFORE the save, lands with the garden of before.
+    await act(async () => reread.resolve(UNSET));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const reopened = await screen.findByRole('dialog');
+    expect(within(reopened).getByRole('radio', { name: 'Southern' })).toBeChecked();
+  });
+
+  it('a re-read still out when the planner goes away is aborted', async () => {
+    const reread = deferred<Garden>();
+    vi.mocked(fetchGarden).mockResolvedValueOnce(GARDEN).mockReturnValueOnce(reread.promise);
+    await openSettings();
+    await within(section()).findByText('Current place: Écully');
+    fireEvent.click(within(section()).getByRole('button', { name: 'Change the location' }));
+    const locate = await screen.findByRole('dialog', { name: 'Locate Terrasse' });
+    fireEvent.click(within(locate).getByRole('button', { name: 'Back to the profile city' }));
+    await waitFor(() => expect(fetchGarden).toHaveBeenCalledTimes(2));
+    const signal = vi.mocked(fetchGarden).mock.calls[1]![1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal!.aborted).toBe(false);
+
+    cleanup();
+
+    expect(signal!.aborted).toBe(true);
   });
 });

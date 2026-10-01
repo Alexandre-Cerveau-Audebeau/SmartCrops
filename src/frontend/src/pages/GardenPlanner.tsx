@@ -54,7 +54,7 @@ import { useGardenLayout } from '../hooks/useGardenLayout';
 import { useLanguage } from '../hooks/useLanguage';
 import { useScrollHold } from '../hooks/useScrollHold';
 import { useSelection } from '../hooks/useSelection';
-import { updateGarden } from '../services/gardenApi';
+import { fetchGarden, updateGarden } from '../services/gardenApi';
 import { saveLayout } from '../services/gardenLayoutApi';
 import { problemOf, requestFailureKind } from '../services/requestFailure';
 import { isWholeNumber } from '../services/wireChecks';
@@ -724,8 +724,37 @@ export default function GardenPlanner() {
     latitudeBand: garden?.latitudeBand ?? null,
   };
 
+  // SMA-454 — a city set from « Réglages » goes through its own write (`PUT
+  // /api/gardens/{id}/location`), and the server pre-fills the hemisphere and
+  // the latitude band it finds EMPTY from the latitude
+  // (GardensController.PutLocation). The planner re-reads the garden, so its
+  // exposure and the open dialog read what is stored. A re-read still out is
+  // dropped by the next one, by a config save — whose answer is the newer
+  // garden — and by the unmount.
+  const gardenRereadRef = useRef<AbortController | null>(null);
+  const handleLocated = useCallback(() => {
+    if (!id) return;
+    gardenRereadRef.current?.abort();
+    const controller = new AbortController();
+    gardenRereadRef.current = controller;
+    fetchGarden(id, controller.signal)
+      .then((fresh) => {
+        if (!controller.signal.aborted) setGarden(fresh);
+      })
+      .catch(() => {
+        // A failed re-read leaves the garden as it was read: the city's line
+        // reads the weather aggregate, which its section re-reads itself; only
+        // a hemisphere or a band the server has just pre-filled stays unseen
+        // until the next load.
+      });
+  }, [id]);
+  useEffect(() => () => gardenRereadRef.current?.abort(), []);
+
   const persistConfig = async (config: GardenConfig): Promise<boolean> => {
     if (!id || !garden) return false;
+    // The config's answer is the newer garden: a re-read still out must not
+    // land after it.
+    gardenRereadRef.current?.abort();
     try {
       const updated = await updateGarden(
         id,
@@ -2378,7 +2407,10 @@ export default function GardenPlanner() {
         // dashboard's location dialog, on this garden.
         locationSection={
           id && garden ? (
-            <GardenLocationSection garden={{ id, name: garden.name }} />
+            <GardenLocationSection
+              garden={{ id, name: garden.name }}
+              onLocated={handleLocated}
+            />
           ) : undefined
         }
       />
