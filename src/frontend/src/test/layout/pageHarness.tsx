@@ -110,6 +110,12 @@ const createOutcome = params.get('create');
 /** The planner's page instead of the dashboard, on the Novice's 20 x 20 garden. */
 const plannerPage = params.get('page') === 'planner';
 /**
+ * SMA-454, fix round 1 (R2) — the planner on a garden WITHOUT a plan yet
+ * (`setup=first`): its layout answers no size, and the page opens its first
+ * setup at once — the dialog that carries the garden's city too.
+ */
+const firstSetup = plannerPage && params.get('setup') === 'first';
+/**
  * The planner's save refused for the plan's size (403 `formula.gardenSize`)
  * or by a session that expired (401). Either makes the catalogue unreadable
  * too: the add buttons then stay live — the server is the judge — and a
@@ -206,7 +212,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       if (saveOutcome === 'unauthorized') return new Response(null, { status: 401 });
       return new Response(null, { status: 204 });
     }
-    return json(PLANNER_LAYOUT);
+    return json(firstSetup ? { ...PLANNER_LAYOUT, width: null, height: null, cellSize: null } : PLANNER_LAYOUT);
   }
   if (url.startsWith('/api/gardens/g1')) return json(PLANNER_GARDEN);
   if (url.startsWith('/api/gardens')) {
@@ -931,8 +937,11 @@ const page = {
   ready(): boolean {
     if (document.fonts.status !== 'loaded') return false;
     if (!document.querySelector('[data-site-navbar]')) return false;
-    // The planner (SMA-448, lot F3, L7): its grid drawn, no skeleton.
+    // The planner (SMA-448, lot F3, L7): its grid drawn, no skeleton — or, on
+    // a garden without a plan (SMA-454, fix round 1, R2), its first setup
+    // drawn: the dialog's title, whatever the dialog carries.
     if (plannerPage) {
+      if (firstSetup) return document.querySelector('.MuiDialog-paper h2') !== null;
       return document.querySelector('[role="grid"]') !== null && document.querySelectorAll('.MuiSkeleton-root').length === 0;
     }
     if (!headerRowOf()) return false;

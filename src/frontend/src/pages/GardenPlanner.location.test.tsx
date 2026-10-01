@@ -55,7 +55,8 @@ import {
 // LOCATION section that says where the garden is and opens the dashboard's
 // own location dialog on it — one dialog, several doors: the same target,
 // read from the same weather aggregate by the same derivation, the same
-// writes, the same re-read after a write, the same honest failures.
+// writes, the same re-read after a write, the same honest failures. So does
+// the first setup of a garden without a plan (fix round 1, R2).
 
 const GARDEN = {
   id: 'g1',
@@ -123,12 +124,15 @@ async function openSettings(name = 'Settings') {
   return screen.findByRole('dialog');
 }
 
-/** The LOCATION section of the open « Réglages ». */
+/** The LOCATION section of the open dialog — « Réglages », or the first setup. */
 const section = () => {
   const found = document.querySelector<HTMLElement>('[data-config-location]');
-  if (!found) throw new Error('No LOCATION section in « Réglages ».');
+  if (!found) throw new Error('No LOCATION section in the open dialog.');
   return found;
 };
+
+/** The layout of a garden without a plan: the planner opens its first setup. */
+const NO_PLAN: GardenLayoutData = { ...LAYOUT, width: null, height: null, cellSize: null };
 
 beforeEach(async () => {
   localStorage.clear();
@@ -163,7 +167,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe('the planner — the city of a garden in « Réglages » (SMA-454)', () => {
+describe('the planner — the city of a garden, in « Réglages » and at its first setup (SMA-454)', () => {
   it('Réglages carries LOCATION, between the orientation and the hemisphere: « loading » until the aggregate lands, then the place the garden reads, and the door', async () => {
     const weather = deferred<DashboardWeatherData>();
     vi.mocked(fetchDashboardWeather).mockReturnValue(weather.promise);
@@ -264,15 +268,33 @@ describe('the planner — the city of a garden in « Réglages » (SMA-454)', ()
     expect(within(section()).getByRole('button', { name: 'Change the location' })).toBeEnabled();
   });
 
-  it('only in « Réglages »: the first setup carries no LOCATION section, and reads no aggregate', async () => {
-    vi.mocked(fetchLayout).mockResolvedValue({ ...LAYOUT, width: null, height: null, cellSize: null });
+  it('the first setup carries LOCATION too (fix round 1, R2), between the orientation and the hemisphere: « loading » until the aggregate lands, then the place the garden reads, and the door — never the danger zone', async () => {
+    const weather = deferred<DashboardWeatherData>();
+    vi.mocked(fetchDashboardWeather).mockReturnValue(weather.promise);
+    vi.mocked(fetchLayout).mockResolvedValue(NO_PLAN);
     renderPlanner();
 
+    // A garden without a plan: its first setup opens by itself, no grid behind it.
     const setup = await screen.findByRole('dialog');
     expect(within(setup).getByRole('heading', { name: 'Garden settings' })).toBeInTheDocument();
     expect(within(setup).getByText('DIMENSIONS')).toBeInTheDocument();
-    expect(document.querySelector('[data-config-location]')).toBeNull();
-    expect(fetchDashboardWeather).not.toHaveBeenCalled();
+    expect(screen.queryByRole('grid')).toBeNull();
+
+    expect(within(section()).getByRole('heading', { level: 3, name: 'LOCATION' })).toBeInTheDocument();
+    // In flight: « loading » — never « no place saved » over a place not read yet.
+    expect(within(section()).getByText('Loading the current place…')).toBeInTheDocument();
+    expect(fetchDashboardWeather).toHaveBeenCalledTimes(1);
+
+    await act(async () => weather.resolve(ownCity()));
+
+    expect(within(section()).getByText('Current place: Écully')).toBeInTheDocument();
+    expect(within(section()).getByRole('button', { name: 'Change the location' })).toBeEnabled();
+    const orientation = within(setup).getByRole('heading', { level: 3, name: 'ORIENTATION' });
+    const hemisphere = within(setup).getByText('HEMISPHERE');
+    expect(orientation.compareDocumentPosition(section()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section().compareDocumentPosition(hemisphere) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The danger zone stays « Réglages »' alone: the first setup's Cancel already leaves for the list.
+    expect(within(setup).queryByRole('button', { name: 'Delete this garden' })).toBeNull();
   });
 
   it('en français : LOCALISATION, « Lieu actuel : Écully », « Modifier la localisation », « Localiser Terrasse »', async () => {
@@ -386,6 +408,35 @@ describe('the planner — a city set from « Réglages » and the exposure it wr
     fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(updateGarden).toHaveBeenCalledTimes(1));
     expect(vi.mocked(updateGarden).mock.calls[0]![3]).toMatchObject({ hemisphere: 'N', latitudeBand: 'mid' });
+  });
+
+  it('at the first setup too (fix round 1, R2): a southern city set from LOCATION re-reads the garden, the hemisphere shown turns « Southern », and the first setup’s « Save » sends it', async () => {
+    const reread = deferred<Garden>();
+    vi.mocked(fetchLayout).mockResolvedValue(NO_PLAN);
+    vi.mocked(fetchGarden).mockResolvedValueOnce(GARDEN).mockReturnValueOnce(reread.promise);
+    vi.mocked(searchLocations).mockResolvedValue([SYDNEY]);
+    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...GARDEN, ...config, id, name, description }));
+    renderPlanner();
+    const setup = await screen.findByRole('dialog');
+    await within(section()).findByText('Current place: Écully');
+    expect(within(setup).getByRole('radio', { name: 'Northern' })).toBeChecked();
+    fireEvent.click(within(section()).getByRole('button', { name: 'Change the location' }));
+    const locate = await screen.findByRole('dialog', { name: 'Locate Terrasse' });
+    await pickSydney(locate);
+
+    fireEvent.click(within(locate).getByRole('button', { name: 'Use' }));
+
+    await waitFor(() => expect(fetchGarden).toHaveBeenCalledTimes(2));
+    expect(saveGardenLocation).toHaveBeenCalledWith('g1', SYDNEY);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Locate Terrasse' })).toBeNull());
+    expect(within(setup).getByRole('radio', { name: 'Northern' })).toBeChecked();
+
+    await act(async () => reread.resolve({ ...GARDEN, hemisphere: 'S', latitudeBand: 'mid' }));
+
+    expect(within(setup).getByRole('radio', { name: 'Southern' })).toBeChecked();
+    fireEvent.click(within(setup).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateGarden).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(updateGarden).mock.calls[0]![3]).toMatchObject({ hemisphere: 'S', latitudeBand: 'mid' });
   });
 
   it('a re-read still out never lands over a config save that answered after it — the saved garden stays', async () => {

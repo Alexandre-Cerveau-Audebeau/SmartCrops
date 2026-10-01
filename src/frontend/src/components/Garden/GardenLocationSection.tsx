@@ -22,16 +22,17 @@ interface Props {
 }
 
 /**
- * SMA-454 — the planner's door to a garden's city, in « Réglages »: the place
- * the garden reads today, said with the location dialog's own sentence (as
- * the Weather gear says it), and « Modifier la localisation », which opens
- * THE location dialog of the dashboard on this garden — one dialog, several
- * doors. What the dialog holds comes from the weather aggregate through the
- * dashboard's own derivation (`gardenLocationTarget`): the same place named,
- * « Revenir à la ville du profil » on the same terms, « loading » while a read
- * is in flight and « weather unavailable » when it failed; after a write, the
- * same re-read as after a write. The aggregate is read while the section is
- * mounted — while « Réglages » is open.
+ * SMA-454 — the planner's door to a garden's city, in « Réglages » and at the
+ * first setup (fix round 1, R2): the place the garden reads today, said with
+ * the location dialog's own sentence (as the Weather gear says it), and
+ * « Modifier la localisation », which opens THE location dialog of the
+ * dashboard on this garden — one dialog, several doors. What the dialog holds
+ * comes from the weather aggregate through the dashboard's own derivation
+ * (`gardenLocationTarget`): the same place named, « Revenir à la ville du
+ * profil » on the same terms, « loading » while a read is in flight and
+ * « weather unavailable » when it failed; after a write, the same re-read as
+ * after a write. The aggregate is read while the section is mounted — while
+ * the dialog that carries it is open.
  */
 export default function GardenLocationSection({ garden, onLocated }: Props) {
   const { t } = useTranslation();
@@ -84,7 +85,8 @@ export default function GardenLocationSection({ garden, onLocated }: Props) {
           {t('planner.config.locationChange')}
         </Button>
       </Box>
-      {/* Over « Réglages », which stays open with what was typed in it; the
+      {/* Over the dialog that carries the section — « Réglages », or the
+          first setup —, which stays open with what was typed in it; the
           dialog gives the focus back to the door when it closes. */}
       <LocationDialog
         open={open}

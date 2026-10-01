@@ -724,11 +724,12 @@ export default function GardenPlanner() {
     latitudeBand: garden?.latitudeBand ?? null,
   };
 
-  // SMA-454 — a city set from « Réglages » goes through its own write (`PUT
-  // /api/gardens/{id}/location`, or the `DELETE` of « Revenir à la ville du
-  // profil »), and the server writes the hemisphere and the latitude band from
-  // the city's latitude — always: the city is authoritative (fix round 1;
-  // GardensController.PutLocation / DeleteLocation). The planner re-reads the
+  // SMA-454 — a city set from « Réglages » or the first setup (fix round 1,
+  // R2) goes through its own write (`PUT /api/gardens/{id}/location`, or the
+  // `DELETE` of « Revenir à la ville du profil »), and the server writes the
+  // hemisphere and the latitude band from the city's latitude — always: the
+  // city is authoritative (fix round 1; GardensController.PutLocation /
+  // DeleteLocation). The planner re-reads the
   // garden, so its exposure reads what is stored, and bumps `locatedSeq` as
   // the re-read lands: the open dialog then shows the re-read hemisphere and
   // band over whatever it showed. A re-read still out is dropped by the next
@@ -2362,6 +2363,19 @@ export default function GardenPlanner() {
         }
       : null;
 
+  // SMA-454 — the garden's city: the door to the dashboard's location dialog,
+  // on this garden — the sharedSidebarProps rule, one value for the two
+  // dialogs that carry it: the first setup (fix round 1, R2: the city offered
+  // at the creation of a garden too) and « Réglages ». Each mounts it only
+  // while it is open, so the aggregate is read only then.
+  const locationSection =
+    id && garden ? (
+      <GardenLocationSection
+        garden={{ id, name: garden.name }}
+        onLocated={handleLocated}
+      />
+    ) : undefined;
+
   return (
     // Full-width page (R3 item F): the lg Container is replaced by a
     // full-width wrapper with 24px lateral padding — settled #177 layout
@@ -2392,6 +2406,8 @@ export default function GardenPlanner() {
         limitNote={limitNote}
         onConfirm={handleSetupConfigConfirm}
         onCancel={() => navigate('/gardens')}
+        locationSection={locationSection}
+        locatedSeq={locatedSeq}
       />
 
       {/* Config dialog — "Réglages" on an existing garden */}
@@ -2410,16 +2426,7 @@ export default function GardenPlanner() {
         onConfirm={handleSettingsConfigConfirm}
         onCancel={() => setShowConfig(false)}
         onDeleteRequest={handleDeleteGardenRequest}
-        // SMA-454 — the garden's city in « Réglages »: the door to the
-        // dashboard's location dialog, on this garden.
-        locationSection={
-          id && garden ? (
-            <GardenLocationSection
-              garden={{ id, name: garden.name }}
-              onLocated={handleLocated}
-            />
-          ) : undefined
-        }
+        locationSection={locationSection}
         locatedSeq={locatedSeq}
       />
 

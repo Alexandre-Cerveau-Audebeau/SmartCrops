@@ -557,10 +557,16 @@ interface LocationStackMeasure {
   title: string;
 }
 
-/** One case: « Réglages » as one card and its section; the location dialog over it; after Escape, whether the focus is back on the door. */
+/**
+ * One case: the dialog that carries the section — « Réglages », or the first
+ * setup (fix round 1, R2) — as one card, and its section; whether a plan is
+ * drawn behind it; the location dialog over it; after Escape, whether the
+ * focus is back on the door.
+ */
 interface PlannerLocationRun {
   settings: DialogMeasure;
   section: LocationSectionMeasure;
+  grid: boolean;
   dialog: DialogMeasure;
   stack: LocationStackMeasure;
   focusBack: boolean;
@@ -568,6 +574,8 @@ interface PlannerLocationRun {
 
 /** « Réglages » and the location dialog, by width then by case; the probes, at 1 280 px. */
 const plannerLocationCases = new Map<string, Map<string, PlannerLocationRun>>();
+/** The first setup of a garden without a plan and the location dialog over it, by width then by case (fix round 1, R2). */
+const plannerSetupCases = new Map<string, Map<string, PlannerLocationRun>>();
 const plannerLocationProbes = new Map<string, LocationSectionMeasure>();
 let plannerLocationStackProbe: { stack: LocationStackMeasure; focusBack: boolean } | null = null;
 
@@ -619,42 +627,78 @@ const MEASURE_LOCATION_STACK = `(() => {
   };
 })()`;
 
+/** The sentence of the section once the place the garden reads has landed: Écully, by the profile (`weatherAll()`). */
+const placeLineOf = (locationCase: PlannerLocationCase) =>
+  locationCase.lang === 'fr' ? 'Lieu actuel : Écully' : 'Current place: Écully';
+
 /** The planner's page, « Réglages » opened from its button, and the place the garden reads landed in its section. */
 async function openPlannerSettings(session: PageSession, locationCase: PlannerLocationCase) {
-  const place = locationCase.lang === 'fr' ? 'Lieu actuel : Écully' : 'Current place: Écully';
   await session.navigate(`page=planner&theme=${locationCase.theme}&lang=${locationCase.lang}`);
   await call(session, 'click("[data-planner-settings]")');
-  await session.waitFor(`document.querySelector("[data-location-line]")?.textContent === ${JSON.stringify(place)}`, 'the place the garden reads, landed');
+  await session.waitFor(`document.querySelector("[data-location-line]")?.textContent === ${JSON.stringify(placeLineOf(locationCase))}`, 'the place the garden reads, landed');
   await settle(session);
+}
+
+/** The planner's page on a garden without a plan: its first setup open by itself, and the place the garden reads landed in its section (fix round 1, R2). */
+async function openPlannerSetup(session: PageSession, locationCase: PlannerLocationCase) {
+  await session.navigate(`page=planner&setup=first&theme=${locationCase.theme}&lang=${locationCase.lang}`);
+  await session.waitFor(`document.querySelector("[data-location-line]")?.textContent === ${JSON.stringify(placeLineOf(locationCase))}`, 'the place the garden reads, landed in the first setup');
+  await settle(session);
+}
+
+/** The dialog that carries the section, as one card; its section; whether a plan is drawn behind it. */
+async function measureLocationHost(session: PageSession): Promise<Pick<PlannerLocationRun, 'settings' | 'section' | 'grid'>> {
+  return {
+    settings: await session.evaluate<DialogMeasure>('window.__page.measureDialog("[data-config-location]")'),
+    section: await session.evaluate<LocationSectionMeasure>(MEASURE_LOCATION_SECTION),
+    grid: (await session.evaluate<number>(`window.__page.count(${JSON.stringify('[role="grid"]')})`)) > 0,
+  };
+}
+
+/** The door at the keyboard — focused, then Enter —: the location dialog over the dialog that carries the section, measured as one card; Escape, and where the focus went. */
+async function measureLocationDoor(session: PageSession): Promise<Pick<PlannerLocationRun, 'dialog' | 'stack' | 'focusBack'>> {
+  await call(session, `focus(${JSON.stringify(LOCATION_DOOR)})`);
+  await session.press('Enter');
+  await session.waitFor('document.querySelector("[data-location-current]")', 'the location dialog open');
+  await settle(session);
+  const dialog = await session.evaluate<DialogMeasure>('window.__page.measureDialog("[data-location-current]")');
+  const stack = await session.evaluate<LocationStackMeasure>(MEASURE_LOCATION_STACK);
+  await session.press('Escape');
+  await session.waitFor('!document.querySelector("[data-location-current]")', 'the location dialog closed');
+  await settle(session);
+  const focusBack = await session.evaluate<boolean>(`document.activeElement === document.querySelector(${JSON.stringify(LOCATION_DOOR)})`);
+  return { dialog, stack, focusBack };
 }
 
 /**
  * Every case of one width, in one Chrome: « Réglages » once the place the
  * garden reads has landed — its paper as one card, its LOCATION section —;
  * the door focused and Enter, the location dialog over « Réglages » measured
- * as one card; Escape, and where the focus went. At 1 280 px, the probes:
- * the section broken on purpose, then read by the same means.
+ * as one card; Escape, and where the focus went. Then the same for the first
+ * setup of a garden without a plan (fix round 1, R2) — its failure recorded
+ * on its own, « Réglages » measured above kept. At 1 280 px, the probes: the
+ * section broken on purpose, then read by the same means.
  */
-async function runPlannerLocationView(view: PageView): Promise<Map<string, PlannerLocationRun>> {
+async function runPlannerLocationView(
+  view: PageView
+): Promise<{ settings: Map<string, PlannerLocationRun>; setup: Map<string, PlannerLocationRun> }> {
   const session = await openPage(CHROME!, outDir, { label: `planner-location-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
   try {
     const byCase = new Map<string, PlannerLocationRun>();
     for (const locationCase of PLANNER_LOCATION_CASES) {
       await openPlannerSettings(session, locationCase);
-      const settings = await session.evaluate<DialogMeasure>('window.__page.measureDialog("[data-config-location]")');
-      const section = await session.evaluate<LocationSectionMeasure>(MEASURE_LOCATION_SECTION);
-      // The door at the keyboard: focused, then Enter.
-      await call(session, `focus(${JSON.stringify(LOCATION_DOOR)})`);
-      await session.press('Enter');
-      await session.waitFor('document.querySelector("[data-location-current]")', 'the location dialog open');
-      await settle(session);
-      const dialog = await session.evaluate<DialogMeasure>('window.__page.measureDialog("[data-location-current]")');
-      const stack = await session.evaluate<LocationStackMeasure>(MEASURE_LOCATION_STACK);
-      await session.press('Escape');
-      await session.waitFor('!document.querySelector("[data-location-current]")', 'the location dialog closed');
-      await settle(session);
-      const focusBack = await session.evaluate<boolean>(`document.activeElement === document.querySelector(${JSON.stringify(LOCATION_DOOR)})`);
-      byCase.set(locationCase.id, { settings, section, dialog, stack, focusBack });
+      const host = await measureLocationHost(session);
+      byCase.set(locationCase.id, { ...host, ...(await measureLocationDoor(session)) });
+    }
+    const setupByCase = new Map<string, PlannerLocationRun>();
+    try {
+      for (const locationCase of PLANNER_LOCATION_CASES) {
+        await openPlannerSetup(session, locationCase);
+        const host = await measureLocationHost(session);
+        setupByCase.set(locationCase.id, { ...host, ...(await measureLocationDoor(session)) });
+      }
+    } catch (error) {
+      failures.set(`planner-setup-${view.id}`, error);
     }
     if (view.width === 1280) {
       // The probes (SMA-446): a check never shown a defect proves nothing.
@@ -695,7 +739,7 @@ async function runPlannerLocationView(view: PageView): Promise<Map<string, Plann
         focusBack: await session.evaluate<boolean>(`document.activeElement === document.querySelector(${JSON.stringify(LOCATION_DOOR)})`),
       };
     }
-    return byCase;
+    return { settings: byCase, setup: setupByCase };
   } finally {
     await session.close();
   }
@@ -1041,8 +1085,11 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
       // refusals' have closed — in this same hook, no bound of its own.
       const locationSettled = await Promise.allSettled(PLANNER_LOCATION_VIEWS.map((view) => runPlannerLocationView(view)));
       locationSettled.forEach((outcome, index) => {
-        if (outcome.status === 'fulfilled') plannerLocationCases.set(PLANNER_LOCATION_VIEWS[index]!.id, outcome.value);
-        else failures.set(`planner-location-${PLANNER_LOCATION_VIEWS[index]!.id}`, outcome.reason);
+        const viewId = PLANNER_LOCATION_VIEWS[index]!.id;
+        if (outcome.status === 'fulfilled') {
+          plannerLocationCases.set(viewId, outcome.value.settings);
+          plannerSetupCases.set(viewId, outcome.value.setup);
+        } else failures.set(`planner-location-${viewId}`, outcome.reason);
       });
     } finally {
       await terminateChildren();
@@ -1889,6 +1936,79 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
         expect(stackFaults(stack, focusBack, 'Localiser Terrasse')).toEqual([
           '« Réglages » is not hidden from assistive technology under the dialog',
           'the focus is not back on the door once the dialog is closed',
+        ]);
+      });
+    });
+
+    // Fix round 1, R2 (Alexandre's decision: the city was not offered at the
+    // creation of a garden) — THE FIRST SETUP of a garden without a plan, on
+    // the same page: the same section, its door to the same dialog, measured
+    // by the same means and held to the same checks, by day and by night, in
+    // French and in English, at the five widths. Measured in the same Chrome
+    // as « Réglages », after it — no bound of its own.
+    describe('at the first setup of a garden too (SMA-454, fix round 1, R2)', () => {
+      const setupOf = (viewId: string, caseId: string): PlannerLocationRun => {
+        const measured = plannerSetupCases.get(viewId)?.get(caseId);
+        if (!measured) throw new Error(`No measurement of the first setup ${caseId} at ${viewId}: ${String(failures.get(`planner-setup-${viewId}`) ?? failures.get(`planner-location-${viewId}`) ?? 'not run')}`);
+        return measured;
+      };
+      const DANGER = ['Supprimer ce jardin', 'Delete this garden'];
+      /** The dialog measured is the first setup — no plan drawn behind it, no danger zone in it: the SAME check for every case and for the control. */
+      const firstSetupFaults = (run: PlannerLocationRun): string[] => [
+        ...(run.grid ? ['a plan is drawn behind the dialog: not the first setup'] : []),
+        ...run.settings.buttons.filter((button) => DANGER.includes(button.text)).map((button) => `the danger zone in the dialog: « ${button.text} »`),
+      ];
+
+      it('ran every width to its end: four cases each — by day and by night, in French and in English —, twenty in all, in Inter, at the viewport they claim', () => {
+        expect([...failures.entries()].filter(([id]) => id.startsWith('planner-setup-')).map(([id, reason]) => `${id}: ${String(reason)}`)).toEqual([]);
+        for (const view of PLANNER_LOCATION_VIEWS) {
+          expect([...(plannerSetupCases.get(view.id)?.keys() ?? [])], view.id).toEqual(CASE_IDS);
+          for (const id of CASE_IDS) {
+            const run = setupOf(view.id, id);
+            expect(run.section.viewport, `${view.id} ${id}`).toBe(view.width);
+            expect(run.settings.fontLoaded, `${view.id} ${id}: Inter not loaded`).toBe(true);
+            expect(run.dialog.fontLoaded, `${view.id} ${id}: Inter not loaded`).toBe(true);
+          }
+        }
+      });
+
+      it.each(VIEW_IDS)('%s: the first setup — no plan behind it, no danger zone — carries LOCATION: the place the garden reads and the door, its texts whole and inside the paper, each at 4.5:1 or more on it by day and by night; nothing scrolls sideways', (viewId) => {
+        for (const id of CASE_IDS) {
+          const run = setupOf(viewId, id);
+          const said = WORDS[caseOf(id).lang];
+          const label = `${viewId} ${id}`;
+          expect(firstSetupFaults(run), label).toEqual([]);
+          expect({ label: run.section.label, line: run.section.line.text, door: run.section.door.text }, label).toEqual({ label: said.label, line: said.place, door: said.door });
+          expect(sectionFaults(run.section), label).toEqual([]);
+        }
+      });
+
+      it.each(VIEW_IDS)('%s: the first setup as one card — nothing overlapping, spilled nor ellipsized, the LOCATION section in it', (viewId) => {
+        for (const id of CASE_IDS) {
+          const { settings } = setupOf(viewId, id);
+          const found = defects(settings);
+          expect({ overlaps: found.overlaps, spills: found.spills, ellipsized: settings.ellipsized.map((cut) => cut.text) }, `${viewId} ${id}`).toEqual({ overlaps: [], spills: [], ellipsized: [] });
+          expect(settings.text, `${viewId} ${id}`).toContain(WORDS[caseOf(id).lang].door);
+        }
+      });
+
+      it.each(VIEW_IDS)('%s: the door, at the keyboard, opens THE location dialog over the first setup — its title and the place, clean, the first setup hidden under it, the focus in it —; Escape closes it, and the focus is back on the door', (viewId) => {
+        for (const id of CASE_IDS) {
+          const { dialog, stack, focusBack } = setupOf(viewId, id);
+          const said = WORDS[caseOf(id).lang];
+          const label = `${viewId} ${id}`;
+          expect(stackFaults(stack, focusBack, said.title), label).toEqual([]);
+          expect(dialog.text, label).toContain(said.place);
+          expect(defects(dialog), label).toEqual(clean);
+          expect(dialog.hardClipped, label).toBe(0);
+          expect(dialog.ellipsized, label).toEqual([]);
+        }
+      });
+
+      it('the control — the same check sees « Réglages » where the first setup should be: the plan behind it and its danger zone, both reported', () => {
+        expect(firstSetupFaults(runOf('1280x800', 'light/fr'))).toEqual([
+          'a plan is drawn behind the dialog: not the first setup',
+          'the danger zone in the dialog: « Supprimer ce jardin »',
         ]);
       });
     });

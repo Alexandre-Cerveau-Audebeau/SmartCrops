@@ -75,8 +75,10 @@ interface Props {
    * and the hemisphere and latitude band the separator's comment keeps the
    * room for. The planner hands its content in — the place, and the door to
    * the dashboard's location dialog —, so this dialog knows nothing of the
-   * network (pre-flight of SMA-336 PR ③, § F.6). Like the danger zone, on the
-   * « Réglages » instance only.
+   * network (pre-flight of SMA-336 PR ③, § F.6). On both instances, the first
+   * setup and « Réglages » (fix round 1, R2: Alexandre's decision, the city
+   * offered at the creation of a garden too); the danger zone stays
+   * « Réglages »' alone.
    */
   locationSection?: ReactNode;
   /**
