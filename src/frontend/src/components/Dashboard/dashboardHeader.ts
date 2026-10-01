@@ -18,3 +18,16 @@ export const DASHBOARD_HEADER_SX: SxProps<Theme> = {
   alignItems: 'center',
   mb: 3,
 };
+
+/**
+ * SMA-437, lot V3-06 (contract A-24) — the page's title, « Mes Jardins », an
+ * h1 with the h4 look: 28 px on a phone — the size V3-04 drew, which the
+ * pre-flight of lot V39 found the code never had — and the h4's own 34 px
+ * from 600 px up (`sm`); the h4's line height, 1.235, at both sizes. In `rem`,
+ * as the theme writes the h4 (2.125rem): the reader's own font size still
+ * scales it. One constant, read by the page and by the layout harness, like
+ * the row above.
+ */
+export const DASHBOARD_TITLE_SX: SxProps<Theme> = {
+  fontSize: { xs: '1.75rem', sm: '2.125rem' },
+};

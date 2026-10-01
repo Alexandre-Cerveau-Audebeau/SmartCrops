@@ -19,7 +19,7 @@ import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardActions from '../components/Dashboard/DashboardActions';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import FormulaChooserDialog from '../components/Dashboard/FormulaChooserDialog';
-import { DASHBOARD_HEADER_SX } from '../components/Dashboard/dashboardHeader';
+import { DASHBOARD_HEADER_SX, DASHBOARD_TITLE_SX } from '../components/Dashboard/dashboardHeader';
 import { useCompactActionBar } from '../components/Dashboard/useCompactActionBar';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
@@ -906,12 +906,15 @@ export default function GardensDashboard() {
         <Box>
           {/* h1 with the h4 look (round 1, E16 / G5): every DashboardBlock
               title is an h2, so an <h4> page title put the widgets above the
-              page in the heading hierarchy. */}
+              page in the heading hierarchy. Its size by width, 28 px on a
+              phone and 34 from 600 px, is a constant the layout harness
+              reads too (SMA-437, lot V3-06, A-24). */}
           <Typography
             variant="h4"
             component="h1"
             fontWeight={700}
             color="primary"
+            sx={DASHBOARD_TITLE_SX}
           >
             {t('gardens.title')}
           </Typography>

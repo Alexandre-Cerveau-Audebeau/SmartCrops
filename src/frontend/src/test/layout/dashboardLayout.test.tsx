@@ -1256,6 +1256,16 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       }
     });
 
+    // SMA-437, lot V3-06 (A-24) — the title the zone stands beside, drawn by
+    // the page's own constant: 28 px on a phone, 34 px from 600 px.
+    it.each(RUNS.map((run) => run.id))('%s: draws the title as the page draws it — 28 px under 600 px, 34 px from 600, the h4’s line of 1.235 — in every state (A-24)', (id) => {
+      const run = runOf(id);
+      const px = run.vw < 600 ? 28 : 34;
+      for (const scene of HEADER_SCENES) {
+        expect(headerOf(run, scene.name).titleFont, scene.name).toEqual({ px, line: Math.round(px * 1.235 * 10) / 10 });
+      }
+    });
+
     it.each(OWN_LINE_IDS)('%s: under 1 200 px, gives the zone its own line under the title, the whole width of the header, in every state (T0)', (id) => {
       const faults = HEADER_SCENES.flatMap((scene) => {
         const measure = headerOf(runOf(id), scene.name);

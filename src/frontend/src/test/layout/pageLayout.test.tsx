@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageGridMeasure, PageMeasure, PanelFocus, PanelMeasure, PlannerLimitMeasure, PlantingMeasure, WeatherMeasure } from './pageHarness';
+import type { ChoiceMeasure, DialogMeasure, GardensMeasure, NoviceMeasure, PageGridMeasure, PageMeasure, PanelFocus, PanelMeasure, PlannerLimitMeasure, PlantingMeasure, TitleMeasure, WeatherMeasure } from './pageHarness';
 import { CHOICE_SCENES, GARDENS_LIST_KINDS, NOVICE_LONG_NAMES, NOVICE_SCENES, WEATHER_CITY_NAMES, WEATHER_CITY_SCENES, gardensSceneData, weatherCitySceneData, type GardensListKind, type WeatherCityScene } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
@@ -40,6 +40,10 @@ import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
  * note and « Réinitialiser » under it, read just after a switch and six
  * seconds later on the page's simulated timers — the button never moves by
  * itself.
+ *
+ * SMA-437, lot V3-06: THE EDGES OF THE PAGE — the title « Mes Jardins » at
+ * the five widths, by day and by night, in French and in English — in the
+ * Weather group's hook too, once the drawer's Chromes have closed.
  *
  * Chrome as the scenes' suite finds it: without it the suite is SKIPPED on a
  * workstation and FAILS on CI.
@@ -1678,6 +1682,43 @@ async function runPanelView(view: PageView): Promise<Map<string, PanelRun>> {
   }
 }
 
+// ── The edges of the page, on the real page (SMA-437, lot V3-06 — A-21 to A-25) ──
+
+/** One run of the edges: by day or by night, in French or in English — four at each of the five widths, V3-06's own audit. */
+interface EdgeRun {
+  id: string;
+  theme: 'light' | 'dark';
+  lang: 'fr' | 'en';
+}
+
+const EDGE_RUNS: EdgeRun[] = (['light', 'dark'] as const).flatMap((theme) =>
+  (['fr', 'en'] as const).map((lang) => ({ id: `${theme}/${lang}`, theme, lang }))
+);
+
+/** What one run of the edges measured: the page's title (E1). */
+interface EdgeMeasure {
+  title: TitleMeasure;
+}
+
+/** The edges of the page, by viewport then by run. */
+const edgeCases = new Map<string, Map<string, EdgeMeasure>>();
+const edgeFailures = new Map<string, unknown>();
+
+/** Every run of one viewport, in one Chrome: the Expert's page, its title read. */
+async function runEdgesView(view: PageView): Promise<Map<string, EdgeMeasure>> {
+  const session = await openPage(CHROME!, weatherOutDir, { label: `edges-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
+  try {
+    const byRun = new Map<string, EdgeMeasure>();
+    for (const run of EDGE_RUNS) {
+      await session.navigate(`level=expert&theme=${run.theme}&lang=${run.lang}`);
+      byRun.set(run.id, { title: await session.evaluate<TitleMeasure>('window.__page.measureTitle()') });
+    }
+    return byRun;
+  } finally {
+    await session.close();
+  }
+}
+
 describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (SMA-448, lot F4, W5 — V3-02)', () => {
   beforeAll(async () => {
     weatherOutDir = makeOutDir();
@@ -1704,6 +1745,13 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
       panelSettled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') panelCases.set(WEATHER_VIEWS[index]!.id, outcome.value);
         else panelFailures.set(`panel-${WEATHER_VIEWS[index]!.id}`, outcome.reason);
+      });
+      // SMA-437, lot V3-06 — the edges of the page, in this same hook: five
+      // more Chromes, one per viewport, once the drawer's have closed.
+      const edgesSettled = await Promise.allSettled(WEATHER_VIEWS.map((view) => runEdgesView(view)));
+      edgesSettled.forEach((outcome, index) => {
+        if (outcome.status === 'fulfilled') edgeCases.set(WEATHER_VIEWS[index]!.id, outcome.value);
+        else edgeFailures.set(`edges-${WEATHER_VIEWS[index]!.id}`, outcome.reason);
       });
     } finally {
       await terminateChildren();
@@ -2167,6 +2215,44 @@ describe.skipIf(!CHROME)('the Weather widget by formula, as the app mounts it (S
         const found = defects(probe('panel-long-word'));
         expect([...found.overlaps, ...found.clipped, ...found.spills]).not.toEqual([]);
       });
+    });
+  });
+
+  // SMA-437, lot V3-06 (A-21 to A-25; V3-06 § 6) — THE EDGES OF THE PAGE, as
+  // the app mounts them, at the five widths, by day and by night, in French
+  // and in English: the title « Mes Jardins » (A-24). Measured in this group's
+  // own hook, once the drawer's Chromes have closed — no bound of its own.
+  describe('the edges of the page, as the app mounts them (SMA-437, lot V3-06 — A-21 to A-25)', () => {
+    const RUN_IDS = EDGE_RUNS.map((run) => run.id);
+    const edgesOf = (viewId: string, runId: string): EdgeMeasure => {
+      const measured = edgeCases.get(viewId)?.get(runId);
+      if (!measured) throw new Error(`No measurement of the edges ${runId} at ${viewId}: ${String(edgeFailures.get(`edges-${viewId}`) ?? 'not run')}`);
+      return measured;
+    };
+
+    it('ran every viewport to its end: four runs each — by day and by night, in French and in English —, twenty in all; in Inter, at the viewport it claims', () => {
+      expect([...edgeFailures.entries()].map(([id, reason]) => `${id}: ${String(reason)}`)).toEqual([]);
+      expect(EDGE_RUNS).toHaveLength(4);
+      for (const view of WEATHER_VIEWS) {
+        expect([...(edgeCases.get(view.id)?.keys() ?? [])], view.id).toEqual(RUN_IDS);
+        for (const id of RUN_IDS) {
+          const { title } = edgesOf(view.id, id);
+          expect(title.viewport, `${view.id} ${id}`).toBe(view.width);
+          expect(title.fontLoaded, `${view.id} ${id}: Inter not loaded`).toBe(true);
+        }
+      }
+    });
+
+    it.each(WEATHER_VIEWS.map((view) => view.id))('%s: the title — « Mes Jardins », « My Gardens » — at 28 px under 600 px and 34 px from 600, the h4’s line of 1.235, bold, on one line; by day and by night (A-24)', (viewId) => {
+      const view = WEATHER_VIEWS.find((candidate) => candidate.id === viewId)!;
+      const px = view.width < 600 ? 28 : 34;
+      for (const run of EDGE_RUNS) {
+        const { title } = edgesOf(viewId, run.id);
+        expect(
+          { text: title.text, px: title.px, line: title.line, weight: title.weight, lines: title.lines },
+          `${viewId} ${run.id}`
+        ).toEqual({ text: run.lang === 'fr' ? 'Mes Jardins' : 'My Gardens', px, line: Math.round(px * 1.235 * 10) / 10, weight: 700, lines: 1 });
+      }
     });
   });
 });

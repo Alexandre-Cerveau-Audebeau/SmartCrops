@@ -75,6 +75,9 @@ import { gridCellsOf, measureCard, ownText, visible, wrappedTexts, type CardMeas
  * — `fakeTimers()` once the page is loaded, `advanceTimers(ms)` to move them
  * on —, so the suite can read the drawer six seconds after a gesture without
  * waiting six seconds.
+ *
+ * SMA-437, lot V3-06, step E1: THE PAGE'S TITLE — `measureTitle()` reads its
+ * computed size, line height and weight, and the lines its words take.
  */
 
 const params = new URLSearchParams(location.search);
@@ -533,6 +536,24 @@ export interface PanelMeasure extends CardMeasure {
 export interface PanelFocus {
   key: string | null;
   control: string;
+}
+
+/**
+ * SMA-437, lot V3-06, step E1 (contract A-24) — the page's title, « Mes
+ * Jardins », as the engine draws it: its computed size, line height and
+ * weight, the box of its words, and how many lines they take.
+ */
+export interface TitleMeasure {
+  viewport: number;
+  text: string;
+  px: number;
+  line: number;
+  weight: number;
+  /** The box of its words — their Range, not the h1's box, which the header's flex row stretches. */
+  box: Rect;
+  /** The lines its words take: one, or more when they wrap. */
+  lines: number;
+  fontLoaded: boolean;
 }
 
 declare global {
@@ -1057,6 +1078,29 @@ const page = {
         )
       ),
       warning: document.querySelector('[data-weather-disclaimer]') !== null,
+    };
+  },
+
+  /** SMA-437, lot V3-06, step E1 (A-24) — the page's title, as the engine draws it. */
+  measureTitle(): TitleMeasure {
+    const title = document.querySelector<HTMLElement>('[data-dashboard-header] h1');
+    if (!title) throw new Error('The page drew no title.');
+    const style = getComputedStyle(title);
+    const words = document.createRange();
+    words.selectNodeContents(title);
+    const box = words.getBoundingClientRect();
+    const tops = new Set(
+      [...words.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0).map((rect) => Math.round(rect.top))
+    );
+    return {
+      viewport: innerWidth,
+      text: title.textContent ?? '',
+      px: parseFloat(style.fontSize),
+      line: round(parseFloat(style.lineHeight)),
+      weight: Number(style.fontWeight),
+      box: { x: round(box.left), y: round(box.top), w: round(box.width), h: round(box.height) },
+      lines: tops.size,
+      fontLoaded: document.fonts.check('16px Inter'),
     };
   },
 
