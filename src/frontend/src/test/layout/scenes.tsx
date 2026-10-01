@@ -1187,3 +1187,29 @@ export function weatherCitySceneData(kind: WeatherCityScene): WeatherCitySceneDa
     gardens: list.length,
   };
 }
+
+// ── The edges of the page's cards, on the real page (SMA-437, lot V3-06) ────
+
+/**
+ * SMA-437, lot V3-06 (contract A-21 to A-23, A-25; V5: « toute forme nouvelle
+ * de la v3 entre dans le harnais comme une scène […] le pied collant ») —
+ * what the page launcher's `fetch` serves the REAL page so Tips and To-do,
+ * in Large, draw their invitation in its new forms:
+ * - `full` — the scenes' three gardens, Balcon sud without an orientation and
+ *   without a city: Tips groups Terrasse and Potager du fond and names Balcon
+ *   sud in the foot stuck at the bottom of its zone (A-21); To-do lists its
+ *   tasks and Balcon sud has no weather (A-22);
+ * - `empty` — the same three gardens, none oriented, none located: no tip and
+ *   no garden checked, Tips' invitation in the middle of the card (A-23).
+ */
+export type EdgesScene = 'full' | 'empty';
+export const EDGES_SCENES: readonly EdgesScene[] = ['full', 'empty'];
+
+export function edgesSceneData(kind: EdgesScene): { data: DashboardData; weather: DashboardWeatherData } {
+  if (kind === 'full') return { data, weather: weatherPartial() };
+  const unoriented = gardens.map((garden) => ({ ...garden, config: { ...garden.config, orientation: null } }));
+  return {
+    data: dashboardFixture(unoriented, { varieties, totals: data.totals }),
+    weather: weatherFixture([], unoriented.map((garden) => linkFixture({ gardenId: garden.id, locationKey: null, source: null }))),
+  };
+}
