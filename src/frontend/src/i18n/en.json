@@ -2153,11 +2153,11 @@
   "legal": {
     "layout": {
       "lastUpdated": "Last updated:",
-      "updatedDate": "September 22, 2026",
       "courtesy": "Courtesy translation — in case of any discrepancy, the French version prevails."
     },
     "mentions": {
       "title": "Legal Notice",
+      "updatedDate": "September 22, 2026",
       "subtitle": "French Act No. 2004-575 of 21 June 2004 on confidence in the digital economy (LCEN)",
       "s01": {
         "title": "Website publisher",
@@ -2192,6 +2192,7 @@
     },
     "privacy": {
       "title": "Privacy Policy",
+      "updatedDate": "September 22, 2026",
       "s01": {
         "title": "Who is the data controller?",
         "body": "The controller of the personal data collected on **SmartCrops** is the site's publisher: **Alexandre Cerveau Audebeau**, reachable at **contact@smartcrops.fr**. **SmartCrops** is a personal, free project with no commercial purpose."
@@ -2365,6 +2366,7 @@
     },
     "terms": {
       "title": "Terms of Use",
+      "updatedDate": "September 22, 2026",
       "s01": {
         "title": "Purpose",
         "body": "These Terms of Use govern the use of **SmartCrops** (the “Service”), a web application for managing virtual gardens: plant library, garden planning and related features. Using the Service constitutes acceptance of these Terms."

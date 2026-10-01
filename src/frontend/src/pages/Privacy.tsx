@@ -38,7 +38,7 @@ export default function Privacy() {
   const { t } = useTranslation();
 
   return (
-    <LegalPageLayout title={t('legal.privacy.title')}>
+    <LegalPageLayout title={t('legal.privacy.title')} updatedDate={t('legal.privacy.updatedDate')}>
       <LegalSection number="01" title={t('legal.privacy.s01.title')}>
         <LegalParagraph text={t('legal.privacy.s01.body')} />
       </LegalSection>

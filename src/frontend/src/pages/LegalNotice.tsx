@@ -12,6 +12,7 @@ export default function LegalNotice() {
     <LegalPageLayout
       title={t('legal.mentions.title')}
       subtitle={t('legal.mentions.subtitle')}
+      updatedDate={t('legal.mentions.updatedDate')}
     >
       <LegalSection number="01" title={t('legal.mentions.s01.title')}>
         <LegalParagraph text={t('legal.mentions.s01.p1')} />

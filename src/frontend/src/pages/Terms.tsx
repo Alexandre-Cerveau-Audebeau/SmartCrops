@@ -9,7 +9,7 @@ export default function Terms() {
   const { t } = useTranslation();
 
   return (
-    <LegalPageLayout title={t('legal.terms.title')}>
+    <LegalPageLayout title={t('legal.terms.title')} updatedDate={t('legal.terms.updatedDate')}>
       <LegalSection number="01" title={t('legal.terms.s01.title')}>
         <LegalParagraph text={t('legal.terms.s01.body')} />
       </LegalSection>

@@ -2153,11 +2153,11 @@
   "legal": {
     "layout": {
       "lastUpdated": "Dernière mise à jour :",
-      "updatedDate": "22 septembre 2026",
       "courtesy": "Version originale française — en cas de divergence avec la traduction, la version française fait foi."
     },
     "mentions": {
       "title": "Mentions légales",
+      "updatedDate": "22 septembre 2026",
       "subtitle": "Loi n° 2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN)",
       "s01": {
         "title": "Éditeur du site",
@@ -2192,6 +2192,7 @@
     },
     "privacy": {
       "title": "Politique de confidentialité",
+      "updatedDate": "22 septembre 2026",
       "s01": {
         "title": "Qui est responsable du traitement ?",
         "body": "Le responsable du traitement des données personnelles collectées sur **SmartCrops** est l'éditeur du site : **Alexandre Cerveau Audebeau**, joignable à **contact@smartcrops.fr**. **SmartCrops** est un projet personnel, gratuit et sans finalité commerciale."
@@ -2365,6 +2366,7 @@
     },
     "terms": {
       "title": "Conditions générales d'utilisation (CGU)",
+      "updatedDate": "22 septembre 2026",
       "s01": {
         "title": "Objet",
         "body": "Les présentes CGU encadrent l'utilisation de **SmartCrops** (le « Service »), application web de gestion de jardins virtuels : bibliothèque de plantes, planification de jardin et fonctionnalités associées. L'utilisation du Service vaut acceptation des présentes CGU."
