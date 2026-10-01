@@ -146,7 +146,13 @@ describe('FormulaChooserDialog — the choice screen (SMA-448, lot F3, L5)', () 
   it('the refusal region is born empty, polite, kept mounted; a session that expired offers to sign in again', async () => {
     renderDialog({ refusal: { kind: 'unauthorized', formula: 'novice', reasons: [] } });
     await within(dialog()).findByRole('button', { name: 'Keep Gardener' });
-    const region = within(dialog()).getByRole('status');
+    // Two regions on the screen since M5 (SMA-437 review): its loading one,
+    // empty once the offers landed, then the refusal's.
+    const regions = within(dialog()).getAllByRole('status');
+    expect(regions).toHaveLength(2);
+    expect(regions[0]!.textContent).toBe('');
+    const region = regions[1]!;
+    expect(region).toHaveAttribute('data-formula-chooser-refusal');
     expect(region).toHaveAttribute('aria-live', 'polite');
     expect(region).toHaveTextContent('Your session has expired. Sign in again to continue.');
     expect(within(dialog()).getByRole('button', { name: 'Sign in again' })).toBeInTheDocument();
@@ -359,5 +365,66 @@ describe.each(['light', 'dark'] as const)('the choice screen’s green texts rea
         expect(contrast(foreground!, ground), `${what} « ${declared} » on the ${name} ground`).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+});
+
+// SMA-437, the complete review of the v3, M5 (§ 4 and § 7, point 1): the
+// region « Loading the formulas… » was inserted WITH its text — a region
+// born filled is not announced — and taken away with the skeletons, so the
+// start of the load was rarely said and its end never. Now `useLiveRegion()`:
+// mounted with the screen, born empty, the sentence written into it by its
+// ref once it is there, emptied when the offers land, kept mounted. What
+// tells « written into the mounted region » from « inserted with its text »:
+// a mutation whose TARGET is the region itself — React builds a new subtree
+// off the document and inserts it whole, so a region born with its text
+// never shows one. The catalogue HELD, then landed inside `act`.
+describe('the loading region of the choice screen (SMA-437 review, M5)', () => {
+  it('is born empty and kept mounted: « Loading the formulas… » written into it once mounted, emptied when the offers land — the same node, polite', async () => {
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((batch) => records.push(...batch));
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    const held = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(held.promise);
+    try {
+      renderDialog();
+      records.push(...observer.takeRecords());
+
+      const region = within(dialog()).getByText('Loading the formulas…');
+      expect(
+        records.some((record) => record.target === region && [...record.addedNodes].some((node) => node.textContent === 'Loading the formulas…')),
+        'the sentence is written into the region, never born with it'
+      ).toBe(true);
+      expect(region).toHaveAttribute('role', 'status');
+      expect(region).toHaveAttribute('aria-live', 'polite');
+
+      await act(async () => held.resolve(catalogFor('gardener', { gardenCount: 2 })));
+
+      expect(within(dialog()).getByRole('button', { name: 'Keep Gardener' })).toBeInTheDocument();
+      expect(region.isConnected, 'the region stays mounted').toBe(true);
+      expect(region.textContent).toBe('');
+      expect(within(dialog()).getAllByRole('status')[0]).toBe(region);
+    } finally {
+      observer.disconnect();
+    }
+  });
+
+  it('says it again on « Try again »: emptied on the error, the sentence written anew into the same region', async () => {
+    const first = deferred<FormulasCatalog>();
+    const second = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    renderDialog();
+    const region = within(dialog()).getByText('Loading the formulas…');
+
+    await act(async () => first.reject(new Error('down')));
+    expect(within(dialog()).getByText('Couldn’t load the formulas.')).toBeInTheDocument();
+    expect(region.textContent).toBe('');
+
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Try again' }));
+    expect(region.textContent).toBe('Loading the formulas…');
+    expect(region.isConnected).toBe(true);
+
+    await act(async () => second.resolve(catalogFor('gardener', { gardenCount: 2 })));
+    expect(within(dialog()).getByRole('button', { name: 'Keep Gardener' })).toBeInTheDocument();
+    expect(region.textContent).toBe('');
   });
 });

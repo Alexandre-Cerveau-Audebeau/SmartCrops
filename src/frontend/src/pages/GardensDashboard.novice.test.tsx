@@ -446,17 +446,24 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     expect(screen.getByRole('button', { name: 'Novice view — change formula', hidden: true })).toBeInTheDocument();
   });
 
-  it('the chooser’s refusal region is born empty and stays mounted — never assertive', async () => {
+  it('the chooser’s regions — its loading one and its refusal’s — are born empty and stay mounted — never assertive', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
     // The catalogue first (SMA-452 § 12): the dialog opens before it, and
-    // while it loads « Loading the formulas… » is a second status.
+    // while it loads the loading region says « Loading the formulas… ».
     await within(dialog).findByRole('button', { name: 'Keep Novice' });
 
-    const region = within(dialog).getByRole('status');
-    expect(region).toHaveTextContent('');
-    expect(region).toHaveAttribute('aria-live', 'polite');
+    // Two regions, kept mounted (SMA-437 review, M5): the loading one, empty
+    // again once the offers landed, then the refusal's.
+    const regions = within(dialog).getAllByRole('status');
+    expect(regions).toHaveLength(2);
+    expect(regions[0]).toBe(dialog.querySelector('[data-formula-choice-status]'));
+    expect(regions[1]).toBe(dialog.querySelector('[data-formula-chooser-refusal]'));
+    for (const region of regions) {
+      expect(region).toHaveTextContent('');
+      expect(region).toHaveAttribute('aria-live', 'polite');
+    }
     expect(dialog.querySelector('[aria-live="assertive"]')).toBeNull();
   });
 
@@ -598,7 +605,7 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
     expect(chipRules).toMatch(/outline:2pxsolid/u);
   });
 
-  it('keeps its live regions born empty and mounted — the header’s save indicator, the chooser’s refusal — and none assertive', async () => {
+  it('keeps its live regions born empty and mounted — the header’s save indicator, the chooser’s loading and refusal regions — and none assertive', async () => {
     renderPage();
     await waitFor(() => expect(cards()).toHaveLength(3));
 
@@ -610,11 +617,17 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
 
     fireEvent.click(screen.getByRole('button', { name: 'Novice view — change formula' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
-    // The catalogue first (SMA-452 § 12): while it loads, « Loading the
-    // formulas… » is a second status — this read lost that race in the merge
-    // CI of `e640de7` and of `7e5069d`.
+    // The catalogue first (SMA-452 § 12): while it loads, the loading region
+    // says « Loading the formulas… » — this read lost that race in the merge
+    // CI of `e640de7` and of `7e5069d`, when that region was inserted with
+    // its text. Both regions of the chooser, empty once the offers landed,
+    // and kept mounted (SMA-437 review, M5).
     await within(dialog).findByRole('button', { name: 'Keep Novice' });
-    expect(within(dialog).getByRole('status')).toHaveTextContent('');
+    const regions = within(dialog).getAllByRole('status');
+    expect(regions).toHaveLength(2);
+    expect(regions[0]).toBe(dialog.querySelector('[data-formula-choice-status]'));
+    expect(regions[1]).toBe(dialog.querySelector('[data-formula-chooser-refusal]'));
+    for (const region of regions) expect(region).toHaveTextContent('');
     expect(document.querySelector('[aria-live="assertive"]')).toBeNull();
   });
 

@@ -17,6 +17,7 @@ import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
 import ReconnectButton from '../ReconnectButton';
 import { formulaRefusalText } from './formulaRefusal';
 import { useFormulas } from '../../hooks/useFormulas';
+import { useLiveRegion } from '../../hooks/useLiveRegion';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../theme/useDashboardTokens';
 import type {
@@ -110,6 +111,18 @@ export default function FormulaChoice({ titleId, mandatory, switching, refusal, 
     titleRef.current?.focus({ preventScroll: true });
   }, []);
 
+  // SMA-437, the complete review of the v3, M5 — the screen's loading
+  // region is `useLiveRegion()`'s: mounted with the screen, born EMPTY, its
+  // sentence written by its ref once it is there. The one before was
+  // inserted with its text — a region born filled is not announced — and
+  // taken away with the skeletons. On screen while the offers load
+  // (`visible`); emptied when they land or fail — a removal, not announced
+  // —; said again on « Réessayer ». The effect writes the DOM, never a state.
+  const { announce, regionProps } = useLiveRegion<HTMLElement>({ visible: true });
+  useEffect(() => {
+    announce(loading ? t('dashboard.choice.loading') : '');
+  }, [announce, loading, t]);
+
   const nameOf = (level: DashboardLevel) => t(`dashboard.levels.${level}.name`);
 
   return (
@@ -147,18 +160,25 @@ export default function FormulaChoice({ titleId, mandatory, switching, refusal, 
             </Link>
           </Typography>
         )}
+        {/* The loading region (M5), in the header: kept mounted, it adds no
+            gap to the column — the three « Choisir » keep their place above
+            the fold (A2). No children: React never renders its text, so a
+            re-render never rewrites what `announce` wrote. */}
+        <Typography
+          {...regionProps}
+          data-formula-choice-status
+          sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary', '&:not(:empty)': { mt: '16px' } }}
+        />
       </Box>
 
       {loading && (
-        <Box data-formula-choice-loading sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <Typography role="status" sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary' }}>
-            {t('dashboard.choice.loading')}
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' }, gap: `${DASHBOARD_SPACING.gutter}px` }}>
-            {[0, 1, 2].map((index) => (
-              <Skeleton key={index} variant="rounded" height={320} sx={{ borderRadius: '14px' }} />
-            ))}
-          </Box>
+        <Box
+          data-formula-choice-loading
+          sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' }, gap: `${DASHBOARD_SPACING.gutter}px` }}
+        >
+          {[0, 1, 2].map((index) => (
+            <Skeleton key={index} variant="rounded" height={320} sx={{ borderRadius: '14px' }} />
+          ))}
         </Box>
       )}
 
