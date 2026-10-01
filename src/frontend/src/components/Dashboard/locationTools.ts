@@ -4,13 +4,14 @@ import {
   saveGardenLocation,
   saveProfileLocation,
 } from '../../services/weatherApi';
-import type { LocationPick } from '../../types/DashboardWeather';
+import type { DashboardWeatherData, LocationPick } from '../../types/DashboardWeather';
 
 /**
  * SMA-336 PR 3b/5 — what the location gestures of the dashboard share: the
  * TARGET a dialog or an inline invitation writes to, the label of a pick, and
  * the writes. A module of its own so the component files export components
- * only (react-refresh/only-export-components).
+ * only (react-refresh/only-export-components). Since SMA-454 the planner's
+ * door in « Réglages » shares them too: one dialog, several doors.
  */
 
 /**
@@ -60,6 +61,42 @@ export type LocationTarget =
       /** As for the profile: the aggregate could not be read (round 3, E2; round 4, F1). */
       unavailable?: boolean;
     };
+
+/**
+ * SMA-454 — what a GARDEN's dialog holds TODAY, read from the LIVE weather
+ * aggregate (round 2, D4: derived on every render, never a photograph taken
+ * at opening), with the state of the read that brought it — in flight (D4,
+ * F2), or failed (E2, F1). The ONE derivation behind every door to a garden's
+ * location: the dashboard's and the planner's « Réglages » read it, so two
+ * doors can never name another place, nor offer another way back. Moved here
+ * as it was from `GardensDashboard`.
+ */
+export function gardenLocationTarget(
+  weather: DashboardWeatherData,
+  garden: { id: string; name: string },
+  read: { loading: boolean; unavailable: boolean }
+): Extract<LocationTarget, { kind: 'garden' }> {
+  const link = weather.gardens.find((entry) => entry.gardenId === garden.id);
+  return {
+    kind: 'garden',
+    gardenId: garden.id,
+    gardenName: garden.name,
+    // « Revenir à la ville du profil » only when there is a profile city to
+    // return to AND an override to drop.
+    canRevert: link?.source === 'garden' && weather.profileLocated,
+    current: placeName(weather, link?.locationKey),
+    loading: read.loading,
+    unavailable: read.unavailable,
+  };
+}
+
+/** The stored name of the place a link reads, when the aggregate carries it. */
+export function placeName(
+  weather: DashboardWeatherData,
+  key: string | null | undefined
+): string | null {
+  return key ? (weather.locations.find((place) => place.key === key)?.name ?? null) : null;
+}
 
 /**
  * What a surface knows of a stored place, and the ONE sentence for it — the

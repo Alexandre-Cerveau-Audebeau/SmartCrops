@@ -694,3 +694,51 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
     await waitFor(() => expect(document.activeElement).toBe(bin));
   });
 });
+
+// SMA-454 — A CARD'S WEATHER DOOR, THROUGH THE PAGE: what the location dialog
+// holds for a garden is read from the live aggregate by the derivation the
+// planner's door in « Réglages » reads too (`gardenLocationTarget`) — the
+// garden's place, and « Back to the profile city » only where there is an
+// override to drop AND a profile city to fall back to.
+describe('the Novice page — a card’s weather door opens THE location dialog on its garden (SMA-454)', () => {
+  /** Opens the location dialog from a garden's card, once the aggregate has landed — every card shows its figure. */
+  const locate = async (id: string, name: string) => {
+    await waitFor(() => expect(document.querySelectorAll('[data-novice-weather]')).toHaveLength(3));
+    fireEvent.click(within(cardOf(id)).getByRole('button', { name: `Change the location of ${name}` }));
+    return screen.findByRole('dialog', { name: `Locate ${name}` });
+  };
+
+  it('a garden with its own city, beside a profile city: its place, and « Back to the profile city »', async () => {
+    renderPage();
+
+    const dialog = await locate('g3', 'Potager du fond');
+
+    expect(within(dialog).getByText('Current place: Écully')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Back to the profile city' })).toBeInTheDocument();
+  });
+
+  it('a garden reading the profile city: its place, and nothing to go back to', async () => {
+    renderPage();
+
+    const dialog = await locate('g1', 'Terrasse');
+
+    expect(within(dialog).getByText('Current place: Écully')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Back to the profile city' })).toBeNull();
+  });
+
+  it('a garden with its own city and NO profile city: no « Back to the profile city » — the DELETE would leave it unlocated', async () => {
+    const [ecully] = weatherAll().locations;
+    vi.mocked(fetchDashboardWeather).mockResolvedValue(
+      weatherFixture(
+        [ecully!],
+        ['g1', 'g2', 'g3'].map((gardenId) => linkFixture({ gardenId, locationKey: ecully!.key, source: 'garden' }))
+      )
+    );
+    renderPage();
+
+    const dialog = await locate('g3', 'Potager du fond');
+
+    expect(within(dialog).getByText('Current place: Écully')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Back to the profile city' })).toBeNull();
+  });
+});

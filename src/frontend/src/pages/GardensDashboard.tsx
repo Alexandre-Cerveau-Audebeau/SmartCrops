@@ -39,7 +39,11 @@ import TodoBlock from '../components/Dashboard/blocks/TodoBlock';
 import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
 import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPanel';
 import LocationDialog from '../components/Dashboard/LocationDialog';
-import type { LocationTarget } from '../components/Dashboard/locationTools';
+import {
+  gardenLocationTarget,
+  placeName,
+  type LocationTarget,
+} from '../components/Dashboard/locationTools';
 import NoviceGardens from '../components/Dashboard/NoviceGardens';
 import ReconnectButton from '../components/ReconnectButton';
 import { cardBearsWeather, noviceCardsOf } from '../components/Dashboard/noviceCards';
@@ -204,15 +208,12 @@ export default function GardensDashboard() {
   >(null);
   const [locateOpen, setLocateOpen] = useState(false);
 
-  /** The stored name of the place a link reads, when the aggregate carries it. */
-  const placeNamed = (key: string | null | undefined): string | null =>
-    key ? (weatherData.locations.find((place) => place.key === key)?.name ?? null) : null;
-
   // The profile default is the place every garden WITHOUT an override reads
   // (ADR-0006); the aggregate names it through any link that inherits. When
   // every garden overrides it, its name is unknown here — the dialog then says
   // « a default is stored » and still offers to remove it (V21).
-  const profileCurrent = placeNamed(
+  const profileCurrent = placeName(
+    weatherData,
     weatherData.gardens.find((entry) => entry.source === 'profile')?.locationKey
   );
 
@@ -243,18 +244,16 @@ export default function GardensDashboard() {
         unavailable: weatherError,
       };
     }
-    const link = weatherData.gardens.find((entry) => entry.gardenId === locateKey.gardenId);
-    return {
-      kind: 'garden',
-      gardenId: locateKey.gardenId,
-      gardenName: gardens.find((garden) => garden.id === locateKey.gardenId)?.name ?? '',
-      // « Revenir à la ville du profil » only when there is a profile city to
-      // return to AND an override to drop.
-      canRevert: link?.source === 'garden' && weatherData.profileLocated,
-      current: placeNamed(link?.locationKey),
-      loading: weatherInFlight,
-      unavailable: weatherError,
-    };
+    // SMA-454 — the ONE derivation of a garden's target, which the planner's
+    // door in « Réglages » reads too.
+    return gardenLocationTarget(
+      weatherData,
+      {
+        id: locateKey.gardenId,
+        name: gardens.find((garden) => garden.id === locateKey.gardenId)?.name ?? '',
+      },
+      { loading: weatherInFlight, unavailable: weatherError }
+    );
   })();
 
   /** Opens the dialog on a garden's override, or on the profile default when `gardenId` is null. */
