@@ -444,3 +444,80 @@ describe('the loading region of the choice screen (SMA-437 review, M5)', () => {
     expect(region.textContent).toBe('');
   });
 });
+
+// PR #306, fix round 1, D2 (Alexandre's visual pass, 01/10: « il y a 2
+// scrollbars sur le côté de l'écran quand ce dialog container s'ouvre ») —
+// the screen locks the page under it ITSELF: `disableScrollLock` stays (the
+// overlays' rule, `docs/coding-guidelines.md`), and MUI's lock is decided by
+// the first overlay of the page (`ModalManager.mount`) — none from the chip,
+// none on the mandatory screen. A style written on <html> as the screen
+// opens, given back EXACTLY as it closes or unmounts: what stood before —
+// nothing, or the lock of an overlay already there, the Customize panel
+// left open under it or the creation dialog « Voir les formules » closes —
+// stands after. The catalogue held: the lock is the screen's, whatever it
+// draws. What the page does in a real engine is read in Chrome
+// (`pageLayout.test.tsx`, D2).
+describe('the page under the choice screen, locked by the screen itself (PR #306, fix round 1, D2)', () => {
+  const page = () => document.documentElement.style;
+  const overflow = () => ({ x: page().getPropertyValue('overflow-x'), y: page().getPropertyValue('overflow-y') });
+
+  function renderScreen(open: boolean) {
+    vi.mocked(fetchFormulas).mockReturnValue(deferred<FormulasCatalog>().promise);
+    const props = { mandatory: false, switching: false, refusal: null, onClose: vi.fn(), onChoose: vi.fn() };
+    const screenAt = (isOpen: boolean) => (
+      <MemoryRouter>
+        <FormulaChooserDialog open={isOpen} {...props} />
+      </MemoryRouter>
+    );
+    const view = render(screenAt(open));
+    return { setOpen: (next: boolean) => view.rerender(screenAt(next)), unmount: view.unmount };
+  }
+
+  afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13): the screen gives back what it wrote as it
+    // unmounts; what a test wrote itself is taken away after.
+    cleanup();
+    page().removeProperty('overflow-x');
+    page().removeProperty('overflow-y');
+  });
+
+  it('opened, it writes `overflow: hidden` on <html>; closed, it gives back what stood — nothing', () => {
+    const screenOf = renderScreen(false);
+    expect(overflow()).toEqual({ x: '', y: '' });
+
+    screenOf.setOpen(true);
+    expect(overflow()).toEqual({ x: 'hidden', y: 'hidden' });
+
+    screenOf.setOpen(false);
+    expect(overflow()).toEqual({ x: '', y: '' });
+    expect(page().cssText).toBe('');
+  });
+
+  it('over the lock of an overlay already there — MUI’s `overflow: hidden`, the Customize panel’s or the creation dialog’s —, it leaves that lock in place as it closes', () => {
+    page().setProperty('overflow-x', 'hidden');
+    page().setProperty('overflow-y', 'hidden');
+    const screenOf = renderScreen(true);
+    expect(overflow()).toEqual({ x: 'hidden', y: 'hidden' });
+
+    screenOf.setOpen(false);
+    expect(overflow()).toEqual({ x: 'hidden', y: 'hidden' });
+  });
+
+  it('gives back each axis exactly as it stood — a value and its priority, and an axis left unset', () => {
+    page().setProperty('overflow-y', 'auto', 'important');
+    const screenOf = renderScreen(true);
+    expect(overflow()).toEqual({ x: 'hidden', y: 'hidden' });
+
+    screenOf.setOpen(false);
+    expect(overflow()).toEqual({ x: '', y: 'auto' });
+    expect(page().getPropertyPriority('overflow-y')).toBe('important');
+  });
+
+  it('unmounted while open, it gives back what stood', () => {
+    const screenOf = renderScreen(true);
+    expect(overflow()).toEqual({ x: 'hidden', y: 'hidden' });
+
+    screenOf.unmount();
+    expect(overflow()).toEqual({ x: '', y: '' });
+  });
+});

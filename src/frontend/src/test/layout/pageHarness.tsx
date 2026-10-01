@@ -75,6 +75,12 @@ import { gridCellsOf, measureCard, ownText, visible, wrappedTexts, type CardMeas
  * — `fakeTimers()` once the page is loaded, `advanceTimers(ms)` to move them
  * on —, so the suite can read the drawer six seconds after a gesture without
  * waiting six seconds.
+ *
+ * SMA-448, PR #306, fix round 1, D2: WHAT SCROLLS around the choice screen —
+ * `measureChoice()` says it with the screen open, `measureScroll()` at any
+ * moment, the screen gone included; `hit()` says whether a control can be
+ * pressed where it stands. A formula chosen on the screen is stamped, as the
+ * server stamps it: the mandatory screen then closes, as on the real page.
  */
 
 const params = new URLSearchParams(location.search);
@@ -156,6 +162,14 @@ const json = (body: unknown) =>
 const saved: unknown[] = [];
 
 /**
+ * Whether the account has chosen its formula: the choice scene's, until a
+ * formula is chosen on the screen — the server stamps the choice (`PUT
+ * /api/formulas/current`, `FormulaChosenAt`) and the layout read back after
+ * the switch says so (PR #306, fix round 1, D2).
+ */
+let chosen = choiceScene ? choiceScene.chosen : true;
+
+/**
  * While the suite holds the saves (`holdSaves()`), a write waits here for
  * `releaseSaves()` (SMA-437, PR #292, fix round 1, R1): « Enregistrement… »
  * is transient, and it cannot end under the measurement that reads it.
@@ -171,6 +185,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const method = (init?.method ?? 'GET').toUpperCase();
   if (url.startsWith('/api/formulas')) {
     if (plannerPage && saveOutcome) return new Response(null, { status: 500 });
+    if (method === 'PUT') {
+      chosen = true;
+      return new Response(null, { status: 204 });
+    }
     return json(choiceScene ? choiceSceneCatalog(choiceScene) : catalogFor(plannerPage ? 'novice' : pageLevel, { gardenCount: gardensServed ? gardensServed.gardens.length : 3 }));
   }
   if (url.startsWith('/api/gardens/g1/layout')) {
@@ -219,7 +237,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       level: pageLevel,
       isPreset: true,
       // The choice screen opens by itself on an account that never chose (N18).
-      formulaChosen: choiceScene ? choiceScene.chosen : true,
+      formulaChosen: chosen,
       // A stored layout with the Weather widget at the asked size (lot F4, W5),
       // the Gardens widget at its (lot F5-b, W4).
       blocks: presetFor(pageLevel).map((block) =>
@@ -447,6 +465,22 @@ export interface DialogMeasure extends CardMeasure {
   buttons: Array<{ text: string; disabled: boolean }>;
 }
 
+/**
+ * SMA-448, PR #306, fix round 1, D2 (Alexandre's visual pass, 01/10: « il y a
+ * 2 scrollbars sur le côté de l'écran quand ce dialog container s'ouvre ») —
+ * what scrolls. The PAGE: the document's scroller — its computed
+ * `overflow-y`, whether the reader can scroll it (not hidden, its content
+ * taller than the window), where it stands and how far it goes. The SCREEN:
+ * every element of the choice screen that scrolls — `overflow-y` auto, scroll
+ * or overlay, its content taller than its box —, by its MUI slot, with what a
+ * wheel does at its end (`overscroll-behavior-y`); none when the screen is
+ * not open. What lies under the veil is the page's, out of the wheel's reach.
+ */
+export interface ScrollMeasure {
+  page: { overflowY: string; scrollable: boolean; scrollY: number; maxScroll: number };
+  screen: Array<{ label: string; overscroll: string }>;
+}
+
 /** The choice screen (V3-01) measured on the real page: the panel as one card, and the situation it draws. */
 export interface ChoiceMeasure extends DialogMeasure {
   scene: string;
@@ -485,6 +519,8 @@ export interface ChoiceMeasure extends DialogMeasure {
    * at. Null when the screen draws no line — reopened from the chip.
    */
   terms: { color: string; lead: { text: string; color: string } | null; background: string; ratio: number } | null;
+  /** D2 — what scrolls, the screen open. */
+  scroll: ScrollMeasure;
 }
 
 /** The planner's shape mode at the formula's limit: the note that says why, the four add buttons inert, the four remove buttons live. */
@@ -715,6 +751,26 @@ function describeActive(): ActiveMeasure {
       ? 'header'
       : 'elsewhere';
   return { where, action: active.getAttribute('data-page-action'), text: active.textContent ?? '', mark: markOf(active) };
+}
+
+/** What scrolls now (D2): the page, and every element of the choice screen that scrolls, if it is open. */
+function scrollOf(): ScrollMeasure {
+  const doc = document.documentElement;
+  const overflowY = getComputedStyle(doc).overflowY;
+  const maxScroll = doc.scrollHeight - innerHeight;
+  const root = document.querySelector('[data-formula-choice-dialog]');
+  const screen = root
+    ? [root, ...root.querySelectorAll('*')]
+        .filter((element) => ['auto', 'scroll', 'overlay'].includes(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight)
+        .map((element) => ({
+          label: [...element.classList].find((name) => name.startsWith('Mui')) ?? element.tagName.toLowerCase(),
+          overscroll: getComputedStyle(element).overscrollBehaviorY,
+        }))
+    : [];
+  return {
+    page: { overflowY, scrollable: overflowY !== 'hidden' && overflowY !== 'clip' && maxScroll > 0, scrollY: round(scrollY), maxScroll },
+    screen,
+  };
 }
 
 // ── The Customize drawer (SMA-437, lot V3-07, P5) ───────────────────────────
@@ -1172,7 +1228,21 @@ const page = {
         return { text: cell.textContent ?? '', color: style.color, weight: style.fontWeight, tone: cell.getAttribute('data-compare-tone') };
       }),
       terms,
+      scroll: scrollOf(),
     };
+  },
+
+  /** D2 — what scrolls now: the page, and the choice screen's scrollers while it is open. */
+  measureScroll(): ScrollMeasure {
+    return scrollOf();
+  },
+
+  /** Whether a pointer at the centre of the first element `selector` finds lands on it — nothing drawn over it (D2: the chip pressable once the page has scrolled). */
+  hit(selector: string): boolean {
+    const element = nth(selector, 0);
+    const box = element.getBoundingClientRect();
+    const found = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return found !== null && element.contains(found);
   },
 
   /** The planner's shape mode at the formula's limit (SMA-448, lot F3, L7): the note, the row under it, the eight buttons. */
