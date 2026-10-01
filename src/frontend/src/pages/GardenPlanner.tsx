@@ -2564,6 +2564,7 @@ export default function GardenPlanner() {
             variant="outlined"
             startIcon={<SettingsIcon sx={{ fontSize: 19 }} />}
             onClick={handleOpenSettings}
+            data-planner-settings
             sx={{
               ...headerBtnSx,
               fontWeight: 700,
