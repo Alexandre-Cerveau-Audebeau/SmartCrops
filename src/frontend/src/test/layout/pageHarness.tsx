@@ -477,6 +477,14 @@ export interface ChoiceMeasure extends DialogMeasure {
    * declares (SMA-448, PR #297, fix round 1, S3: the tone by meaning).
    */
   compareCells: Array<{ text: string; color: string; weight: string; tone: string | null }>;
+  /**
+   * PR #306, fix round 1, L1 (Alexandre, 01/10: « Oui on peut la rendre plus
+   * visible, ça me va bien ») — the line of the Terms on the mandatory
+   * screen, and the lead right before it: the line's computed colour and the
+   * lead's, what is painted behind the line, and the ratio its text is read
+   * at. Null when the screen draws no line — reopened from the chip.
+   */
+  terms: { color: string; lead: { text: string; color: string } | null; background: string; ratio: number } | null;
 }
 
 /** The planner's shape mode at the formula's limit: the note that says why, the four add buttons inert, the four remove buttons live. */
@@ -1114,6 +1122,24 @@ const page = {
     const title = document.querySelector<HTMLElement>('[data-dashboard-header] h1');
     const paperBox = paper.getBoundingClientRect();
     const titleBox = title?.getBoundingClientRect() ?? null;
+    // L1 — the line, and the lead it follows (the order the dialog's unit
+    // tests pin): its steady colour, the screen's fade aside, read on what is
+    // painted behind it.
+    const line = paper.querySelector<HTMLElement>('[data-formula-choice-terms]');
+    let terms: ChoiceMeasure['terms'] = null;
+    if (line) {
+      const lineStyle = getComputedStyle(line);
+      const colour = channels(lineStyle.color);
+      const behind = paintedBehind(line);
+      const lead = line.previousElementSibling;
+      terms = {
+        color: lineStyle.color,
+        lead: lead ? { text: lead.textContent ?? '', color: getComputedStyle(lead).color } : null,
+        background: behind ? `rgb(${behind.map((channel) => Math.round(channel)).join(', ')})` : 'unreadable',
+        // Cut, never rounded, to the hundredth: a 4.497 is never read as 4.5.
+        ratio: colour && behind ? Math.floor(contrast(mix(colour.rgb, colour.a, behind), behind) * 100) / 100 : 0,
+      };
+    }
     return {
       ...page.measureDialog('[data-formula-choice]'),
       scene: choiceName ?? '',
@@ -1145,6 +1171,7 @@ const page = {
         const style = getComputedStyle(cell);
         return { text: cell.textContent ?? '', color: style.color, weight: style.fontWeight, tone: cell.getAttribute('data-compare-tone') };
       }),
+      terms,
     };
   },
 

@@ -1255,6 +1255,30 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
       }
     });
 
+    // SMA-448, PR #306, fix round 1 (L1, Alexandre 01/10: « Oui on peut la
+    // rendre plus visible, ça me va bien »): the line of the Terms in the
+    // colour of the lead it follows — no longer the secondary grey, in
+    // which a visual pass once missed it —, « les lire » as it was. Read on
+    // what is painted behind it, by day and by night, on every screen that
+    // draws it.
+    it('the line of the Terms on every mandatory screen: in the colour of the lead it follows, by day and by night, read at 4.5:1 or more — and none from the chip (L1)', () => {
+      const LEADS = { fr: 'Trois façons de jardiner avec SmartCrops.', en: 'Three ways to garden with SmartCrops.' } as const;
+      for (const run of CHOICE_RUNS) {
+        for (const scene of CHOICE_SCENES) {
+          const { terms } = choiceOf(run.id, scene.name);
+          const label = `${run.id} ${scene.name}`;
+          if (scene.opened === 'chip') {
+            expect(terms, label).toBeNull();
+            continue;
+          }
+          if (!terms) throw new Error(`${label}: no line of the Terms on the mandatory screen`);
+          expect(terms.lead?.text, `${label}: the lead`).toMatch(LEADS[run.lang]);
+          expect(terms.color, `${label}: the line, against the lead`).toBe(terms.lead?.color);
+          expect(terms.ratio, `${label}: ${terms.color} on ${terms.background}`).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    });
+
     // SMA-448, PR #297, fix round 1 (S3 — GitHub G2): the tone of a cell of
     // the comparison comes from its MEANING, never from its text. Read from
     // the text, « No limit » — the best value of its row — was drawn in the

@@ -144,11 +144,14 @@ export default function FormulaChoice({ titleId, mandatory, switching, refusal, 
             screen shown once (the final text of the Terms and the policy,
             § 4.1): in the header, so it is read while the offers load and
             on an error too; « les lire » opens the Terms in a new tab, the
-            mandatory choice — no close, no Escape — left in view. */}
+            mandatory choice — no close, no Escape — left in view. In the
+            lead's colour, no longer the secondary grey (PR #306, fix round
+            1, L1 — Alexandre, 01/10: « Oui on peut la rendre plus visible,
+            ça me va bien »); the link as it was. */}
         {mandatory && (
           <Typography
             data-formula-choice-terms
-            sx={{ mt: '8px', fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.5, color: 'text.secondary', maxWidth: 760 }}
+            sx={{ mt: '8px', fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.5, color: 'text.primary', maxWidth: 760 }}
           >
             {t('dashboard.choice.termsNotice')}{' '}
             <Link component={RouterLink} to="/terms" target="_blank" rel="noopener noreferrer">
