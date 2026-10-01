@@ -10,6 +10,7 @@ import { visuallyHidden } from '@mui/utils';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import DashboardBlock from '../DashboardBlock';
 import IconDisc from '../IconDisc';
+import InviteCard from '../InviteCard';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
 import { useRowBudget } from '../useRowBudget';
@@ -90,6 +91,10 @@ const MEDIUM_ROW_GAP = 8;
  * them (« Tailler — Thym, Romarin et Tournesol (septembre) ») and need no
  * weather, so a garden with no city now has tasks of its own — and the A4
  * invitation says what is missing, watering, rather than everything.
+ *
+ * SMA-437, lot V3-06 (contract A-22): in Large, beside tasks, that invitation
+ * is the form (b), stuck at the foot of the zone the groups scroll in — as
+ * the Tips card's (A-21).
  */
 export default function TodoBlock({
   size,
@@ -213,6 +218,13 @@ export default function TodoBlock({
     );
   };
 
+  /** The gardens without weather, as the language lists them — two names and « N autres » past three. */
+  const missingNames = nameList(
+    missing.map((garden) => garden.name),
+    i18n.language,
+    (count) => t('dashboard.blocks.weather.others', { count })
+  );
+
   /** « Sans la météo de X et Y, leurs arrosages ne sont pas planifiés — Ajouter une ville → » (A4). */
   const invitation = missing.length > 0 && (
     <Box
@@ -239,14 +251,7 @@ export default function TodoBlock({
         component="div"
         sx={{ flex: 1, minWidth: 0, fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.5, color: 'text.secondary' }}
       >
-        {t('dashboard.blocks.todo.noWeather', {
-          count: missing.length,
-          gardens: nameList(
-            missing.map((garden) => garden.name),
-            i18n.language,
-            (count) => t('dashboard.blocks.weather.others', { count })
-          ),
-        })}
+        {t('dashboard.blocks.todo.noWeather', { count: missing.length, gardens: missingNames })}
         <Button
           variant="text"
           size="small"
@@ -257,6 +262,25 @@ export default function TodoBlock({
         </Button>
       </Typography>
     </Box>
+  );
+
+  /**
+   * SMA-437, lot V3-06 (contract A-22) — the same invitation in the Large
+   * card beside its tasks: the form (b), the zone's last child, stuck to its
+   * bottom as the Tips card's (A-21). Its title is the row's sentence — the
+   * gardens named as the row names them, without quotes —; its body, the
+   * Weather invitation's own sentence, the same key (« … dans Réglages » is
+   * true once SMA-454 puts the city in the planner's Settings); its gesture,
+   * the location dialog on the profile default, as the row's link.
+   */
+  const footInvitation = missing.length > 0 && (
+    <InviteCard
+      place="foot"
+      icon={<LocationOnOutlinedIcon />}
+      title={t('dashboard.blocks.todo.noWeatherTitle', { count: missing.length, gardens: missingNames })}
+      body={t('dashboard.blocks.weather.inviteNote')}
+      gesture={{ label: t('dashboard.blocks.weather.addCity'), onClick: () => onLocate(null) }}
+    />
   );
 
   /**
@@ -389,6 +413,8 @@ export default function TodoBlock({
   };
 
   const largeBody = () => {
+    // No task: the honest panel and the row (a) under it, unchanged — V3-06
+    // draws no foot without a list to scroll ([P], contract A-22).
     if (tasks.length === 0) {
       return (
         <>
@@ -409,7 +435,9 @@ export default function TodoBlock({
             and pushed the three notes to the foot, leaving a void under three
             tasks. It now takes the height of what it lists and shrinks — with
             its own scroll — only when the card is too short for it; whatever
-            is left over stays at the bottom, under the notes. */}
+            is left over stays at the bottom, under the notes. The invitation
+            is its LAST child, stuck to its bottom (A-22); the weather note and
+            the session line are not invitations, and stay under it. */}
         <Box
           data-todo-groups
           sx={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}
@@ -434,8 +462,8 @@ export default function TodoBlock({
               </Box>
             </Box>
           ))}
+          {footInvitation}
         </Box>
-        {invitation}
         {weatherNote}
         <Typography data-todo-session sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}>
           {t('dashboard.blocks.todo.sessionOnly')}

@@ -19,6 +19,7 @@ import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
 import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 import {
   CHOICE_SCENES,
+  EDGES_SCENES,
   GARDENS_LIST_KINDS,
   NOVICE_SCENES,
   PLANNER_GARDEN,
@@ -26,11 +27,13 @@ import {
   SCENE_DATA,
   WEATHER_CITY_SCENES,
   choiceSceneCatalog,
+  edgesSceneData,
   gardensSceneData,
   noviceSceneData,
   weatherAll,
   weatherCitySceneData,
   type ChoiceScene,
+  type EdgesScene,
   type GardensListKind,
   type NoviceScene,
   type WeatherCityScene,
@@ -81,6 +84,16 @@ import { gridCellsOf, measureCard, ownText, visible, wrappedTexts, type CardMeas
  * moment, the screen gone included; `hit()` says whether a control can be
  * pressed where it stands. A formula chosen on the screen is stamped, as the
  * server stamps it: the mandatory screen then closes, as on the real page.
+ *
+ * SMA-437, lot V3-06, step E1: THE PAGE'S TITLE — `measureTitle()` reads its
+ * computed size, line height and weight, and the lines its words take. Steps
+ * E3 and E4: THE EDGES OF A LARGE CARD — `edges=full|empty` serves the scene's
+ * gardens and weather with Tips and To-do in Large; `measureEdges(key)` reads
+ * the card, its zone that scrolls, its invitation stuck at the foot of the
+ * zone or in the middle of the card, and every text's contrast on that
+ * invitation; `scrollZoneToEnd(key)` scrolls the zone to its end;
+ * `focusUnderFoot(key)` focuses the zone's controls in turn and names the
+ * ones the foot still hides (WCAG 2.4.11).
  */
 
 const params = new URLSearchParams(location.search);
@@ -152,6 +165,17 @@ if (gardensKindName && !gardensKind) throw new Error(`No gardens scene ${gardens
 const gardensSize = params.get('gsize') as DashboardSize | null;
 /** What `fetch` serves the page for the Gardens scene: its gardens and their weather. */
 const gardensServed = gardensKind ? gardensSceneData(gardensKind) : null;
+
+// SMA-437, lot V3-06 (A-21 to A-25) — the edges of the page's cards: the
+// gardens and the weather the scene serves (`edges=full|empty`), and Tips and
+// To-do in Large through the page's own read of the layout, as `wsize` above.
+const edgesName = params.get('edges');
+const edgesKind: EdgesScene | null = edgesName
+  ? ((EDGES_SCENES as readonly string[]).includes(edgesName) ? (edgesName as EdgesScene) : null)
+  : null;
+if (edgesName && !edgesKind) throw new Error(`No edges scene ${edgesName}`);
+/** What `fetch` serves the page for the edges scene: its aggregate and its weather. */
+const edgesServed = edgesKind ? edgesSceneData(edgesKind) : null;
 
 /**
  * The theme the page draws with — the colour mode `pageSetup.ts` stored —:
@@ -251,18 +275,40 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
           ? { ...block, size: weatherSize, hidden: false }
           : gardensSize && block.key === 'gardens'
             ? { ...block, size: gardensSize, hidden: false }
-            : block
+            : edgesKind && (block.key === 'tips' || block.key === 'todo')
+              ? { ...block, size: 'large' as const, hidden: false }
+              : block
       ),
       updatedAt: null,
       capabilities: capabilitiesFor(pageLevel),
     });
   }
   if (url.startsWith('/api/dashboard/weather')) {
-    return json(served ? served.weather : weatherServed ? weatherServed.weather : gardensServed ? gardensServed.weather : weatherAll());
+    return json(
+      served
+        ? served.weather
+        : weatherServed
+          ? weatherServed.weather
+          : gardensServed
+            ? gardensServed.weather
+            : edgesServed
+              ? edgesServed.weather
+              : weatherAll()
+    );
   }
   if (url.startsWith('/api/dashboard')) {
     if (failGardens) return new Response(null, { status: 500 });
-    return json(served ? served.data : weatherServed ? weatherServed.data : gardensServed ? gardensServed.data : SCENE_DATA);
+    return json(
+      served
+        ? served.data
+        : weatherServed
+          ? weatherServed.data
+          : gardensServed
+            ? gardensServed.data
+            : edgesServed
+              ? edgesServed.data
+              : SCENE_DATA
+    );
   }
   // A visitor: the navbar of someone not signed in, as the pre-flight measured it.
   if (url.startsWith('/api/auth/')) return new Response(null, { status: 401 });
@@ -583,6 +629,63 @@ export interface PanelMeasure extends CardMeasure {
 export interface PanelFocus {
   key: string | null;
   control: string;
+}
+
+/**
+ * SMA-437, lot V3-06, step E1 (contract A-24) — the page's title, « Mes
+ * Jardins », as the engine draws it: its computed size, line height and
+ * weight, the box of its words, and how many lines they take.
+ */
+export interface TitleMeasure {
+  viewport: number;
+  text: string;
+  px: number;
+  line: number;
+  weight: number;
+  /** The box of its words — their Range, not the h1's box, which the header's flex row stretches. */
+  box: Rect;
+  /** The lines its words take: one, or more when they wrap. */
+  lines: number;
+  fontLoaded: boolean;
+}
+
+/**
+ * SMA-437, lot V3-06, step E3 (A-21 to A-23) — the invitation of a Large card
+ * in its new forms, the card (b): stuck at the FOOT of the zone that scrolls,
+ * or in the MIDDLE of the card. Its box, the computed styles that make it
+ * what it is, and every text's contrast on what is painted behind it.
+ */
+export interface InviteCardMeasure {
+  /** `foot` or `middle`. */
+  place: string;
+  rect: Rect;
+  position: string;
+  bottom: string;
+  backgroundColor: string;
+  backgroundImage: string;
+  backdropFilter: string;
+  maxWidth: string;
+  texts: PanelText[];
+}
+
+/**
+ * SMA-437, lot V3-06, step E3 (A-21 to A-23, A-25) — the edges of a Large
+ * card: the card measured as the scenes' harness measures one; its zone that
+ * scrolls — its box, its content's height, its own, how far it is scrolled;
+ * its invitation; the bottom of its last group, which the foot never covers
+ * once the zone is scrolled to its end; and the middle card's gaps to the
+ * space it is centred in.
+ */
+export interface EdgeCardMeasure extends CardMeasure {
+  viewport: number;
+  zone: { rect: Rect; scrollH: number; clientH: number; scrollTop: number } | null;
+  invite: InviteCardMeasure | null;
+  /** The invitation is the zone's last child. */
+  last: boolean;
+  /** The bottom of the zone's last group, in the window — null without a group. */
+  lastGroupBottom: number | null;
+  /** The middle card's gaps to the box it is centred in: left, right, top, bottom. */
+  middle: { left: number; right: number; top: number; bottom: number } | null;
 }
 
 declare global {
@@ -1133,6 +1236,106 @@ const page = {
     };
   },
 
+  /** SMA-437, lot V3-06, step E1 (A-24) — the page's title, as the engine draws it. */
+  measureTitle(): TitleMeasure {
+    const title = document.querySelector<HTMLElement>('[data-dashboard-header] h1');
+    if (!title) throw new Error('The page drew no title.');
+    const style = getComputedStyle(title);
+    const words = document.createRange();
+    words.selectNodeContents(title);
+    const box = words.getBoundingClientRect();
+    const tops = new Set(
+      [...words.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0).map((rect) => Math.round(rect.top))
+    );
+    return {
+      viewport: innerWidth,
+      text: title.textContent ?? '',
+      px: parseFloat(style.fontSize),
+      line: round(parseFloat(style.lineHeight)),
+      weight: Number(style.fontWeight),
+      box: { x: round(box.left), y: round(box.top), w: round(box.width), h: round(box.height) },
+      lines: tops.size,
+      fontLoaded: document.fonts.check('16px Inter'),
+    };
+  },
+
+  /**
+   * SMA-437, lot V3-06, steps E3 and E4 (A-21 to A-23, A-25) — the edges of a
+   * Large card, `tips` or `todo`: the card, its zone, its invitation and its
+   * texts' contrast, as the engine draws them.
+   */
+  measureEdges(key: 'tips' | 'todo'): EdgeCardMeasure {
+    const card = document.querySelector<HTMLElement>(`[data-widget="${key}"]`);
+    if (!card) throw new Error(`The page drew no ${key} widget to measure.`);
+    const zone = card.querySelector<HTMLElement>(`[data-${key}-groups]`);
+    const invite = card.querySelector<HTMLElement>('[data-invite-card]');
+    const groups = zone ? [...zone.children].filter((child) => child !== invite) : [];
+    const space = invite?.getAttribute('data-invite-card') === 'middle' ? invite.parentElement : null;
+    const style = invite ? getComputedStyle(invite) : null;
+    const gaps = (inner: Element, outer: Element) => {
+      const a = inner.getBoundingClientRect();
+      const b = outer.getBoundingClientRect();
+      return { left: round(a.left - b.left), right: round(b.right - a.right), top: round(a.top - b.top), bottom: round(b.bottom - a.bottom) };
+    };
+    return {
+      ...measureCard(card),
+      viewport: innerWidth,
+      zone: zone ? { rect: rectOf(zone), scrollH: zone.scrollHeight, clientH: zone.clientHeight, scrollTop: round(zone.scrollTop) } : null,
+      invite:
+        invite && style
+          ? {
+              place: invite.getAttribute('data-invite-card') ?? '',
+              rect: rectOf(invite),
+              position: style.position,
+              bottom: style.bottom,
+              backgroundColor: style.backgroundColor,
+              backgroundImage: style.backgroundImage,
+              backdropFilter: style.backdropFilter,
+              maxWidth: style.maxWidth,
+              texts: textContrasts(invite),
+            }
+          : null,
+      last: invite !== null && zone !== null && zone.lastElementChild === invite,
+      lastGroupBottom: groups.length > 0 ? round(groups[groups.length - 1]!.getBoundingClientRect().bottom) : null,
+      middle: invite && space ? gaps(invite, space) : null,
+    };
+  },
+
+  /**
+   * SMA-437, lot V3-06, E3 — WCAG 2.4.11 (Focus Not Obscured) in the zone of
+   * a Large card: from the top of the zone, every control of the zone but
+   * the foot's focused in turn, as the keyboard reaches it — the engine
+   * scrolls what it scrolls —; the ones the foot still covers WHOLLY once
+   * focused, named. The focus is let go at the end.
+   */
+  focusUnderFoot(key: 'tips' | 'todo'): { focused: number; hidden: string[] } {
+    const zone = document.querySelector<HTMLElement>(`[data-widget="${key}"] [data-${key}-groups]`);
+    const foot = zone?.querySelector<HTMLElement>(':scope > [data-invite-card="foot"]');
+    if (!zone || !foot) throw new Error(`The ${key} widget draws no zone with a foot.`);
+    zone.scrollTop = 0;
+    // The links and buttons of Tips, the checkboxes of To-do.
+    const controls = [...zone.querySelectorAll<HTMLElement>('a[href], button, input')].filter((control) => !foot.contains(control));
+    const hidden: string[] = [];
+    for (const control of controls) {
+      control.focus();
+      const box = control.getBoundingClientRect();
+      const under = foot.getBoundingClientRect();
+      if (box.top >= under.top - 0.5 && box.bottom <= under.bottom + 0.5) {
+        hidden.push(`« ${control.textContent ?? ''} » at ${round(box.top)}–${round(box.bottom)}, the foot at ${round(under.top)}–${round(under.bottom)}`);
+      }
+    }
+    (document.activeElement as HTMLElement | null)?.blur();
+    return { focused: controls.length, hidden };
+  },
+
+  /** Scrolls the zone of a Large card, `tips` or `todo`, to its end, at once, and settles. */
+  async scrollZoneToEnd(key: 'tips' | 'todo'): Promise<true> {
+    const zone = document.querySelector<HTMLElement>(`[data-widget="${key}"] [data-${key}-groups]`);
+    if (!zone) throw new Error(`The ${key} widget draws no zone to scroll.`);
+    zone.scrollTop = zone.scrollHeight;
+    return page.settle();
+  },
+
   /** SMA-437, lot V3-08, step S5 — the grid's cards, their cells and the empty ones, as laid out. */
   measureGrid(): PageGridMeasure {
     const cards = gridCards();
@@ -1533,9 +1736,18 @@ const page = {
    *   the Customize drawer's paper — MUI still writes `--Paper-overlay`
    *   inline at night;
    * - `panel-long-word`: a widget's name no row can hold, one word with no
-   *   break in it.
+   *   break in it;
+   * - `foot-static` (SMA-437, lot V3-06, E3): the Tips foot no longer stuck —
+   *   `position: static`, the last row of a zone that scrolls, out of its
+   *   view at rest.
    */
   probe(name: string): boolean {
+    if (name === 'foot-static') {
+      const foot = document.querySelector<HTMLElement>('[data-widget="tips"] [data-invite-card="foot"]');
+      if (!foot) return false;
+      foot.style.position = 'static';
+      return true;
+    }
     const bar = barOf();
     if (name === 'filled-region') {
       const region = document.querySelector('[data-save-status]');

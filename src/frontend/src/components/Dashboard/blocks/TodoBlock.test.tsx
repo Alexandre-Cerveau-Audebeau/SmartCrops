@@ -105,8 +105,8 @@ const partial = (): DashboardWeatherData =>
 
 type Props = React.ComponentProps<typeof TodoBlock>;
 
-function renderBlock(over: Partial<Props> = {}) {
-  localStorage.setItem('smartcrops-language', 'en');
+function renderBlock(over: Partial<Props> = {}, language = 'en') {
+  localStorage.setItem('smartcrops-language', language);
   const props: Props = {
     size: 'medium',
     gardens,
@@ -203,6 +203,16 @@ describe('TodoBlock — Medium (Main.dc.html)', () => {
     );
     fireEvent.click(within(invite as HTMLElement).getByRole('button', { name: 'Add a city →' }));
     expect(onLocate).toHaveBeenCalledWith(null);
+    // The Medium card keeps its row (a): the card (b) is the Large card's (SMA-437, A-22 — « Inchangés »).
+    expect(card.querySelector('[data-invite-card]')).toBeNull();
+  });
+
+  it('never nests the « Add a city → » button in a paragraph (E2)', () => {
+    const { card } = renderBlock({ weather: partial() });
+
+    const invite = card.querySelector('[data-todo-invite]')!;
+    expect(invite.querySelector('p')).toBeNull();
+    expect(invite.querySelector('button')).not.toBeNull();
   });
 
   it('with an invitation, caps the rows at two and defers the rest to « +N »', () => {
@@ -356,12 +366,73 @@ describe('TodoBlock — Large', () => {
     expect(card.textContent).not.toContain('last known weather');
   });
 
-  it('never nests the « Add a city → » button in a paragraph (E2)', () => {
-    const { card } = renderBlock({ size: 'large', weather: partial() });
+  // SMA-437, lot V3-06 (contract A-22 — Alexandre, 28/09: « l'invitation
+  // d'À faire en pied de zone »): with tasks to list and gardens the weather
+  // cannot plan for, the Large card's invitation is the card (b), the zone's
+  // last child, stuck to its bottom as Tips' (A-21). The session line and the
+  // weather note are not invitations: they stay under the zone.
+  it('A-22: gardens without weather beside tasks — ONE card (b) at the foot of the zone, its title the row’s sentence, its body the Weather invitation’s, « Add a city » to the location dialog; the session line under the zone', () => {
+    const onLocate = vi.fn();
+    const { card } = renderBlock({ size: 'large', weather: partial(), onLocate });
 
-    const invite = card.querySelector('[data-todo-invite]')!;
-    expect(invite.querySelector('p')).toBeNull();
-    expect(invite.querySelector('button')).not.toBeNull();
+    const zone = card.querySelector('[data-todo-groups]') as HTMLElement;
+    expect([...zone.querySelectorAll('[data-todo-group]')].map((node) => node.getAttribute('data-todo-group'))).toEqual(['g1']);
+    expect(card.querySelector('[data-todo-invite]')).toBeNull();
+    expect(card.querySelectorAll('[data-invite-card]')).toHaveLength(1);
+    const foot = zone.lastElementChild as HTMLElement;
+    expect(foot).toHaveAttribute('data-invite-card', 'foot');
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Without the weather of Balcon sud and Potager du fond, their watering is not planned'
+    );
+    expect(foot).toHaveTextContent('One city is enough for all your gardens; you will be able to set one per garden in Settings.');
+    // Stuck to the zone's bottom, on the ground of Tips' foot.
+    const rules = rulesFor(foot).replace(/\s+/g, '');
+    expect(rules).toContain('position:sticky');
+    expect(rules).toContain('bottom:0');
+    expect(rules).toContain('backdrop-filter:blur(7px)');
+    expect(rules).toContain('background-color:rgba(255,255,255,0.92)');
+    // The gesture: the location dialog on the profile default, as the row's link.
+    fireEvent.click(within(foot).getByRole('button', { name: 'Add a city' }));
+    expect(onLocate).toHaveBeenCalledWith(null);
+    // The session line is not an invitation: under the zone, after it.
+    const session = card.querySelector('[data-todo-session]')!;
+    expect(zone.contains(session)).toBe(false);
+    expect(zone.compareDocumentPosition(session)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('A-22: one garden without weather — « its watering »; and in French, the same card in the product’s words', () => {
+    const one = weatherFixture(
+      [locationFixture({ days: days() })],
+      [linkFixture({ gardenId: 'g1' }), linkFixture({ gardenId: 'g2' }), linkFixture({ gardenId: 'g3', locationKey: null, source: null })]
+    );
+    const english = renderBlock({ size: 'large', weather: one });
+    expect(within(english.card.querySelector('[data-invite-card="foot"]') as HTMLElement).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Without the weather of Potager du fond, its watering is not planned'
+    );
+
+    cleanup();
+    const french = renderBlock({ size: 'large', weather: partial() }, 'fr');
+    const foot = french.card.querySelector('[data-invite-card="foot"]') as HTMLElement;
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Sans la météo de Balcon sud et Potager du fond, leurs arrosages ne sont pas planifiés'
+    );
+    expect(foot).toHaveTextContent('Une seule ville suffit pour tous vos jardins ; vous pourrez en préciser une par jardin dans Réglages.');
+    expect(within(foot).getByRole('button', { name: 'Ajouter une ville' })).toBeInTheDocument();
+  });
+
+  it('A-22 [P]: the Large card WITHOUT any task is unchanged — the honest panel and the row (a) under it, no card (b)', () => {
+    const idle = [varietyFixture({ plantId: 'hedge', commonName: 'Hedge', wateringNeedLevel: 'Low' })];
+    const quiet = gardenFixture({ id: 'g1', name: 'Terrasse', placements: plants(['hedge', 2]), placementCount: 2 });
+    const { card } = renderBlock({
+      size: 'large',
+      gardens: [quiet],
+      varieties: idle,
+      weather: weatherFixture([], [linkFixture({ gardenId: 'g1', locationKey: null, source: null })]),
+    });
+
+    expect(card).toHaveTextContent('Nothing planned today — watering is not known yet.');
+    expect(card.querySelector('[data-todo-invite]')).toHaveTextContent('Without the weather of Terrasse, its watering is not planned —');
+    expect(card.querySelector('[data-invite-card]')).toBeNull();
   });
 });
 
@@ -558,6 +629,8 @@ describe('TodoBlock — the weather is half the block, not all of it (round 1, C
     });
 
     expect(card.querySelectorAll('[data-todo-weather-note]')).toHaveLength(1);
+    // Nothing to add while the request failed: no invitation of either form (SMA-437, A-22).
+    expect(card.querySelector('[data-invite-card], [data-todo-invite]')).toBeNull();
   });
 
   it('C4 — « nothing to do » only when the block KNOWS; otherwise it says it does not', () => {

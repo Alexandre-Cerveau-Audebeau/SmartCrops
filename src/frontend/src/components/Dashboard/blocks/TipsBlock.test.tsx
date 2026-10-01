@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,7 +35,8 @@ vi.mock('./gardenAdvice', async (importOriginal) => {
 //                     (Frequent → the watering tip), a hydrangea on D1 (a shade
 //                     lover in full sun → « prefers part shade »): THREE tips.
 //   Balcon sud      — no orientation, a tomato: the A4 invitation, no tip —
-//                     in the Large card, in its own group (round 1, S-3).
+//                     in the Large card, no group: it is named in the ONE
+//                     invitation at the foot of the zone (SMA-437, A-21).
 //   Potager du fond — oriented, a sage (Low) only, no city: checked, nothing
 //                     to say → « Nothing to report ».
 
@@ -248,7 +249,33 @@ describe('TipsBlock — the sentences name the variety, the cell and the garden'
     expect(texts[0]).toContain('Voir la case B3 →');
     expect(texts[0]).toContain('Pourquoi');
     expect(card).toHaveTextContent('Rien à signaler — vos plantes sont là où elles aiment être.');
-    expect(card).toHaveTextContent('Sans l’orientation de « Balcon sud », impossible de comparer l’exposition — Configurer le jardin →');
+    // The orientation invitation of the Large card: the card (b), at the foot of the zone (SMA-437, A-21).
+    const foot = card.querySelector('[data-invite-card="foot"]') as HTMLElement;
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Sans l’orientation de « Balcon sud », impossible de comparer l’exposition'
+    );
+    expect(foot).toHaveTextContent(
+      'L’exposition se déduit de l’orientation du jardin et de sa latitude. Renseignez-la pour que les conseils d’ensoleillement tiennent compte de ce jardin.'
+    );
+    expect(within(foot).getByRole('link', { name: 'Configurer le jardin' })).toHaveAttribute('href', '/gardens/g2/planner');
+  });
+
+  it('in French, two gardens without orientation: « … » et « … », « de ces jardins », « Configurer les jardins »', () => {
+    const cour = gardenFixture({
+      id: 'g4',
+      name: 'Cour',
+      config: { orientation: null, gardenType: 'balcony', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+      placements: [plant('tomato', 0, 0)],
+      placementCount: 1,
+    });
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse, balcon, cour] }, 'fr');
+
+    const foot = card.querySelector('[data-invite-card="foot"]') as HTMLElement;
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Sans l’orientation de « Balcon sud » et « Cour », impossible de comparer l’exposition'
+    );
+    expect(foot).toHaveTextContent('Renseignez-la pour que les conseils d’ensoleillement tiennent compte de ces jardins.');
+    expect(within(foot).getByRole('button', { name: 'Configurer les jardins' })).toBeInTheDocument();
   });
 });
 
@@ -296,6 +323,8 @@ describe('TipsBlock — Medium (Main.dc.html l. 295-309, A4Manquantes.dc.html l.
     expect(invite).toHaveTextContent('Without the orientation of “Balcon sud”, the exposure can’t be compared — Set up the garden →');
     expect(within(invite as HTMLElement).getByRole('link', { name: 'Set up the garden →' })).toHaveAttribute('href', '/gardens/g2/planner');
     expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+    // The Medium card keeps its row (a) in its slot: the card (b) is the Large card's (SMA-437, A-21 — « Inchangés »).
+    expect(card.querySelector('[data-invite-card]')).toBeNull();
   });
 
   it('counts the plants whose exposure the catalog does not know, in a foot with no gesture (D2)', () => {
@@ -350,11 +379,22 @@ describe('TipsBlock — Medium (Main.dc.html l. 295-309, A4Manquantes.dc.html l.
 });
 
 describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
+  /** A garden whose orientation is unknown: a balcony with a tomato — and `extra` plantings. */
+  const unoriented = (id: string, name: string, extra: ReturnType<typeof plant>[] = []) =>
+    gardenFixture({
+      id,
+      name,
+      config: { orientation: null, gardenType: 'balcony', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+      placements: [plant('tomato', 0, 0), ...extra],
+      placementCount: 1 + extra.length,
+    });
+
   it('groups by garden with the type glyph, the name and the chip; « nothing to report » for a checked garden', () => {
     const { card } = renderBlock({ size: 'large' });
 
+    // Balcon sud — no orientation, no tip — has no group: the foot names it (SMA-437, A-21).
     const groups = [...card.querySelectorAll('[data-tips-group]')].map((node) => node.getAttribute('data-tips-group'));
-    expect(groups).toEqual(['g1', 'g2', 'g3']);
+    expect(groups).toEqual(['g1', 'g3']);
     const terrasseGroup = card.querySelector('[data-tips-group="g1"]') as HTMLElement;
     expect(within(terrasseGroup).getByRole('heading', { level: 3, name: 'Terrasse' })).toBeInTheDocument();
     expect(terrasseGroup.querySelector('[data-tips-group-chip]')).toHaveTextContent('3 tips');
@@ -365,24 +405,27 @@ describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
     expect(potagerGroup.querySelector('svg[data-testid="GrassIcon"]')).not.toBeNull();
   });
 
-  it('a garden whose orientation is unknown has its group, carrying the invitation where « nothing to report » would go (S-3)', () => {
+  it('a garden whose orientation is unknown and has no tip has no group: the ONE invitation at the foot of the zone names it (SMA-437, A-21)', () => {
     const { card } = renderBlock({ size: 'large' });
 
-    const balconGroup = card.querySelector('[data-tips-group="g2"]') as HTMLElement;
-    expect(within(balconGroup).getByRole('heading', { level: 3, name: 'Balcon sud' })).toBeInTheDocument();
-    const invite = balconGroup.querySelector('[data-tips-invite="g2"]')!;
-    expect(invite).toHaveTextContent('Without the orientation of “Balcon sud”, the exposure can’t be compared — Set up the garden →');
-    expect(within(invite as HTMLElement).getByRole('link', { name: 'Set up the garden →' })).toHaveAttribute('href', '/gardens/g2/planner');
-    // Nothing was checked, so no verdict: neither « nothing to report » nor a chip (T6).
-    expect(balconGroup.querySelector('[data-tips-nothing="g2"]')).toBeNull();
-    expect(balconGroup.querySelector('[data-tips-group-chip]')).toBeNull();
-    expect(balconGroup.querySelector('[data-tips-tip]')).toBeNull();
-    // ONE invitation for that garden, and it is the one in the group.
-    expect(card.querySelectorAll('[data-tips-invite="g2"]')).toHaveLength(1);
+    expect(card.querySelector('[data-tips-group="g2"]')).toBeNull();
+    // No row (a) in the Large card any more: its invitation is the card (b).
+    expect(card.querySelector('[data-tips-invite]')).toBeNull();
+    expect(card.querySelectorAll('[data-invite-card]')).toHaveLength(1);
+    const zone = card.querySelector('[data-tips-groups]') as HTMLElement;
+    const foot = zone.lastElementChild as HTMLElement;
+    expect(foot).toHaveAttribute('data-invite-card', 'foot');
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent('Without the orientation of “Balcon sud”, the exposure can’t be compared');
+    expect(foot).toHaveTextContent(
+      'The exposure is derived from the garden’s orientation and its latitude. Fill it in so the sunlight tips take this garden into account.'
+    );
+    // One garden: the gesture leads to its planner, where its configuration lives — a link, no menu.
+    expect(within(foot).getByRole('link', { name: 'Set up the garden' })).toHaveAttribute('href', '/gardens/g2/planner');
+    expect(within(foot).queryByRole('button')).toBeNull();
   });
 
-  it('a garden whose orientation is unknown but whose basil is thirsty keeps BOTH its tip and its invitation in its group', () => {
-    // The watering family needs no orientation; the exposure family does — the invitation still stands beside the tip.
+  it('a garden whose orientation is unknown but whose basil is thirsty keeps its group for its tip, with no invitation in it — the foot names it', () => {
+    // The watering family needs no orientation; the exposure family does — the invitation stands at the foot, after the group.
     const cour = gardenFixture({
       id: 'g4',
       name: 'Cour',
@@ -396,26 +439,22 @@ describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
     const group = card.querySelector('[data-tips-group="g4"]') as HTMLElement;
     expect(group.querySelector('[data-tips-group-chip]')).toHaveTextContent('1 tip');
     expect(group.querySelector('[data-tips-tip="watering"]')).toHaveTextContent('Your Basil (B1, Cour) likes an always-moist soil — no rain before Tuesday.');
-    expect(group.querySelector('[data-tips-invite="g4"]')).not.toBeNull();
-    // The tip comes first, the invitation after it.
-    expect(group.querySelector('[data-tips-tip]')!.compareDocumentPosition(group.querySelector('[data-tips-invite]')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(group.querySelector('[data-tips-invite], [data-invite-card]')).toBeNull();
+    const foot = card.querySelector('[data-invite-card="foot"]') as HTMLElement;
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent('Without the orientation of “Cour”, the exposure can’t be compared');
+    expect(group.compareDocumentPosition(foot)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it('three gardens without orientation: every invitation scrolls WITH the groups, and only the foot stays under the zone (S-3, measured)', () => {
-    // Round 1, S-3 (GitHub `4035502545`): drawn under the scrolling zone with
-    // `flexShrink: 0`, three invitations left the zone — the only shrinkable
-    // item, `min-height: 0` — 0 px tall on a phone (328 × 420) and 245 px of
-    // its 285 on a desktop (630 × 566); with six, 13 px on a desktop. The tips
-    // were not clipped, they were evicted. jsdom lays nothing out, so this
-    // asserts the cause: nothing outside the zone grows with the invitations.
-    const unoriented = (id: string, name: string, extra: ReturnType<typeof plant>[] = []) =>
-      gardenFixture({
-        id,
-        name,
-        config: { orientation: null, gardenType: 'balcony', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
-        placements: [plant('tomato', 0, 0), ...extra],
-        placementCount: 1 + extra.length,
-      });
+  it('three gardens without orientation: ONE card (b), the zone’s last child, stuck to its bottom on the invitation tint over the card at 92 %, blurred 7 px (A-21)', () => {
+    // History — round 1, S-3 (GitHub `4035502545`): drawn under the scrolling
+    // zone with `flexShrink: 0`, three invitations left the zone — the only
+    // shrinkable item, `min-height: 0` — 0 px tall on a phone (328 × 420); S-3
+    // moved each into its garden's group. SMA-437, A-21 (Alexandre, 28/09):
+    // ONE grouped card, the zone's LAST child, `position: sticky; bottom: 0` —
+    // it scrolls with the groups, stays seen at the bottom of the zone while
+    // it scrolls, and takes nothing from the zone outside it. jsdom lays
+    // nothing out, so this asserts the cause; the pixels are the page
+    // harness's, at five widths, day and night.
     const gardens = [terrasse, unoriented('u1', 'Balcon sud', [plant('mystery', 0, 1)]), unoriented('u2', 'Balcon nord'), unoriented('u3', 'Rebord')];
     const { card } = renderBlock({ size: 'large', gardens });
 
@@ -425,15 +464,28 @@ describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
     expect(rules).toContain('flex:01auto');
     expect(rules).toContain('min-height:0');
     expect(rules).toContain('overflow-y:auto');
-    // Every invitation is IN the zone, in the group of its garden.
-    const invites = [...card.querySelectorAll('[data-tips-invite]')];
-    expect(invites.map((node) => node.getAttribute('data-tips-invite'))).toEqual(['u1', 'u2', 'u3']);
-    for (const invite of invites) {
-      expect(zone.contains(invite)).toBe(true);
-      expect(invite.closest('[data-tips-group]')).toHaveAttribute('data-tips-group', invite.getAttribute('data-tips-invite')!);
-    }
-    expect([...zone.querySelectorAll('[data-tips-group]')].map((node) => node.getAttribute('data-tips-group'))).toEqual(['g1', 'u1', 'u2', 'u3']);
-    // Under the zone: the foot alone — no invitation, no panel — and after it in document order.
+    // The groups: Terrasse alone — the three others have no tip.
+    expect([...zone.querySelectorAll('[data-tips-group]')].map((node) => node.getAttribute('data-tips-group'))).toEqual(['g1']);
+    // ONE invitation, the zone's last child, naming the three.
+    const cards = [...card.querySelectorAll('[data-invite-card]')];
+    expect(cards).toHaveLength(1);
+    const foot = cards[0] as HTMLElement;
+    expect(zone.lastElementChild).toBe(foot);
+    expect(foot).toHaveAttribute('data-invite-card', 'foot');
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Without the orientation of “Balcon sud”, “Balcon nord”, and “Rebord”, the exposure can’t be compared'
+    );
+    expect(foot).toHaveTextContent('Fill it in so the sunlight tips take these gardens into account.');
+    // Stuck to the bottom of the zone while it scrolls, its own height kept.
+    const footRules = rulesFor(foot).replace(/\s+/g, '');
+    expect(footRules).toContain('position:sticky');
+    expect(footRules).toContain('bottom:0');
+    expect(footRules).toContain('flex-shrink:0');
+    // Its ground, V3-06's recipe: the invitation tint over the card at 92 %, and a 7 px blur of what passes beneath.
+    expect(footRules).toContain('background-color:rgba(255,255,255,0.92)');
+    expect(footRules).toContain('background-image:linear-gradient(rgba(41,123,77,0.045),rgba(41,123,77,0.045))');
+    expect(footRules).toContain('backdrop-filter:blur(7px)');
+    // Under the zone: the foot « N plants … » alone, after it in document order.
     // (The card's live region, `data-tips-status`, is out of the flow and above the zone: not a layout sibling.)
     const siblings = [...zone.parentElement!.children].filter((node) => node !== zone && !node.hasAttribute('data-tips-status'));
     expect(siblings).toHaveLength(1);
@@ -444,24 +496,93 @@ describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
     expect(rows(card)).toHaveLength(3);
   });
 
-  it('three gardens without orientation and no other: the zone holds their three groups, no global panel outside it', () => {
-    const unoriented = (id: string, name: string) =>
-      gardenFixture({
-        id,
-        name,
-        config: { orientation: null, gardenType: 'balcony', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
-        placements: [plant('tomato', 0, 0)],
-        placementCount: 1,
-      });
-    const { card } = renderBlock({ size: 'large', gardens: [unoriented('u1', 'Balcon sud'), unoriented('u2', 'Balcon nord'), unoriented('u3', 'Rebord')] });
+  it('two gardens or more: « Set up the gardens » opens a menu that names each garden, each to its planner (A-21 [P])', () => {
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse, balcon, unoriented('g4', 'Cour')] });
+
+    const foot = card.querySelector('[data-invite-card="foot"]') as HTMLElement;
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent('Without the orientation of “Balcon sud” and “Cour”, the exposure can’t be compared');
+    expect(within(foot).queryByRole('link')).toBeNull();
+    const button = within(foot).getByRole('button', { name: 'Set up the gardens' });
+    expect(button).toHaveAttribute('aria-haspopup', 'true');
+    expect(button).not.toHaveAttribute('aria-expanded');
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    const menu = screen.getByRole('menu');
+    expect(button).toHaveAttribute('aria-controls', menu.id);
+    expect(menu).toHaveAttribute('aria-labelledby', button.id);
+    const items = within(menu).getAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).toEqual(['Balcon sud', 'Cour']);
+    expect(items.map((item) => item.getAttribute('href'))).toEqual(['/gardens/g2/planner', '/gardens/g4/planner']);
+
+    // Choosing a garden closes the menu.
+    fireEvent.click(items[1]!);
+    expect(button).not.toHaveAttribute('aria-expanded');
+  });
+
+  it('past three gardens, the title names two and counts the others — the menu names every one', () => {
+    const four = [unoriented('u1', 'Balcon sud'), unoriented('u2', 'Balcon nord'), unoriented('u3', 'Rebord'), unoriented('u4', 'Cour')];
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse, ...four] });
+
+    const foot = card.querySelector('[data-invite-card="foot"]') as HTMLElement;
+    expect(within(foot).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Without the orientation of “Balcon sud”, “Balcon nord”, and 2 others, the exposure can’t be compared'
+    );
+    fireEvent.click(within(foot).getByRole('button', { name: 'Set up the gardens' }));
+    expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Balcon sud',
+      'Balcon nord',
+      'Rebord',
+      'Cour',
+    ]);
+  });
+
+  it('a checked garden with nothing to report beside a garden without orientation: the group says so, the foot names the other — not the middle', () => {
+    const { card } = renderBlock({ size: 'large', gardens: [potager, balcon] });
 
     const zone = card.querySelector('[data-tips-groups]') as HTMLElement;
-    expect(zone.children).toHaveLength(3);
-    expect([...zone.querySelectorAll('[data-tips-invite]')]).toHaveLength(3);
-    expect([...zone.parentElement!.children].filter((node) => node !== zone && !node.hasAttribute('data-tips-status'))).toHaveLength(0);
+    expect([...zone.querySelectorAll('[data-tips-group]')].map((node) => node.getAttribute('data-tips-group'))).toEqual(['g3']);
+    expect(zone.querySelector('[data-tips-nothing="g3"]')).toHaveTextContent('Nothing to report — your plants are where they like to be.');
+    expect(zone.lastElementChild).toHaveAttribute('data-invite-card', 'foot');
+    expect(card.querySelector('[data-invite-card="middle"]')).toBeNull();
+  });
+
+  it('no tip, no garden checked, three gardens without orientation: the card (b) in the MIDDLE of the card — no zone, no panel (SMA-437, A-23)', () => {
+    const { card } = renderBlock({ size: 'large', gardens: [unoriented('u1', 'Balcon sud'), unoriented('u2', 'Balcon nord'), unoriented('u3', 'Rebord')] });
+
+    expect(card.querySelector('[data-tips-groups]')).toBeNull();
+    const cards = [...card.querySelectorAll('[data-invite-card]')];
+    expect(cards).toHaveLength(1);
+    const middle = cards[0] as HTMLElement;
+    expect(middle).toHaveAttribute('data-invite-card', 'middle');
+    expect(within(middle).getByRole('heading', { level: 3 })).toHaveTextContent(
+      'Without the orientation of “Balcon sud”, “Balcon nord”, and “Rebord”, the exposure can’t be compared'
+    );
+    expect(within(middle).getByRole('button', { name: 'Set up the gardens' })).toBeInTheDocument();
+    // In the middle of the card, 520 px at most; its own ground, never stuck.
+    const rules = rulesFor(middle).replace(/\s+/g, '');
+    expect(rules).toContain('margin:auto');
+    expect(rules).toContain('max-width:520px');
+    expect(rules).toContain('background-color:#F6FBF4');
+    expect(rules).not.toContain('position:sticky');
+    // …of the space above the foot: its box takes that space whole (V3-06's `.zone.grow`).
+    const space = middle.parentElement as HTMLElement;
+    expect(space).toHaveAttribute('data-tips-middle');
+    const spaceRules = rulesFor(space).replace(/\s+/g, '');
+    expect(spaceRules).toContain('flex:1');
+    expect(spaceRules).toContain('min-height:0');
+    expect(spaceRules).toContain('overflow-y:auto');
     expect(card.querySelector('[data-invite-panel]')).toBeNull();
     expect(card).not.toHaveTextContent('No tip for now');
     expect(card).not.toHaveTextContent('Nothing to report');
+  });
+
+  it('no garden without orientation: no invitation at all in the Large card', () => {
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse, potager] });
+
+    expect(card.querySelector('[data-invite-card]')).toBeNull();
+    expect(card.querySelector('[data-tips-invite]')).toBeNull();
   });
 
   it('every « Why » is folded at rest, unfolds the rule, and folds back', () => {
@@ -934,10 +1055,11 @@ describe('TipsBlock — Medium: the list clips, and the foot yields to an invita
     expect(card.querySelector('[data-tips-unknown]')).toBeNull();
   });
 
-  it('Large keeps its foot beside its invitations: the yield is the Medium card’s alone', () => {
+  it('Large keeps its foot beside its invitation: the yield is the Medium card’s alone', () => {
     const { card } = renderBlock({ size: 'large', gardens: [terrasseWithUnknown, balcon] });
 
-    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    // The Large card's invitation is the card (b) at the foot of its zone (SMA-437, A-21).
+    expect(card.querySelector('[data-invite-card="foot"]')).not.toBeNull();
     expect(card.querySelector('[data-tips-unknown]')).toHaveTextContent('2 plants with no known exposure');
   });
 });

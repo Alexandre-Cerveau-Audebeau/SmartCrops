@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { contrast, hex, over } from '../test/contrast';
+import { contrast, hex, over, type Rgb } from '../test/contrast';
+import { createAppTheme } from '../theme';
 import { getDashboardTokens } from './dashboardTokens';
 
 // ROUND 7 (S40 — Extension #7-25) — the ornamental chip's text reads at AA.
@@ -164,5 +165,58 @@ describe('the neutral pill reads at WCAG AA in both modes', () => {
     const { pillText, pillBg } = getDashboardTokens('dark');
 
     expect(contrast(hex(pillText), over(pillBg, card))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// SMA-437, lot V3-06 (contract A-21) — the FOOT stuck at the bottom of a
+// scrolling zone (`InviteCard`, `place="foot"`): the invitation tint over the
+// card at 92 %, a 7 px blur of what passes beneath. Its three texts — the
+// title in `text.primary`, the body in `text.secondary`, the gesture in the
+// primary colour of an outlined button — owe 4,5:1 on that ground, in both
+// modes. The colours are the theme's own (`createAppTheme`); the page harness
+// measures the same texts as the engine draws them, at five widths.
+describe('the foot’s ground (SMA-437, lot V3-06, A-21)', () => {
+  const colours = (mode: 'light' | 'dark') => {
+    const { palette } = createAppTheme(mode);
+    return {
+      card: hex(palette.background.paper),
+      title: palette.text.primary,
+      body: palette.text.secondary,
+      gesture: palette.primary.main,
+    };
+  };
+  /** A colour as drawn on `ground`: a translucent one composited over it. */
+  const drawn = (colour: string, ground: Rgb): Rgb => (colour.startsWith('#') ? hex(colour) : over(colour, ground));
+  /** The foot's ground over `beneath`: the card at 92 %, the invitation tint over that. */
+  const footGround = (mode: 'light' | 'dark', beneath: Rgb): Rgb =>
+    over(getDashboardTokens(mode).invTint, over(`rgba(${colours(mode).card.join(',')},0.92)`, beneath));
+
+  it.each(['light', 'dark'] as const)('%s: the title, the body and the gesture read at AA over the bare card', (mode) => {
+    const c = colours(mode);
+    const ground = footGround(mode, c.card);
+    for (const text of ['title', 'body', 'gesture'] as const) {
+      expect(contrast(drawn(c[text], ground), ground), text).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  /**
+   * MEASURED, not asserted against a floor — the lanes' rule above. What 8 %
+   * of an UNBLURRED pixel of the zone's strongest ink would leave under the
+   * texts: by day the darkest, by night the lightest — `text.primary` in
+   * both. The 7 px blur spreads a glyph's ink over some fourteen pixels each
+   * way, so a line of tips passing beneath gives a fraction of that; how
+   * much, no box says — a filter, not a box (V3-06's own audit says the
+   * same). Recorded so the trade can be weighed (contract A-21, its [P] on
+   * the contrast corrected on 01/10): the gesture is the low one.
+   */
+  it('records what 8 % of an unblurred pixel of the strongest ink would leave — the gesture is the low one', () => {
+    const day = colours('light');
+    const dayGround = footGround('light', drawn(day.title, day.card));
+    expect(contrast(drawn(day.gesture, dayGround), dayGround)).toBeCloseTo(4.21, 2);
+
+    const night = colours('dark');
+    const nightGround = footGround('dark', drawn(night.title, night.card));
+    expect(contrast(drawn(night.body, nightGround), nightGround)).toBeCloseTo(4.39, 2);
+    expect(contrast(drawn(night.gesture, nightGround), nightGround)).toBeCloseTo(3.98, 2);
   });
 });

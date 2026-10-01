@@ -15,7 +15,7 @@
  *   every `overflow` ancestor up to the card and by the card's own padding
  *   box, and cut by the sticky occluders that legitimately paint over the
  *   flow (the frozen actions column of the Gardens table, the calendar's
- *   month axis);
+ *   month axis, the invitations' foot stuck at the bottom of a zone);
  * - what the card or an `overflow: hidden` ancestor CLIPS — the « rogné » of
  *   the visual pass — apart from what a scrolling zone merely keeps below its
  *   fold, which rule 5 of the design contract allows. Measured against EVERY
@@ -344,24 +344,34 @@ function clipBoxFor(el: Element, card: Element, includeSelf: boolean): Box {
 interface Occluder {
   el: Element;
   box: Box;
-  /** A `top`-stuck header hides what scrolls under it; a `right`-stuck column what scrolls beside it. */
+  /**
+   * A `top`- or `bottom`-stuck element hides what scrolls under it; a
+   * `right`-stuck column what scrolls beside it.
+   */
   axis: 'vertical' | 'horizontal';
 }
 
 /**
  * The sticky elements of the card — the frozen actions column of the Gardens
- * table (`position: sticky; right: 0`, amendment A4) and the month axis of the
- * calendar (`position: sticky; top: 0`, V27). They are opaque and paint OVER
- * the flow by design: a cell that has scrolled under the column is hidden, not
- * overlapped. What they cover is removed from the visible box of every atom
- * they do not contain.
+ * table (`position: sticky; right: 0`, amendment A4), the month axis of the
+ * calendar (`position: sticky; top: 0`, V27) and, since SMA-437's lot V3-06,
+ * the invitations' foot of the Tips and To-do zones in Large (`position:
+ * sticky; bottom: 0`, A-21, A-22). They are opaque — the foot all but: its
+ * 92 % ground and its blur leave nothing legible under it — and paint OVER
+ * the flow by design: a cell that has scrolled under the column, a tip under
+ * the foot, is hidden, not overlapped. What they cover is removed from the
+ * visible box of every atom they do not contain. A foot stuck at the BOTTOM
+ * lies on the VERTICAL axis as the axis stuck at the top does (A-25): read
+ * from `top` alone, it passed for a column stuck to the right, and a line
+ * half under it was hidden whole — its seen half and whatever overlapped it
+ * with it (the `sticky-foot` probe).
  */
 function occluders(card: Element): Occluder[] {
   const found: Occluder[] = [];
   for (const el of Array.from(card.querySelectorAll('*'))) {
     const cs = getComputedStyle(el);
     if (cs.position !== 'sticky' || !visible(el)) continue;
-    found.push({ el, box: rectOf(el), axis: cs.top !== 'auto' ? 'vertical' : 'horizontal' });
+    found.push({ el, box: rectOf(el), axis: cs.top !== 'auto' || cs.bottom !== 'auto' ? 'vertical' : 'horizontal' });
   }
   return found;
 }
