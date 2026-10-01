@@ -300,19 +300,12 @@ describe('the planner — a city set from « Réglages » and the exposure it pr
   const UNSET: Garden = { ...GARDEN, hemisphere: null, latitudeBand: null };
   const SYDNEY = pickFixture({ name: 'Sydney', region: 'New South Wales', country: 'Australia', latitude: -33.87, longitude: 151.21 });
 
-  it('the garden is re-read after the write: the hemisphere the server filled shows in the open dialog, a band chosen here is kept, and « Save » sends both', async () => {
-    const reread = deferred<Garden>();
-    vi.mocked(fetchGarden).mockResolvedValueOnce(UNSET).mockReturnValueOnce(reread.promise);
-    vi.mocked(searchLocations).mockResolvedValue([SYDNEY]);
-    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...UNSET, ...config, id, name, description }));
-    const settings = await openSettings();
-    await within(section()).findByText('Current place: Écully');
-    // Seeded from nothing: the dialog shows its defaults, Northern and Mid.
-    expect(within(settings).getByRole('radio', { name: 'Northern' })).toBeChecked();
-    // A band chosen HERE before the city is set.
-    fireEvent.click(within(settings).getByRole('radio', { name: 'High' }));
-    fireEvent.click(within(section()).getByRole('button', { name: 'Change the location' }));
-    const locate = await screen.findByRole('dialog', { name: 'Locate Terrasse' });
+  /**
+   * « Sydney » searched and picked in the open location dialog. « Use » stays
+   * with the caller, right before the wait for the write: what the write
+   * answers then lands inside that wait.
+   */
+  async function pickSydney(locate: HTMLElement) {
     // The page is loaded: the simulated clock only now (SMA-452) — the search
     // asks the server 400 ms after the last keystroke.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -329,6 +322,22 @@ describe('the planner — a city set from « Réglages » and the exposure it pr
     });
     fireEvent.click(screen.getByRole('option', { name: 'Sydney, New South Wales, Australia' }));
     vi.useRealTimers();
+  }
+
+  it('the garden is re-read after the write: the hemisphere the server filled shows in the open dialog, a band chosen here is kept, and « Save » sends both', async () => {
+    const reread = deferred<Garden>();
+    vi.mocked(fetchGarden).mockResolvedValueOnce(UNSET).mockReturnValueOnce(reread.promise);
+    vi.mocked(searchLocations).mockResolvedValue([SYDNEY]);
+    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...UNSET, ...config, id, name, description }));
+    const settings = await openSettings();
+    await within(section()).findByText('Current place: Écully');
+    // Seeded from nothing: the dialog shows its defaults, Northern and Mid.
+    expect(within(settings).getByRole('radio', { name: 'Northern' })).toBeChecked();
+    // A band chosen HERE before the city is set.
+    fireEvent.click(within(settings).getByRole('radio', { name: 'High' }));
+    fireEvent.click(within(section()).getByRole('button', { name: 'Change the location' }));
+    const locate = await screen.findByRole('dialog', { name: 'Locate Terrasse' });
+    await pickSydney(locate);
 
     fireEvent.click(within(locate).getByRole('button', { name: 'Use' }));
 
@@ -369,6 +378,34 @@ describe('the planner — a city set from « Réglages » and the exposure it pr
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     const reopened = await screen.findByRole('dialog');
     expect(within(reopened).getByRole('radio', { name: 'Southern' })).toBeChecked();
+  });
+
+  it('a config save the server refuses leaves the re-read standing — no newer garden answered: the open dialog still adopts the hemisphere the server filled, and the retry sends it', async () => {
+    const reread = deferred<Garden>();
+    vi.mocked(fetchGarden).mockResolvedValueOnce(UNSET).mockReturnValueOnce(reread.promise);
+    vi.mocked(searchLocations).mockResolvedValue([SYDNEY]);
+    vi.mocked(updateGarden).mockRejectedValueOnce(new Error('down'));
+    const settings = await openSettings();
+    await within(section()).findByText('Current place: Écully');
+    fireEvent.click(within(section()).getByRole('button', { name: 'Change the location' }));
+    const locate = await screen.findByRole('dialog', { name: 'Locate Terrasse' });
+    await pickSydney(locate);
+    fireEvent.click(within(locate).getByRole('button', { name: 'Use' }));
+    await waitFor(() => expect(fetchGarden).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Locate Terrasse' })).toBeNull());
+
+    // « Save » while the re-read is out — and the server refuses it.
+    fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+    expect(await within(settings).findByText("Couldn't save the garden settings. Please try again.")).toBeInTheDocument();
+    expect(within(settings).getByRole('radio', { name: 'Northern' })).toBeChecked();
+    // …then the re-read lands: nothing newer answered, so it stands.
+    await act(async () => reread.resolve({ ...UNSET, hemisphere: 'S', latitudeBand: 'mid' }));
+
+    expect(within(settings).getByRole('radio', { name: 'Southern' })).toBeChecked();
+    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...UNSET, ...config, id, name, description }));
+    fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateGarden).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(updateGarden).mock.calls[1]![3]).toMatchObject({ hemisphere: 'S', latitudeBand: 'mid' });
   });
 
   it('a re-read still out when the planner goes away is aborted', async () => {

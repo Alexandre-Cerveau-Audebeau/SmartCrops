@@ -729,7 +729,7 @@ export default function GardenPlanner() {
   // the latitude band it finds EMPTY from the latitude
   // (GardensController.PutLocation). The planner re-reads the garden, so its
   // exposure and the open dialog read what is stored. A re-read still out is
-  // dropped by the next one, by a config save — whose answer is the newer
+  // dropped by the next one, by the answer of a config save — the newer
   // garden — and by the unmount.
   const gardenRereadRef = useRef<AbortController | null>(null);
   const handleLocated = useCallback(() => {
@@ -752,9 +752,6 @@ export default function GardenPlanner() {
 
   const persistConfig = async (config: GardenConfig): Promise<boolean> => {
     if (!id || !garden) return false;
-    // The config's answer is the newer garden: a re-read still out must not
-    // land after it.
-    gardenRereadRef.current?.abort();
     try {
       const updated = await updateGarden(
         id,
@@ -762,6 +759,10 @@ export default function GardenPlanner() {
         garden.description ?? undefined,
         config
       );
+      // The config's answer is the newer garden: a re-read still out must not
+      // land after it. Dropped on the answer, not on the click — a refused
+      // save leaves it standing, the newest garden there is then.
+      gardenRereadRef.current?.abort();
       setGarden(updated);
       setConfigError(null);
       return true;
