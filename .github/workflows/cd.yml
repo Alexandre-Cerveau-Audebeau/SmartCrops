@@ -281,7 +281,7 @@ jobs:
           }
           REMOTE
 
-      - name: Deploy the freshly built images
+      - name: Deploy the api first (server before client)
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
@@ -291,10 +291,36 @@ jobs:
           # contract: EVERY remote compose invocation in this pipeline must
           # carry IMAGE_TAG itself — interpolation of ${IMAGE_TAG:?} runs
           # for ps/stop/exec too, not just pull/up.
-          ssh vps "cd /opt/smartcrops && IMAGE_TAG=sha-$HEAD_SHA docker compose pull && IMAGE_TAG=sha-$HEAD_SHA docker compose up -d --remove-orphans"
+          # Server before client (D17, SMA-447 § 7): a NEW web in front of
+          # the OLD api breaks — the routes and fields it relies on do not
+          # exist yet. One `up` for both images held no order at all: web
+          # has no depends_on and started BEFORE the api on 24/09 (run
+          # 36067826925). So (1) every image is pulled before anything
+          # moves; (2) the data plane and the edge converge first, WAITED
+          # healthy within a bound — `--no-deps api` below skips the
+          # depends_on conditions that used to hold the api back; (3) ONLY
+          # the api is recreated, and its boot applies the migrations before
+          # Kestrel listens. The web keeps serving the previous client until
+          # the health gate below is green.
+          ssh vps "cd /opt/smartcrops && IMAGE_TAG=sha-$HEAD_SHA docker compose pull && IMAGE_TAG=sha-$HEAD_SHA docker compose up -d --wait --wait-timeout 120 --no-deps db typesense traefik && IMAGE_TAG=sha-$HEAD_SHA docker compose up -d --no-deps api"
 
       - name: Health gate (shared action, DNS-independent)
         uses: ./.github/actions/ssh-health-gate
         with:
           mode: health-gate
           image_tag: sha-${{ github.event.workflow_run.head_sha }}
+
+      - name: Deploy the web last (after the api is healthy)
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Reached ONLY after a green health gate: a red gate stops the job
+          # before this step and leaves the PREVIOUS web in front of the new
+          # api — the old-client/new-server pair every additive server change
+          # is built to serve. The pre-SMA-447 command, unchanged: it
+          # converges what is left (the web, and any service not named above)
+          # and removes orphans; db, typesense, traefik and the api are
+          # already at target and stay Running — Compose keeps depends_on out
+          # of its config hash (v2.29.3+), so the --no-deps call above cannot
+          # make this one recreate them.
+          ssh vps "cd /opt/smartcrops && IMAGE_TAG=sha-$HEAD_SHA docker compose up -d --remove-orphans"
