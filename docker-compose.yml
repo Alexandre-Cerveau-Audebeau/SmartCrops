@@ -21,8 +21,14 @@ services:
       # override/.env — do NOT `docker compose down -v`, that destroys the
       # database.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    # SMA-455 — published on loopback ONLY, like the api's 5000 and
+    # Typesense's 8108: Docker Desktop's firewall rule lets any device of a
+    # PUBLIC network (café, hotel) reach a port published on every interface,
+    # and nothing outside this PC needs these three — inside the stack the
+    # services reach each other by name (db:5432, typesense:8108, api:8080),
+    # and the site reaches the api through the Vite proxy on 3000.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - smartcrops-db-data:/var/lib/postgresql/data
 
@@ -71,8 +77,11 @@ services:
       # to their invitation and a warning is logged once (the SMA-377 lesson:
       # a boot must not depend on a non-critical third party).
       WeatherApi__ApiKey: ${WEATHERAPI_API_KEY:-}
+    # SMA-455 — loopback only (see db). This PC still reaches it at
+    # localhost:5000: the Google sign-in button (VITE_AUTH_API_URL below),
+    # the bulk-import scripts, Postman.
     ports:
-      - "5000:8080"
+      - "127.0.0.1:5000:8080"
     depends_on:
       - db
 
@@ -88,16 +97,38 @@ services:
       # GET /api/auth/me (user.isAdmin), not a front whitelist. The former
       # VITE_ADMIN_EMAILS var was removed; configure AdminSeed__Emails on the api
       # service instead.
+    # SMA-455 — loopback by default, like the other three (see db): 3000
+    # serves the site AND, through the Vite proxy, the api, so published on
+    # every interface it exposed both to any device of a public network.
+    # Open it only for a test on a real phone, at
+    # http://<this PC's address>:3000, then close it. In PowerShell, at the
+    # root of the repo:
+    #   open:  $env:DEV_WEB_BIND = "0.0.0.0"; docker compose up -d
+    #   close: Remove-Item Env:DEV_WEB_BIND; docker compose up -d
+    #   check: netstat -ano | findstr ":3000"
+    #          closed: loopback only (127.0.0.1:3000, maybe [::1]:3000);
+    #          open: 0.0.0.0:3000.
+    # During a phone test, sign in by email: the Google button and the links
+    # in emails target localhost, that is the PC, not the phone (a limit
+    # older than SMA-455).
+    # Set DEV_WEB_BIND in the PowerShell session only, never in a .env (the
+    # close line would not remove it from there, and 3000 would stay open),
+    # and always verify the close with netstat.
+    # Closing the window does NOT close the port: the container keeps its
+    # binding, across stop/start too, until a `docker compose up -d` run
+    # without DEV_WEB_BIND recreates it. 5173 is the port Vite listens on
+    # inside the container (Dockerfile).
     ports:
-      - "3000:5173"
+      - "${DEV_WEB_BIND:-127.0.0.1}:3000:5173"
     depends_on:
       - api
 
   typesense:
     image: typesense/typesense:30.2
     container_name: smartcrops-typesense
+    # SMA-455 — loopback only (see db).
     ports:
-      - "8108:8108"
+      - "127.0.0.1:8108:8108"
     environment:
       # TYPESENSE_API_KEY is required and supplied via the gitignored
       # docker-compose.override.yml — never commit it here.
