@@ -4,12 +4,17 @@ import LegalPageLayout from '../components/Legal/LegalPageLayout';
 import LegalParagraph from '../components/Legal/LegalParagraph';
 import LegalSection from '../components/Legal/LegalSection';
 
-/** SMA-35: /terms — Conditions générales d'utilisation (trame §3). */
+/**
+ * SMA-35: /terms — Conditions générales d'utilisation (trame §3). SMA-448:
+ * article 03 « Formules » (the three formulas, their limits, what a switch
+ * keeps), inserted right after « Accès au Service » — the i18n keys s03…s10
+ * keep their names and are displayed one number later.
+ */
 export default function Terms() {
   const { t } = useTranslation();
 
   return (
-    <LegalPageLayout title={t('legal.terms.title')}>
+    <LegalPageLayout title={t('legal.terms.title')} updatedDate={t('legal.terms.updatedDate')}>
       <LegalSection number="01" title={t('legal.terms.s01.title')}>
         <LegalParagraph text={t('legal.terms.s01.body')} />
       </LegalSection>
@@ -23,7 +28,19 @@ export default function Terms() {
         />
       </LegalSection>
 
-      <LegalSection number="03" title={t('legal.terms.s03.title')}>
+      <LegalSection number="03" title={t('legal.terms.formulas.title')}>
+        <LegalList
+          items={[
+            t('legal.terms.formulas.items.intro'),
+            t('legal.terms.formulas.items.limits'),
+            t('legal.terms.formulas.items.applied'),
+            t('legal.terms.formulas.items.protection'),
+            t('legal.terms.formulas.items.switch'),
+          ]}
+        />
+      </LegalSection>
+
+      <LegalSection number="04" title={t('legal.terms.s03.title')}>
         <LegalList
           items={[
             t('legal.terms.s03.items.accuracy'),
@@ -32,7 +49,7 @@ export default function Terms() {
         />
       </LegalSection>
 
-      <LegalSection number="04" title={t('legal.terms.s04.title')}>
+      <LegalSection number="05" title={t('legal.terms.s04.title')}>
         <LegalList
           items={[
             t('legal.terms.s04.items.ownership'),
@@ -42,16 +59,16 @@ export default function Terms() {
         />
       </LegalSection>
 
-      <LegalSection number="05" title={t('legal.terms.s05.title')}>
+      <LegalSection number="06" title={t('legal.terms.s05.title')}>
         <LegalParagraph text={t('legal.terms.s05.p1')} />
         <LegalParagraph text={t('legal.terms.s05.p2')} />
       </LegalSection>
 
-      <LegalSection number="06" title={t('legal.terms.s06.title')}>
+      <LegalSection number="07" title={t('legal.terms.s06.title')}>
         <LegalParagraph text={t('legal.terms.s06.body')} />
       </LegalSection>
 
-      <LegalSection number="07" title={t('legal.terms.s07.title')}>
+      <LegalSection number="08" title={t('legal.terms.s07.title')}>
         <LegalList
           items={[
             t('legal.terms.s07.items.bestEffort'),
@@ -61,15 +78,15 @@ export default function Terms() {
         />
       </LegalSection>
 
-      <LegalSection number="08" title={t('legal.terms.s08.title')}>
+      <LegalSection number="09" title={t('legal.terms.s08.title')}>
         <LegalParagraph text={t('legal.terms.s08.body')} />
       </LegalSection>
 
-      <LegalSection number="09" title={t('legal.terms.s09.title')}>
+      <LegalSection number="10" title={t('legal.terms.s09.title')}>
         <LegalParagraph text={t('legal.terms.s09.body')} />
       </LegalSection>
 
-      <LegalSection number="10" title={t('legal.terms.s10.title')}>
+      <LegalSection number="11" title={t('legal.terms.s10.title')}>
         <LegalParagraph text={t('legal.terms.s10.body')} />
       </LegalSection>
     </LegalPageLayout>

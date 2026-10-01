@@ -14,6 +14,12 @@ import { adaptBadge } from '../../utils/badgeColors';
 interface LegalPageLayoutProps {
   title: string;
   subtitle?: string;
+  /**
+   * SMA-448 — the date of THIS page's latest change: one per legal page (the
+   * Terms' article « Modification des CGU » says that the date shows the
+   * latest change). Required, so a page cannot fall back on another's date.
+   */
+  updatedDate: string;
   children: ReactNode;
 }
 
@@ -26,6 +32,7 @@ interface LegalPageLayoutProps {
 export default function LegalPageLayout({
   title,
   subtitle,
+  updatedDate,
   children,
 }: LegalPageLayoutProps) {
   const { t, i18n } = useTranslation();
@@ -55,7 +62,7 @@ export default function LegalPageLayout({
             </Typography>
           )}
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-            {t('legal.layout.lastUpdated')} {t('legal.layout.updatedDate')}
+            {t('legal.layout.lastUpdated')} {updatedDate}
           </Typography>
         </Box>
 

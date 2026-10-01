@@ -198,6 +198,10 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
     expect(tagsOf('novice')).toEqual(['recommended']);
     expect(tagsOf('gardener')).toEqual([]);
     expect(within(screenOfChoice).getByText(/Welcome\. Before opening your gardens/)).toBeInTheDocument();
+    // The line of the Terms under the lead (SMA-448, the final text § 4.1): this screen, shown once, says it.
+    const terms = within(screenOfChoice).getByRole('link', { name: /read them.*new tab/i });
+    expect(terms).toHaveAttribute('href', '/terms');
+    expect(terms).toHaveAttribute('target', '_blank');
     expect(changeFormula).not.toHaveBeenCalled();
   });
 
@@ -239,6 +243,8 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
     const screenOfChoice = await dialog();
     await within(screenOfChoice).findByRole('button', { name: 'Keep Novice' }, PATIENCE);
     expect(within(screenOfChoice).getByText(/You are on Novice and you have 1 garden/)).toBeInTheDocument();
+    // Reopened from the chip: no line of the Terms — the mandatory screen alone says it (SMA-448, § 4.1).
+    expect(screenOfChoice.querySelector('[data-formula-choice-terms]')).toBeNull();
     fireEvent.click(within(screenOfChoice).getByRole('button', { name: 'Close without changing formula' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
     expect(changeFormula).not.toHaveBeenCalled();

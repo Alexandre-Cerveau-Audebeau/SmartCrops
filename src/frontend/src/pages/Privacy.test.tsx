@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
@@ -45,7 +45,8 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
     // Newsletter has no backend: its rows are gone from the page.
     expect(screen.queryByText(/Newsletter/)).not.toBeInTheDocument();
-    expect(screen.getByText(/September 22, 2026/)).toBeInTheDocument();
+    // The policy's own date (SMA-448): the day of its change for the formulas.
+    expect(screen.getByText(/October 1, 2026/)).toBeInTheDocument();
     // SMA-441: the garden-location section names its processor.
     expect(
       screen.getByRole('heading', { name: 'Location of your gardens' })
@@ -74,7 +75,7 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('7 jours')).toBeInTheDocument();
     expect(screen.getByText('2 minutes')).toBeInTheDocument();
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
-    expect(screen.getByText(/22 septembre 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/1er octobre 2026/)).toBeInTheDocument();
     // SMA-441, FR mirror.
     expect(
       screen.getByRole('heading', { name: 'Localisation de vos jardins' })
@@ -107,5 +108,78 @@ describe('Privacy (SMA-35)', () => {
     expect(
       screen.getByRole('table', { name: 'Cookies and local storage used' })
     ).toBeInTheDocument();
+  });
+});
+
+// SMA-448 — the formulas in the policy, the text of « SMA-448 - CGU et
+// confidentialité - texte final.md » (§ 3): the row « Formula and dashboard
+// layout », the two data the gardens gained, the retention of the layouts,
+// what the export leaves out, and the policy's own date (T7).
+describe('the formulas in the policy (SMA-448)', () => {
+  beforeEach(async () => {
+    await i18next.changeLanguage('en');
+  });
+
+  it('in English: the formula row, the gardens’ two new data, the retention of the layouts, the export without the layout, the date of the change', () => {
+    const { container } = renderPage();
+    const text = container.textContent ?? '';
+
+    expect(screen.getByText('Formula and dashboard layout')).toBeInTheDocument();
+    expect(text).toContain('Your formula (Novice, Gardener or Expert) and the date of your latest choice;');
+    expect(text).toContain('the date you last opened each garden, the rank of each in your custom order if you set one');
+    expect(text).toContain(
+      'Formula, date of choice and dashboard layouts — lifetime of the account; erased with it, under the same conditions as the account and its content.'
+    );
+    expect(text).toContain("your dashboard layout, including its widgets' settings, is not included");
+    expect(screen.getByText(/October 1, 2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/September 22, 2026/)).toBeNull();
+  });
+
+  it('en français : la ligne de la formule, les deux données des jardins, la conservation des dispositions, l’export sans la disposition, la date du changement', async () => {
+    await i18next.changeLanguage('fr');
+    const { container } = renderPage();
+    const text = container.textContent ?? '';
+
+    expect(screen.getByText('Formule et disposition du tableau de bord')).toBeInTheDocument();
+    expect(text).toContain('Votre formule (Novice, Jardinier ou Expert) et la date de votre dernier choix ;');
+    expect(text).toContain(
+      'date de votre dernière ouverture de chaque jardin, rang de chacun dans votre ordre personnalisé si vous en définissez un'
+    );
+    expect(text).toContain(
+      'Formule, date du choix et dispositions du tableau de bord — durée de vie du compte ; effacées avec lui, dans les mêmes conditions que le compte et ses contenus.'
+    );
+    expect(text).toContain("la disposition de votre tableau de bord, réglages de ses widgets compris, n'y figure pas");
+    expect(screen.getByText(/1er octobre 2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/22 septembre 2026/)).toBeNull();
+  });
+
+  it('places the formula row between « Profile » and « Created content » (desktop table)', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+    renderPage();
+    const table = screen.getByRole('table', { name: 'Data collected, purposes and legal bases' });
+    const names = within(table)
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[0]!.textContent);
+
+    expect(names.slice(0, 5)).toEqual([
+      'User account',
+      'Google sign-in (optional)',
+      'Profile (optional)',
+      'Formula and dashboard layout',
+      'Created content',
+    ]);
   });
 });
