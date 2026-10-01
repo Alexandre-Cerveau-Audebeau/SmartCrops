@@ -7,6 +7,7 @@ import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
+import { deferred } from '../test/responses';
 import { LIVE_REGION_CLEAR_MS } from '../hooks/useLiveRegion';
 
 vi.mock('../services/gardenApi', () => ({
@@ -41,7 +42,8 @@ import {
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
-import type { DashboardBlock } from '../types/Dashboard';
+import type { DashboardBlock, DashboardPreferences } from '../types/Dashboard';
+import type { DashboardData } from '../types/DashboardData';
 
 // SMA-437 lot 1, PR B, step B5 (contract § 4.5; A-N23) — the gear of the Key
 // figures band, in the real `Popover` of the page: four numbered emplacements,
@@ -377,5 +379,46 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
     const panel = await screen.findByRole('dialog');
     expect(within(panel).getByRole('button', { name: 'Remplacer «\u00a0Cases libres\u00a0», 1ʳᵉ place' })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Remplacer «\u00a0Occupation\u00a0», 2ᵉ place' })).toBeInTheDocument();
+  });
+});
+
+// SMA-437, review of the v3, M2 — the band's « Create Garden » door ends the
+// Edit mode FIRST, as the header's (#291) and the Gardens widget's (F5-a) do:
+// two identical buttons of one page, one behaviour. The layout and the gardens
+// HELD, then landed inside `act` (SMA-452 § 12): the empty band is drawn when
+// the reads below are made.
+describe('the band’s « Create Garden » door (SMA-437, review of the v3, M2)', () => {
+  it('in Edit mode, ends the mode FIRST, then opens the dialog — like the header’s and the Gardens widget’s', async () => {
+    localStorage.setItem('smartcrops-language', 'en');
+    const layout = deferred<DashboardPreferences>();
+    const gardens = deferred<DashboardData>();
+    vi.mocked(fetchDashboardPreferences).mockReturnValueOnce(layout.promise);
+    vi.mocked(fetchDashboardData).mockReturnValueOnce(gardens.promise);
+    renderPage();
+    // An Expert without a garden: the band empty, its door « Create Garden ».
+    await act(async () => {
+      layout.resolve({
+        schemaVersion: 1,
+        level: 'expert',
+        capabilities: capabilitiesFor('expert'),
+        isPreset: true,
+        formulaChosen: true,
+        blocks: presetFor('expert'),
+        updatedAt: null,
+      });
+      gardens.resolve(dashboardFixture([]));
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    const band = document.querySelector('[data-widget="keyfigures"]') as HTMLElement;
+
+    fireEvent.click(within(band).getByRole('button', { name: 'Create Garden' }));
+
+    expect(screen.getByRole('dialog', { name: 'Create a new garden' })).toBeInTheDocument();
+    // The mode is over: « Edit » is back in the header, « Done » gone — read
+    // through the dialog's veil (MUI hides the page from assistive technology
+    // while a modal is open), hence `hidden: true`.
+    expect(screen.queryByRole('button', { name: 'Done', hidden: true })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit', hidden: true })).toBeInTheDocument();
   });
 });

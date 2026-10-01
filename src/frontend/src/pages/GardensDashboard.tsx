@@ -329,6 +329,26 @@ export default function GardensDashboard() {
   const [editing, setEditing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
 
+  // SMA-437, review of the v3, M4 — the cards page has no Customize panel and
+  // no Edit mode: arriving on it CLOSES both, so the way back to a grid formula
+  // starts at rest. Hidden by its condition alone (`!cardsPage` below), the
+  // panel kept `panelOpen` true and came back by itself with the grid — the
+  // symptom R2-E1 closed for the load error —, and the Edit mode came back with
+  // it. Keyed on the edge INTO the cards page, whatever door led there: no
+  // other switch touches the panel, which stays open under the screen (A1).
+  // Here rather than in `chooseFormula`: the formula's page is what its served
+  // capabilities say (R8), and the handler only holds those of before. A
+  // render-time adjust, as in DeleteGardenDialog (react-hooks/set-state-in-
+  // effect forbids the effect variant).
+  const [wasCardsPage, setWasCardsPage] = useState(cardsPage);
+  if (cardsPage !== wasCardsPage) {
+    setWasCardsPage(cardsPage);
+    if (cardsPage) {
+      setPanelOpen(false);
+      setEditing(false);
+    }
+  }
+
   // SMA-437, lot V39, PR B — the compact action bar: mounted at the formulas
   // that have one (A-9), armed once the layout is read (A-10.2), shown when
   // the header's repeated buttons pass under the site navbar plus the bar.
@@ -812,7 +832,9 @@ export default function GardensDashboard() {
             refreshing={gardensRefreshing}
             loadError={gardensError}
             onRetry={refetch}
-            onCreate={() => setCreateDialogOpen(true)}
+            // SMA-437, review of the v3, M2 — the band's door ends the Edit mode
+            // first, as the Gardens widget's and the header's do.
+            onCreate={createFromWidget}
           />
         );
       default:

@@ -125,13 +125,22 @@ public class FormulasController(SmartCropsDbContext context) : ControllerBase
             await SwapLayoutsAsync(userId, current, target.Key, ct);
         }
 
+        // SMA-437, review of the v3, M1 — the stamp turns with the formula. This
+        // UPDATE writes the row OUTSIDE Identity, and `UserManager.UpdateAsync`
+        // rewrites EVERY column of it with `ConcurrencyStamp` as its only guard:
+        // an Identity write that read the account before this switch committed
+        // (the default location, the profile) found the stamp unchanged and put
+        // the old formula back, with the old « chosen at ». Turned here, the late
+        // write fails as a ConcurrencyFailure instead (FormulaIdentityWriteRaceTests).
         var chosenAt = DateTime.UtcNow;
+        var stamp = Guid.NewGuid().ToString();
         await context.Users
             .Where(u => u.Id == userId)
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(u => u.Formula, target.Key)
-                    .SetProperty(u => u.FormulaChosenAt, chosenAt),
+                    .SetProperty(u => u.FormulaChosenAt, chosenAt)
+                    .SetProperty(u => u.ConcurrencyStamp, stamp),
                 ct);
         await context.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
