@@ -19,6 +19,7 @@ import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
 import type { DashboardLevel, DashboardSize } from '../../types/Dashboard';
 import {
   CHOICE_SCENES,
+  EDGES_SCENES,
   GARDENS_LIST_KINDS,
   NOVICE_SCENES,
   PLANNER_GARDEN,
@@ -26,11 +27,13 @@ import {
   SCENE_DATA,
   WEATHER_CITY_SCENES,
   choiceSceneCatalog,
+  edgesSceneData,
   gardensSceneData,
   noviceSceneData,
   weatherAll,
   weatherCitySceneData,
   type ChoiceScene,
+  type EdgesScene,
   type GardensListKind,
   type NoviceScene,
   type WeatherCityScene,
@@ -75,6 +78,22 @@ import { gridCellsOf, measureCard, ownText, visible, wrappedTexts, type CardMeas
  * — `fakeTimers()` once the page is loaded, `advanceTimers(ms)` to move them
  * on —, so the suite can read the drawer six seconds after a gesture without
  * waiting six seconds.
+ *
+ * SMA-448, PR #306, fix round 1, D2: WHAT SCROLLS around the choice screen —
+ * `measureChoice()` says it with the screen open, `measureScroll()` at any
+ * moment, the screen gone included; `hit()` says whether a control can be
+ * pressed where it stands. A formula chosen on the screen is stamped, as the
+ * server stamps it: the mandatory screen then closes, as on the real page.
+ *
+ * SMA-437, lot V3-06, step E1: THE PAGE'S TITLE — `measureTitle()` reads its
+ * computed size, line height and weight, and the lines its words take. Steps
+ * E3 and E4: THE EDGES OF A LARGE CARD — `edges=full|empty` serves the scene's
+ * gardens and weather with Tips and To-do in Large; `measureEdges(key)` reads
+ * the card, its zone that scrolls, its invitation stuck at the foot of the
+ * zone or in the middle of the card, and every text's contrast on that
+ * invitation; `scrollZoneToEnd(key)` scrolls the zone to its end;
+ * `focusUnderFoot(key)` focuses the zone's controls in turn and names the
+ * ones the foot still hides (WCAG 2.4.11).
  */
 
 const params = new URLSearchParams(location.search);
@@ -103,6 +122,12 @@ if (choiceName && !choiceScene) throw new Error(`No choice scene ${choiceName}`)
 const createOutcome = params.get('create');
 /** The planner's page instead of the dashboard, on the Novice's 20 x 20 garden. */
 const plannerPage = params.get('page') === 'planner';
+/**
+ * SMA-454, fix round 1 (R2) — the planner on a garden WITHOUT a plan yet
+ * (`setup=first`): its layout answers no size, and the page opens its first
+ * setup at once — the dialog that carries the garden's city too.
+ */
+const firstSetup = plannerPage && params.get('setup') === 'first';
 /**
  * The planner's save refused for the plan's size (403 `formula.gardenSize`)
  * or by a session that expired (401). Either makes the catalogue unreadable
@@ -141,6 +166,17 @@ const gardensSize = params.get('gsize') as DashboardSize | null;
 /** What `fetch` serves the page for the Gardens scene: its gardens and their weather. */
 const gardensServed = gardensKind ? gardensSceneData(gardensKind) : null;
 
+// SMA-437, lot V3-06 (A-21 to A-25) — the edges of the page's cards: the
+// gardens and the weather the scene serves (`edges=full|empty`), and Tips and
+// To-do in Large through the page's own read of the layout, as `wsize` above.
+const edgesName = params.get('edges');
+const edgesKind: EdgesScene | null = edgesName
+  ? ((EDGES_SCENES as readonly string[]).includes(edgesName) ? (edgesName as EdgesScene) : null)
+  : null;
+if (edgesName && !edgesKind) throw new Error(`No edges scene ${edgesName}`);
+/** What `fetch` serves the page for the edges scene: its aggregate and its weather. */
+const edgesServed = edgesKind ? edgesSceneData(edgesKind) : null;
+
 /**
  * The theme the page draws with — the colour mode `pageSetup.ts` stored —:
  * the Customize drawer's secondary texts are told apart by its
@@ -154,6 +190,14 @@ const json = (body: unknown) =>
 
 /** The layouts the page wrote, in order — what a gesture in Edit mode sends. */
 const saved: unknown[] = [];
+
+/**
+ * Whether the account has chosen its formula: the choice scene's, until a
+ * formula is chosen on the screen — the server stamps the choice (`PUT
+ * /api/formulas/current`, `FormulaChosenAt`) and the layout read back after
+ * the switch says so (PR #306, fix round 1, D2).
+ */
+let chosen = choiceScene ? choiceScene.chosen : true;
 
 /**
  * While the suite holds the saves (`holdSaves()`), a write waits here for
@@ -171,6 +215,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const method = (init?.method ?? 'GET').toUpperCase();
   if (url.startsWith('/api/formulas')) {
     if (plannerPage && saveOutcome) return new Response(null, { status: 500 });
+    if (method === 'PUT') {
+      chosen = true;
+      return new Response(null, { status: 204 });
+    }
     return json(choiceScene ? choiceSceneCatalog(choiceScene) : catalogFor(plannerPage ? 'novice' : pageLevel, { gardenCount: gardensServed ? gardensServed.gardens.length : 3 }));
   }
   if (url.startsWith('/api/gardens/g1/layout')) {
@@ -188,7 +236,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       if (saveOutcome === 'unauthorized') return new Response(null, { status: 401 });
       return new Response(null, { status: 204 });
     }
-    return json(PLANNER_LAYOUT);
+    return json(firstSetup ? { ...PLANNER_LAYOUT, width: null, height: null, cellSize: null } : PLANNER_LAYOUT);
   }
   if (url.startsWith('/api/gardens/g1')) return json(PLANNER_GARDEN);
   if (url.startsWith('/api/gardens')) {
@@ -219,7 +267,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       level: pageLevel,
       isPreset: true,
       // The choice screen opens by itself on an account that never chose (N18).
-      formulaChosen: choiceScene ? choiceScene.chosen : true,
+      formulaChosen: chosen,
       // A stored layout with the Weather widget at the asked size (lot F4, W5),
       // the Gardens widget at its (lot F5-b, W4).
       blocks: presetFor(pageLevel).map((block) =>
@@ -227,18 +275,40 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
           ? { ...block, size: weatherSize, hidden: false }
           : gardensSize && block.key === 'gardens'
             ? { ...block, size: gardensSize, hidden: false }
-            : block
+            : edgesKind && (block.key === 'tips' || block.key === 'todo')
+              ? { ...block, size: 'large' as const, hidden: false }
+              : block
       ),
       updatedAt: null,
       capabilities: capabilitiesFor(pageLevel),
     });
   }
   if (url.startsWith('/api/dashboard/weather')) {
-    return json(served ? served.weather : weatherServed ? weatherServed.weather : gardensServed ? gardensServed.weather : weatherAll());
+    return json(
+      served
+        ? served.weather
+        : weatherServed
+          ? weatherServed.weather
+          : gardensServed
+            ? gardensServed.weather
+            : edgesServed
+              ? edgesServed.weather
+              : weatherAll()
+    );
   }
   if (url.startsWith('/api/dashboard')) {
     if (failGardens) return new Response(null, { status: 500 });
-    return json(served ? served.data : weatherServed ? weatherServed.data : gardensServed ? gardensServed.data : SCENE_DATA);
+    return json(
+      served
+        ? served.data
+        : weatherServed
+          ? weatherServed.data
+          : gardensServed
+            ? gardensServed.data
+            : edgesServed
+              ? edgesServed.data
+              : SCENE_DATA
+    );
   }
   // A visitor: the navbar of someone not signed in, as the pre-flight measured it.
   if (url.startsWith('/api/auth/')) return new Response(null, { status: 401 });
@@ -447,6 +517,22 @@ export interface DialogMeasure extends CardMeasure {
   buttons: Array<{ text: string; disabled: boolean }>;
 }
 
+/**
+ * SMA-448, PR #306, fix round 1, D2 (Alexandre's visual pass, 01/10: « il y a
+ * 2 scrollbars sur le côté de l'écran quand ce dialog container s'ouvre ») —
+ * what scrolls. The PAGE: the document's scroller — its computed
+ * `overflow-y`, whether the reader can scroll it (not hidden, its content
+ * taller than the window), where it stands and how far it goes. The SCREEN:
+ * every element of the choice screen that scrolls — `overflow-y` auto, scroll
+ * or overlay, its content taller than its box —, by its MUI slot, with what a
+ * wheel does at its end (`overscroll-behavior-y`); none when the screen is
+ * not open. What lies under the veil is the page's, out of the wheel's reach.
+ */
+export interface ScrollMeasure {
+  page: { overflowY: string; scrollable: boolean; scrollY: number; maxScroll: number };
+  screen: Array<{ label: string; overscroll: string }>;
+}
+
 /** The choice screen (V3-01) measured on the real page: the panel as one card, and the situation it draws. */
 export interface ChoiceMeasure extends DialogMeasure {
   scene: string;
@@ -477,6 +563,16 @@ export interface ChoiceMeasure extends DialogMeasure {
    * declares (SMA-448, PR #297, fix round 1, S3: the tone by meaning).
    */
   compareCells: Array<{ text: string; color: string; weight: string; tone: string | null }>;
+  /**
+   * PR #306, fix round 1, L1 (Alexandre, 01/10: « Oui on peut la rendre plus
+   * visible, ça me va bien ») — the line of the Terms on the mandatory
+   * screen, and the lead right before it: the line's computed colour and the
+   * lead's, what is painted behind the line, and the ratio its text is read
+   * at. Null when the screen draws no line — reopened from the chip.
+   */
+  terms: { color: string; lead: { text: string; color: string } | null; background: string; ratio: number } | null;
+  /** D2 — what scrolls, the screen open. */
+  scroll: ScrollMeasure;
 }
 
 /** The planner's shape mode at the formula's limit: the note that says why, the four add buttons inert, the four remove buttons live. */
@@ -533,6 +629,63 @@ export interface PanelMeasure extends CardMeasure {
 export interface PanelFocus {
   key: string | null;
   control: string;
+}
+
+/**
+ * SMA-437, lot V3-06, step E1 (contract A-24) — the page's title, « Mes
+ * Jardins », as the engine draws it: its computed size, line height and
+ * weight, the box of its words, and how many lines they take.
+ */
+export interface TitleMeasure {
+  viewport: number;
+  text: string;
+  px: number;
+  line: number;
+  weight: number;
+  /** The box of its words — their Range, not the h1's box, which the header's flex row stretches. */
+  box: Rect;
+  /** The lines its words take: one, or more when they wrap. */
+  lines: number;
+  fontLoaded: boolean;
+}
+
+/**
+ * SMA-437, lot V3-06, step E3 (A-21 to A-23) — the invitation of a Large card
+ * in its new forms, the card (b): stuck at the FOOT of the zone that scrolls,
+ * or in the MIDDLE of the card. Its box, the computed styles that make it
+ * what it is, and every text's contrast on what is painted behind it.
+ */
+export interface InviteCardMeasure {
+  /** `foot` or `middle`. */
+  place: string;
+  rect: Rect;
+  position: string;
+  bottom: string;
+  backgroundColor: string;
+  backgroundImage: string;
+  backdropFilter: string;
+  maxWidth: string;
+  texts: PanelText[];
+}
+
+/**
+ * SMA-437, lot V3-06, step E3 (A-21 to A-23, A-25) — the edges of a Large
+ * card: the card measured as the scenes' harness measures one; its zone that
+ * scrolls — its box, its content's height, its own, how far it is scrolled;
+ * its invitation; the bottom of its last group, which the foot never covers
+ * once the zone is scrolled to its end; and the middle card's gaps to the
+ * space it is centred in.
+ */
+export interface EdgeCardMeasure extends CardMeasure {
+  viewport: number;
+  zone: { rect: Rect; scrollH: number; clientH: number; scrollTop: number } | null;
+  invite: InviteCardMeasure | null;
+  /** The invitation is the zone's last child. */
+  last: boolean;
+  /** The bottom of the zone's last group, in the window — null without a group. */
+  lastGroupBottom: number | null;
+  /** The middle card's gaps to the box it is centred in: left, right, top, bottom. */
+  middle: { left: number; right: number; top: number; bottom: number } | null;
 }
 
 declare global {
@@ -709,6 +862,26 @@ function describeActive(): ActiveMeasure {
   return { where, action: active.getAttribute('data-page-action'), text: active.textContent ?? '', mark: markOf(active) };
 }
 
+/** What scrolls now (D2): the page, and every element of the choice screen that scrolls, if it is open. */
+function scrollOf(): ScrollMeasure {
+  const doc = document.documentElement;
+  const overflowY = getComputedStyle(doc).overflowY;
+  const maxScroll = doc.scrollHeight - innerHeight;
+  const root = document.querySelector('[data-formula-choice-dialog]');
+  const screen = root
+    ? [root, ...root.querySelectorAll('*')]
+        .filter((element) => ['auto', 'scroll', 'overlay'].includes(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight)
+        .map((element) => ({
+          label: [...element.classList].find((name) => name.startsWith('Mui')) ?? element.tagName.toLowerCase(),
+          overscroll: getComputedStyle(element).overscrollBehaviorY,
+        }))
+    : [];
+  return {
+    page: { overflowY, scrollable: overflowY !== 'hidden' && overflowY !== 'clip' && maxScroll > 0, scrollY: round(scrollY), maxScroll },
+    screen,
+  };
+}
+
 // ── The Customize drawer (SMA-437, lot V3-07, P5) ───────────────────────────
 
 /** The drawer's paper and its content, found from its list of widgets — null while it is not open. */
@@ -867,8 +1040,11 @@ const page = {
   ready(): boolean {
     if (document.fonts.status !== 'loaded') return false;
     if (!document.querySelector('[data-site-navbar]')) return false;
-    // The planner (SMA-448, lot F3, L7): its grid drawn, no skeleton.
+    // The planner (SMA-448, lot F3, L7): its grid drawn, no skeleton — or, on
+    // a garden without a plan (SMA-454, fix round 1, R2), its first setup
+    // drawn: the dialog's title, whatever the dialog carries.
     if (plannerPage) {
+      if (firstSetup) return document.querySelector('.MuiDialog-paper h2') !== null;
       return document.querySelector('[role="grid"]') !== null && document.querySelectorAll('.MuiSkeleton-root').length === 0;
     }
     if (!headerRowOf()) return false;
@@ -1060,6 +1236,106 @@ const page = {
     };
   },
 
+  /** SMA-437, lot V3-06, step E1 (A-24) — the page's title, as the engine draws it. */
+  measureTitle(): TitleMeasure {
+    const title = document.querySelector<HTMLElement>('[data-dashboard-header] h1');
+    if (!title) throw new Error('The page drew no title.');
+    const style = getComputedStyle(title);
+    const words = document.createRange();
+    words.selectNodeContents(title);
+    const box = words.getBoundingClientRect();
+    const tops = new Set(
+      [...words.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0).map((rect) => Math.round(rect.top))
+    );
+    return {
+      viewport: innerWidth,
+      text: title.textContent ?? '',
+      px: parseFloat(style.fontSize),
+      line: round(parseFloat(style.lineHeight)),
+      weight: Number(style.fontWeight),
+      box: { x: round(box.left), y: round(box.top), w: round(box.width), h: round(box.height) },
+      lines: tops.size,
+      fontLoaded: document.fonts.check('16px Inter'),
+    };
+  },
+
+  /**
+   * SMA-437, lot V3-06, steps E3 and E4 (A-21 to A-23, A-25) — the edges of a
+   * Large card, `tips` or `todo`: the card, its zone, its invitation and its
+   * texts' contrast, as the engine draws them.
+   */
+  measureEdges(key: 'tips' | 'todo'): EdgeCardMeasure {
+    const card = document.querySelector<HTMLElement>(`[data-widget="${key}"]`);
+    if (!card) throw new Error(`The page drew no ${key} widget to measure.`);
+    const zone = card.querySelector<HTMLElement>(`[data-${key}-groups]`);
+    const invite = card.querySelector<HTMLElement>('[data-invite-card]');
+    const groups = zone ? [...zone.children].filter((child) => child !== invite) : [];
+    const space = invite?.getAttribute('data-invite-card') === 'middle' ? invite.parentElement : null;
+    const style = invite ? getComputedStyle(invite) : null;
+    const gaps = (inner: Element, outer: Element) => {
+      const a = inner.getBoundingClientRect();
+      const b = outer.getBoundingClientRect();
+      return { left: round(a.left - b.left), right: round(b.right - a.right), top: round(a.top - b.top), bottom: round(b.bottom - a.bottom) };
+    };
+    return {
+      ...measureCard(card),
+      viewport: innerWidth,
+      zone: zone ? { rect: rectOf(zone), scrollH: zone.scrollHeight, clientH: zone.clientHeight, scrollTop: round(zone.scrollTop) } : null,
+      invite:
+        invite && style
+          ? {
+              place: invite.getAttribute('data-invite-card') ?? '',
+              rect: rectOf(invite),
+              position: style.position,
+              bottom: style.bottom,
+              backgroundColor: style.backgroundColor,
+              backgroundImage: style.backgroundImage,
+              backdropFilter: style.backdropFilter,
+              maxWidth: style.maxWidth,
+              texts: textContrasts(invite),
+            }
+          : null,
+      last: invite !== null && zone !== null && zone.lastElementChild === invite,
+      lastGroupBottom: groups.length > 0 ? round(groups[groups.length - 1]!.getBoundingClientRect().bottom) : null,
+      middle: invite && space ? gaps(invite, space) : null,
+    };
+  },
+
+  /**
+   * SMA-437, lot V3-06, E3 — WCAG 2.4.11 (Focus Not Obscured) in the zone of
+   * a Large card: from the top of the zone, every control of the zone but
+   * the foot's focused in turn, as the keyboard reaches it — the engine
+   * scrolls what it scrolls —; the ones the foot still covers WHOLLY once
+   * focused, named. The focus is let go at the end.
+   */
+  focusUnderFoot(key: 'tips' | 'todo'): { focused: number; hidden: string[] } {
+    const zone = document.querySelector<HTMLElement>(`[data-widget="${key}"] [data-${key}-groups]`);
+    const foot = zone?.querySelector<HTMLElement>(':scope > [data-invite-card="foot"]');
+    if (!zone || !foot) throw new Error(`The ${key} widget draws no zone with a foot.`);
+    zone.scrollTop = 0;
+    // The links and buttons of Tips, the checkboxes of To-do.
+    const controls = [...zone.querySelectorAll<HTMLElement>('a[href], button, input')].filter((control) => !foot.contains(control));
+    const hidden: string[] = [];
+    for (const control of controls) {
+      control.focus();
+      const box = control.getBoundingClientRect();
+      const under = foot.getBoundingClientRect();
+      if (box.top >= under.top - 0.5 && box.bottom <= under.bottom + 0.5) {
+        hidden.push(`« ${control.textContent ?? ''} » at ${round(box.top)}–${round(box.bottom)}, the foot at ${round(under.top)}–${round(under.bottom)}`);
+      }
+    }
+    (document.activeElement as HTMLElement | null)?.blur();
+    return { focused: controls.length, hidden };
+  },
+
+  /** Scrolls the zone of a Large card, `tips` or `todo`, to its end, at once, and settles. */
+  async scrollZoneToEnd(key: 'tips' | 'todo'): Promise<true> {
+    const zone = document.querySelector<HTMLElement>(`[data-widget="${key}"] [data-${key}-groups]`);
+    if (!zone) throw new Error(`The ${key} widget draws no zone to scroll.`);
+    zone.scrollTop = zone.scrollHeight;
+    return page.settle();
+  },
+
   /** SMA-437, lot V3-08, step S5 — the grid's cards, their cells and the empty ones, as laid out. */
   measureGrid(): PageGridMeasure {
     const cards = gridCards();
@@ -1114,6 +1390,24 @@ const page = {
     const title = document.querySelector<HTMLElement>('[data-dashboard-header] h1');
     const paperBox = paper.getBoundingClientRect();
     const titleBox = title?.getBoundingClientRect() ?? null;
+    // L1 — the line, and the lead it follows (the order the dialog's unit
+    // tests pin): its steady colour, the screen's fade aside, read on what is
+    // painted behind it.
+    const line = paper.querySelector<HTMLElement>('[data-formula-choice-terms]');
+    let terms: ChoiceMeasure['terms'] = null;
+    if (line) {
+      const lineStyle = getComputedStyle(line);
+      const colour = channels(lineStyle.color);
+      const behind = paintedBehind(line);
+      const lead = line.previousElementSibling;
+      terms = {
+        color: lineStyle.color,
+        lead: lead ? { text: lead.textContent ?? '', color: getComputedStyle(lead).color } : null,
+        background: behind ? `rgb(${behind.map((channel) => Math.round(channel)).join(', ')})` : 'unreadable',
+        // Cut, never rounded, to the hundredth: a 4.497 is never read as 4.5.
+        ratio: colour && behind ? Math.floor(contrast(mix(colour.rgb, colour.a, behind), behind) * 100) / 100 : 0,
+      };
+    }
     return {
       ...page.measureDialog('[data-formula-choice]'),
       scene: choiceName ?? '',
@@ -1145,7 +1439,22 @@ const page = {
         const style = getComputedStyle(cell);
         return { text: cell.textContent ?? '', color: style.color, weight: style.fontWeight, tone: cell.getAttribute('data-compare-tone') };
       }),
+      terms,
+      scroll: scrollOf(),
     };
+  },
+
+  /** D2 — what scrolls now: the page, and the choice screen's scrollers while it is open. */
+  measureScroll(): ScrollMeasure {
+    return scrollOf();
+  },
+
+  /** Whether a pointer at the centre of the first element `selector` finds lands on it — nothing drawn over it (D2: the chip pressable once the page has scrolled). */
+  hit(selector: string): boolean {
+    const element = nth(selector, 0);
+    const box = element.getBoundingClientRect();
+    const found = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return found !== null && element.contains(found);
   },
 
   /** The planner's shape mode at the formula's limit (SMA-448, lot F3, L7): the note, the row under it, the eight buttons. */
@@ -1427,9 +1736,18 @@ const page = {
    *   the Customize drawer's paper — MUI still writes `--Paper-overlay`
    *   inline at night;
    * - `panel-long-word`: a widget's name no row can hold, one word with no
-   *   break in it.
+   *   break in it;
+   * - `foot-static` (SMA-437, lot V3-06, E3): the Tips foot no longer stuck —
+   *   `position: static`, the last row of a zone that scrolls, out of its
+   *   view at rest.
    */
   probe(name: string): boolean {
+    if (name === 'foot-static') {
+      const foot = document.querySelector<HTMLElement>('[data-widget="tips"] [data-invite-card="foot"]');
+      if (!foot) return false;
+      foot.style.position = 'static';
+      return true;
+    }
     const bar = barOf();
     if (name === 'filled-region') {
       const region = document.querySelector('[data-save-status]');

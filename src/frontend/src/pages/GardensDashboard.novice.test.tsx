@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +10,8 @@ import { dashboardFixture } from '../test/fixtures/dashboard';
 import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { gardens as sceneGardens, varieties as sceneVarieties, weatherAll } from '../test/layout/scenes';
 import { rulesFor } from '../test/dashboardDom';
-import type { DashboardBlock, DashboardLevel } from '../types/Dashboard';
+import { deferred } from '../test/responses';
+import type { DashboardBlock, DashboardLevel, FormulasCatalog } from '../types/Dashboard';
 import type { DashboardData } from '../types/DashboardData';
 import type { DashboardWeatherData } from '../types/DashboardWeather';
 
@@ -446,17 +447,30 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     expect(screen.getByRole('button', { name: 'Novice view — change formula', hidden: true })).toBeInTheDocument();
   });
 
-  it('the chooser’s refusal region is born empty and stays mounted — never assertive', async () => {
+  it('the chooser’s regions — its loading one and its refusal’s — are born empty and stay mounted — never assertive', async () => {
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(catalogue.promise);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
     // The catalogue first (SMA-452 § 12): the dialog opens before it, and
-    // while it loads « Loading the formulas… » is a second status.
-    await within(dialog).findByRole('button', { name: 'Keep Novice' });
+    // while it loads the loading region says « Loading the formulas… » —
+    // emptied by an effect that runs AFTER the commit drawing the offers, so
+    // a wait for the offers could end before it. Held, then landed inside
+    // `act` (PR #306, fix round 1, R0).
+    await act(async () => catalogue.resolve(catalogFor('novice', { gardenCount: 3 })));
+    expect(within(dialog).getByRole('button', { name: 'Keep Novice' })).toBeInTheDocument();
 
-    const region = within(dialog).getByRole('status');
-    expect(region).toHaveTextContent('');
-    expect(region).toHaveAttribute('aria-live', 'polite');
+    // Two regions, kept mounted (SMA-437 review, M5): the loading one, empty
+    // again once the offers landed, then the refusal's.
+    const regions = within(dialog).getAllByRole('status');
+    expect(regions).toHaveLength(2);
+    expect(regions[0]).toBe(dialog.querySelector('[data-formula-choice-status]'));
+    expect(regions[1]).toBe(dialog.querySelector('[data-formula-chooser-refusal]'));
+    for (const region of regions) {
+      expect(region).toHaveTextContent('');
+      expect(region).toHaveAttribute('aria-live', 'polite');
+    }
     expect(dialog.querySelector('[aria-live="assertive"]')).toBeNull();
   });
 
@@ -598,7 +612,9 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
     expect(chipRules).toMatch(/outline:2pxsolid/u);
   });
 
-  it('keeps its live regions born empty and mounted — the header’s save indicator, the chooser’s refusal — and none assertive', async () => {
+  it('keeps its live regions born empty and mounted — the header’s save indicator, the chooser’s loading and refusal regions — and none assertive', async () => {
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(catalogue.promise);
     renderPage();
     await waitFor(() => expect(cards()).toHaveLength(3));
 
@@ -610,11 +626,21 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
 
     fireEvent.click(screen.getByRole('button', { name: 'Novice view — change formula' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
-    // The catalogue first (SMA-452 § 12): while it loads, « Loading the
-    // formulas… » is a second status — this read lost that race in the merge
-    // CI of `e640de7` and of `7e5069d`.
-    await within(dialog).findByRole('button', { name: 'Keep Novice' });
-    expect(within(dialog).getByRole('status')).toHaveTextContent('');
+    // The catalogue first (SMA-452 § 12): while it loads, the loading region
+    // says « Loading the formulas… » — this read lost that race in the merge
+    // CI of `e640de7` and of `7e5069d`, when that region was inserted with
+    // its text; since M5 an effect empties it AFTER the commit drawing the
+    // offers, and a wait for them could still end before it. Held, then
+    // landed inside `act` (PR #306, fix round 1, R0). Both regions of the
+    // chooser, empty once the offers landed, and kept mounted (SMA-437
+    // review, M5).
+    await act(async () => catalogue.resolve(catalogFor('novice', { gardenCount: 3 })));
+    expect(within(dialog).getByRole('button', { name: 'Keep Novice' })).toBeInTheDocument();
+    const regions = within(dialog).getAllByRole('status');
+    expect(regions).toHaveLength(2);
+    expect(regions[0]).toBe(dialog.querySelector('[data-formula-choice-status]'));
+    expect(regions[1]).toBe(dialog.querySelector('[data-formula-chooser-refusal]'));
+    for (const region of regions) expect(region).toHaveTextContent('');
     expect(document.querySelector('[aria-live="assertive"]')).toBeNull();
   });
 
@@ -692,5 +718,53 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
     fireEvent.click(within(remove).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete this garden?' })).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(bin));
+  });
+});
+
+// SMA-454 — A CARD'S WEATHER DOOR, THROUGH THE PAGE: what the location dialog
+// holds for a garden is read from the live aggregate by the derivation the
+// planner's door in « Réglages » reads too (`gardenLocationTarget`) — the
+// garden's place, and « Back to the profile city » only where there is an
+// override to drop AND a profile city to fall back to.
+describe('the Novice page — a card’s weather door opens THE location dialog on its garden (SMA-454)', () => {
+  /** Opens the location dialog from a garden's card, once the aggregate has landed — every card shows its figure. */
+  const locate = async (id: string, name: string) => {
+    await waitFor(() => expect(document.querySelectorAll('[data-novice-weather]')).toHaveLength(3));
+    fireEvent.click(within(cardOf(id)).getByRole('button', { name: `Change the location of ${name}` }));
+    return screen.findByRole('dialog', { name: `Locate ${name}` });
+  };
+
+  it('a garden with its own city, beside a profile city: its place, and « Back to the profile city »', async () => {
+    renderPage();
+
+    const dialog = await locate('g3', 'Potager du fond');
+
+    expect(within(dialog).getByText('Current place: Écully')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Back to the profile city' })).toBeInTheDocument();
+  });
+
+  it('a garden reading the profile city: its place, and nothing to go back to', async () => {
+    renderPage();
+
+    const dialog = await locate('g1', 'Terrasse');
+
+    expect(within(dialog).getByText('Current place: Écully')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Back to the profile city' })).toBeNull();
+  });
+
+  it('a garden with its own city and NO profile city: no « Back to the profile city » — the DELETE would leave it unlocated', async () => {
+    const [ecully] = weatherAll().locations;
+    vi.mocked(fetchDashboardWeather).mockResolvedValue(
+      weatherFixture(
+        [ecully!],
+        ['g1', 'g2', 'g3'].map((gardenId) => linkFixture({ gardenId, locationKey: ecully!.key, source: 'garden' }))
+      )
+    );
+    renderPage();
+
+    const dialog = await locate('g3', 'Potager du fond');
+
+    expect(within(dialog).getByText('Current place: Écully')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Back to the profile city' })).toBeNull();
   });
 });

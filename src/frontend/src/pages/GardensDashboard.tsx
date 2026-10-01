@@ -19,7 +19,7 @@ import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardActions from '../components/Dashboard/DashboardActions';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import FormulaChooserDialog from '../components/Dashboard/FormulaChooserDialog';
-import { DASHBOARD_HEADER_SX } from '../components/Dashboard/dashboardHeader';
+import { DASHBOARD_HEADER_SX, DASHBOARD_TITLE_SX } from '../components/Dashboard/dashboardHeader';
 import { useCompactActionBar } from '../components/Dashboard/useCompactActionBar';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
@@ -39,7 +39,11 @@ import TodoBlock from '../components/Dashboard/blocks/TodoBlock';
 import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
 import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPanel';
 import LocationDialog from '../components/Dashboard/LocationDialog';
-import type { LocationTarget } from '../components/Dashboard/locationTools';
+import {
+  gardenLocationTarget,
+  placeName,
+  type LocationTarget,
+} from '../components/Dashboard/locationTools';
 import NoviceGardens from '../components/Dashboard/NoviceGardens';
 import ReconnectButton from '../components/ReconnectButton';
 import { cardBearsWeather, noviceCardsOf } from '../components/Dashboard/noviceCards';
@@ -204,15 +208,12 @@ export default function GardensDashboard() {
   >(null);
   const [locateOpen, setLocateOpen] = useState(false);
 
-  /** The stored name of the place a link reads, when the aggregate carries it. */
-  const placeNamed = (key: string | null | undefined): string | null =>
-    key ? (weatherData.locations.find((place) => place.key === key)?.name ?? null) : null;
-
   // The profile default is the place every garden WITHOUT an override reads
   // (ADR-0006); the aggregate names it through any link that inherits. When
   // every garden overrides it, its name is unknown here — the dialog then says
   // « a default is stored » and still offers to remove it (V21).
-  const profileCurrent = placeNamed(
+  const profileCurrent = placeName(
+    weatherData,
     weatherData.gardens.find((entry) => entry.source === 'profile')?.locationKey
   );
 
@@ -243,18 +244,16 @@ export default function GardensDashboard() {
         unavailable: weatherError,
       };
     }
-    const link = weatherData.gardens.find((entry) => entry.gardenId === locateKey.gardenId);
-    return {
-      kind: 'garden',
-      gardenId: locateKey.gardenId,
-      gardenName: gardens.find((garden) => garden.id === locateKey.gardenId)?.name ?? '',
-      // « Revenir à la ville du profil » only when there is a profile city to
-      // return to AND an override to drop.
-      canRevert: link?.source === 'garden' && weatherData.profileLocated,
-      current: placeNamed(link?.locationKey),
-      loading: weatherInFlight,
-      unavailable: weatherError,
-    };
+    // SMA-454 — the ONE derivation of a garden's target, which the planner's
+    // door in « Réglages » reads too.
+    return gardenLocationTarget(
+      weatherData,
+      {
+        id: locateKey.gardenId,
+        name: gardens.find((garden) => garden.id === locateKey.gardenId)?.name ?? '',
+      },
+      { loading: weatherInFlight, unavailable: weatherError }
+    );
   })();
 
   /** Opens the dialog on a garden's override, or on the profile default when `gardenId` is null. */
@@ -328,6 +327,26 @@ export default function GardensDashboard() {
 
   const [editing, setEditing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+
+  // SMA-437, review of the v3, M4 — the cards page has no Customize panel and
+  // no Edit mode: arriving on it CLOSES both, so the way back to a grid formula
+  // starts at rest. Hidden by its condition alone (`!cardsPage` below), the
+  // panel kept `panelOpen` true and came back by itself with the grid — the
+  // symptom R2-E1 closed for the load error —, and the Edit mode came back with
+  // it. Keyed on the edge INTO the cards page, whatever door led there: no
+  // other switch touches the panel, which stays open under the screen (A1).
+  // Here rather than in `chooseFormula`: the formula's page is what its served
+  // capabilities say (R8), and the handler only holds those of before. A
+  // render-time adjust, as in DeleteGardenDialog (react-hooks/set-state-in-
+  // effect forbids the effect variant).
+  const [wasCardsPage, setWasCardsPage] = useState(cardsPage);
+  if (cardsPage !== wasCardsPage) {
+    setWasCardsPage(cardsPage);
+    if (cardsPage) {
+      setPanelOpen(false);
+      setEditing(false);
+    }
+  }
 
   // SMA-437, lot V39, PR B — the compact action bar: mounted at the formulas
   // that have one (A-9), armed once the layout is read (A-10.2), shown when
@@ -812,7 +831,9 @@ export default function GardensDashboard() {
             refreshing={gardensRefreshing}
             loadError={gardensError}
             onRetry={refetch}
-            onCreate={() => setCreateDialogOpen(true)}
+            // SMA-437, review of the v3, M2 — the band's door ends the Edit mode
+            // first, as the Gardens widget's and the header's do.
+            onCreate={createFromWidget}
           />
         );
       default:
@@ -906,12 +927,15 @@ export default function GardensDashboard() {
         <Box>
           {/* h1 with the h4 look (round 1, E16 / G5): every DashboardBlock
               title is an h2, so an <h4> page title put the widgets above the
-              page in the heading hierarchy. */}
+              page in the heading hierarchy. Its size by width, 28 px on a
+              phone and 34 from 600 px, is a constant the layout harness
+              reads too (SMA-437, lot V3-06, A-24). */}
           <Typography
             variant="h4"
             component="h1"
             fontWeight={700}
             color="primary"
+            sx={DASHBOARD_TITLE_SX}
           >
             {t('gardens.title')}
           </Typography>

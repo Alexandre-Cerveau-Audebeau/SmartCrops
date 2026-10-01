@@ -70,6 +70,28 @@ interface Props {
   maxRows?: number;
   /** Why the dimensions stop there, said under them — the formula's limit, or the garden kept beyond it. */
   limitNote?: string | null;
+  /**
+   * SMA-454 — the garden's city: a LOCATION section, between the separator
+   * and the hemisphere and latitude band the separator's comment keeps the
+   * room for. The planner hands its content in — the place, and the door to
+   * the dashboard's location dialog —, so this dialog knows nothing of the
+   * network (pre-flight of SMA-336 PR ③, § F.6). On both instances, the first
+   * setup and « Réglages » (fix round 1, R2: Alexandre's decision, the city
+   * offered at the creation of a garden too); the danger zone stays
+   * « Réglages »' alone.
+   */
+  locationSection?: ReactNode;
+  /**
+   * SMA-454, fix round 1 — the city is authoritative (Alexandre's decision of
+   * 01/10/2026): the planner bumps this count each time the garden, re-read
+   * after a city written from the LOCATION section, lands. The dialog then
+   * shows the hemisphere and the latitude band the re-read brings
+   * (`initialConfig`) over whatever it showed, a value chosen here included.
+   * The count, not a change of value, says a city was written: a city whose
+   * values are those already stored (Lyon on a « N » / « mid » garden) still
+   * puts them back over a choice made here.
+   */
+  locatedSeq?: number;
 }
 
 const CELL_SIZES = ['25cm', '50cm', '1m'];
@@ -208,6 +230,8 @@ function GardenConfigDialogInner({
   maxCols = DEFAULT_MAX_GRID,
   maxRows = DEFAULT_MAX_GRID,
   limitNote = null,
+  locationSection,
+  locatedSeq,
 }: Omit<Props, 'open'>) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -274,6 +298,21 @@ function GardenConfigDialogInner({
   const [latitudeBand, setLatitudeBand] = useState<string>(
     initialConfig.latitudeBand ?? 'mid'
   );
+  // SMA-454, fix round 1 — the city is authoritative: a city set from the
+  // LOCATION section is written at once, by its own dialog, and the server
+  // writes the hemisphere and the band from its latitude, always
+  // (GardensController.PutLocation / DeleteLocation); the planner re-reads
+  // the garden and bumps `locatedSeq` as the re-read lands. What it brings
+  // then replaces what this dialog shows — a value chosen here included —,
+  // the same seeding as at the opening. Adjusted during render on the count
+  // (react-hooks/set-state-in-effect forbids the effect variant); a stored
+  // value that moves without it is never adopted.
+  const [seenLocatedSeq, setSeenLocatedSeq] = useState(locatedSeq);
+  if (locatedSeq !== seenLocatedSeq) {
+    setSeenLocatedSeq(locatedSeq);
+    setHemisphere(initialConfig.hemisphere ?? 'N');
+    setLatitudeBand(initialConfig.latitudeBand ?? 'mid');
+  }
 
   const realDimensions = useMemo(() => {
     const m = cellSizeToMeters(cellSize);
@@ -484,13 +523,25 @@ function GardenConfigDialogInner({
           code-only hemisphere/latitude controls (SMA-17 R3 layout). */}
       <Box sx={{ height: '1px', bgcolor: tk.divider, mb: 3 }} />
 
+      {/* LOCALISATION (SMA-454) — the garden's city, right before the
+          hemisphere and the band it writes (the city is authoritative, fix
+          round 1). */}
+      {locationSection && (
+        <Box data-config-location sx={{ mb: 3 }}>
+          <SectionLabel tk={tk}>{t('planner.config.sectionLocation')}</SectionLabel>
+          {locationSection}
+        </Box>
+      )}
+
       {/* Hemisphere + latitude band (engraved SMA-17 amendment, not in the
           mockup): its OWN section below the divider, so it never pushes the
-          compass down. MANUAL, OVERRIDABLE estimate — like the future per-cell
-          exposure override; the Phase-6 geolocation/weather API will PRE-FILL
-          both from the user's real latitude WITHOUT changing the stored contract
-          or the downstream engine (an "auto-filled from my location" mode slots
-          in later with no refactor). */}
+          compass down. A garden's city WRITES both from its latitude, always
+          — the city is authoritative (SMA-336 PR 3a/5, PutLocation; SMA-454,
+          fix round 1) —, without changing the stored contract or the
+          downstream engine; set from the LOCATION section above, they
+          replace what this open dialog shows (the adjustment beside the
+          state). Still a MANUAL, OVERRIDABLE choice — the estimate of a
+          garden without a city. */}
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <Box>

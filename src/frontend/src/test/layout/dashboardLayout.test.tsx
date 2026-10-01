@@ -1256,6 +1256,16 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       }
     });
 
+    // SMA-437, lot V3-06 (A-24) — the title the zone stands beside, drawn by
+    // the page's own constant: 28 px on a phone, 34 px from 600 px.
+    it.each(RUNS.map((run) => run.id))('%s: draws the title as the page draws it — 28 px under 600 px, 34 px from 600, the h4’s line of 1.235 — in every state (A-24)', (id) => {
+      const run = runOf(id);
+      const px = run.vw < 600 ? 28 : 34;
+      for (const scene of HEADER_SCENES) {
+        expect(headerOf(run, scene.name).titleFont, scene.name).toEqual({ px, line: Math.round(px * 1.235 * 10) / 10 });
+      }
+    });
+
     it.each(OWN_LINE_IDS)('%s: under 1 200 px, gives the zone its own line under the title, the whole width of the header, in every state (T0)', (id) => {
       const faults = HEADER_SCENES.flatMap((scene) => {
         const measure = headerOf(runOf(id), scene.name);
@@ -1456,6 +1466,26 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       // The phone keeps its `minmax(200px, auto)` floor (V7): the band is 200 px there.
       for (const width of PHONE_WIDTHS) {
         expect(probeOf(runOf(`fr@${width}`), 'probe-wide-short').card.h, `fr@${width}`).toBe(200);
+      }
+    });
+
+    it('reads a foot stuck at the BOTTOM of a zone as it reads the axis stuck at the top: what it covers is hidden, what it leaves is seen — the one overlap above it is reported (SMA-437, lot V3-06, A-25)', () => {
+      // The probe: a zone whose last child is a 40 px foot, `position:
+      // sticky; bottom: 0` — the invitations' foot in Large (A-21, A-22). At
+      // rest a line runs wholly under it, another straddles its top edge, and
+      // a text is laid over the straddling line's seen half, on purpose. Read
+      // as a column stuck to the right — `top` alone meant « vertical » — the
+      // straddling line and the text over it were hidden whole, and that
+      // overlap went unseen; the line under the foot is covered, never an
+      // overlap of the foot's own text.
+      for (const run of RUNS) {
+        const probe = probeOf(run, 'probe-sticky-foot');
+        const seen = probe.overlaps
+          .filter((o) => Math.min(o.w, o.h) >= VISIBLE_OVERLAP_PX)
+          .map((o) => [o.a, o.b].sort().join(' ∩ '));
+        expect(seen, run.id).toEqual(['"Overlay over the straddling line" ∩ "Straddling the foot"']);
+        // Nothing of it is lost: the zone scrolls, the foot follows its fold.
+        expect(probe.hardClipped, run.id).toBe(0);
       }
     });
 

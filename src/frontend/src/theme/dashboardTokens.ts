@@ -19,6 +19,13 @@ export interface DashboardTokens {
   /** The soft disc behind an invitation's icon (`--inv-ic-bg`). */
   invIcBg: string;
   /**
+   * The invitation TINT, laid over a ground that is not the invitation's own
+   * (`--inv-tint`, SMA-437, V3-06 l. 94 / 119): the foot stuck at the bottom
+   * of a scrolling zone paints it over the card at 92 % (contract A-21), so
+   * it reads as an invitation while what passes beneath it is hidden.
+   */
+  invTint: string;
+  /**
    * Plan-thumbnail cell fill (`--cell-on`) and the frame behind the grid
    * (`--cell-on-bd`), for the DASHBOARD only.
    *
@@ -178,6 +185,7 @@ const LIGHT: DashboardTokens = {
   invBg: '#F6FBF4',
   invBd: '#C5D9C6',
   invIcBg: '#E4F3E9',
+  invTint: 'rgba(41,123,77,0.045)',
   thumbCellOn: '#F1F7EE',
   thumbCellFrame: '#BCCBB6',
   ornBg: '#F8E3EC',
@@ -222,6 +230,7 @@ const DARK: DashboardTokens = {
   invBg: 'rgba(76,180,124,0.07)',
   invBd: 'rgba(76,180,124,0.35)',
   invIcBg: 'rgba(76,180,124,0.15)',
+  invTint: 'rgba(76,180,124,0.07)',
   thumbCellOn: '#1B3050',
   thumbCellFrame: '#2C4771',
   ornBg: 'rgba(244,143,177,0.16)',
@@ -474,6 +483,32 @@ export const DASHBOARD_KEY_FIGURES = {
   /** The empty band: the invitation's form (b) — a card with a title, a body and a gesture (contract § 4.8). */
   inviteDisc: 40,
   inviteTitle: 16,
+} as const;
+
+/**
+ * T7 — the invitation's form (b), the card with a title, a body and a gesture
+ * (contract § 4.8), as `InviteCard` draws it for Tips and To-do in Large
+ * (SMA-437, lot V3-06 — contract A-21 to A-23), in px: V3-06's `.inv-card`
+ * CSS — a 40 px disc and its 20 px glyph, the title 16 px / 800 at 1.35,
+ * padding 16 / 18, a gap of 14, the gesture an outlined button of 34 px —;
+ * its place in the MIDDLE of a card with nothing else to say
+ * (`.inv-card.mid`: 520 px at most); and the ground of the FOOT stuck at the
+ * bottom of a scrolling zone (`.pin`): the card's colour at 92 % under the
+ * invitation tint, and a 7 px blur of what passes beneath — Alexandre's
+ * decision of 28/09. The Key figures' empty band draws the same form with its
+ * own two measures above.
+ */
+export const DASHBOARD_INVITE_CARD = {
+  disc: 40,
+  icon: 20,
+  title: 16,
+  titleLineHeight: 1.35,
+  padding: '16px 18px',
+  gap: 14,
+  button: 34,
+  middleMaxWidth: 520,
+  footGround: 0.92,
+  footBlur: 7,
 } as const;
 
 /** T2 — air (`_spec.md` § 3). */

@@ -18,6 +18,7 @@ import WaterDropOutlinedIcon from '@mui/icons-material/WaterDropOutlined';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import DashboardBlock from '../DashboardBlock';
 import IconDisc from '../IconDisc';
+import InviteCard, { type InviteCardPlace } from '../InviteCard';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
 import { gardenTypeIcon } from '../gardenTypeIcons';
@@ -117,9 +118,11 @@ const TIP_ICONS: Record<TipKind, SvgIconComponent> = {
  * « 2 conseils » — each tip with « Voir la case F3 → » and a « Pourquoi »
  * that unfolds the rule, a 1 px divider between gardens, and « Rien à
  * signaler — vos plantes sont là où elles aiment être. » for a garden that
- * was checked and has nothing to say; a garden whose orientation is unknown
- * has its group too, carrying the A4 invitation in that place (round 1,
- * S-3); every « Pourquoi » folded at rest (`_spec.md` § 4 l. 79).
+ * was checked and has nothing to say; every « Pourquoi » folded at rest
+ * (`_spec.md` § 4 l. 79). The gardens whose orientation is unknown are named
+ * in ONE invitation, the form (b), stuck at the foot of the zone that
+ * scrolls — or in the middle of the card when no garden has a verdict
+ * (SMA-437, lot V3-06: contract A-21, A-23).
  *
  * « Voir la case F3 → » opens the garden's planner (arbitrage Q4): the planner
  * reads no cell from the route, so the cell is found by the axes there; the
@@ -356,8 +359,9 @@ export default function TipsBlock({
    * `.inv` with `align-items: center; padding: 10px 14px`, a 30 px disc and a
    * 17 px `HelpOutline`, the link inline in the sentence. The link opens the
    * garden's planner, where the configuration dialog lives (pre-flight
-   * § B.1.5: no route opens the dialog itself). In the Medium card it takes
-   * a slot in the flow; in the Large card it sits in its garden's group.
+   * § B.1.5: no route opens the dialog itself). The Medium card's — the form
+   * (a), which takes a slot in the flow (§ 4.8: the form (b) is for Large and
+   * Full width); the Large card draws `orientationCard` below.
    */
   const invitation = (garden: DashboardGardenData) => (
     <Box
@@ -393,6 +397,44 @@ export default function TipsBlock({
       </Typography>
     </Box>
   );
+
+  /**
+   * SMA-437, lot V3-06 (contract A-21, A-23) — the Large card's invitation:
+   * ONE for every garden whose orientation is unknown, the form (b). Its
+   * title names them — « Sans l'orientation de « Balcon sud » et « Serre
+   * nord », impossible de comparer l'exposition », in the language's list,
+   * two names and « N autres » past three, as the To-do invitation lists its
+   * gardens —; its body says what the orientation changes: the sunlight tips
+   * — the watering tips read the forecast and the thirsty varieties, never
+   * the orientation, so a garden without one already gets its own ([P],
+   * V3-06's « et d'arrosage » left out) —; its gesture leads to the one
+   * garden's planner, where its configuration lives, or opens a menu that
+   * names each garden, each to its planner ([P]: never the first garden's
+   * planner under a plural label).
+   */
+  const orientationCard = (place: InviteCardPlace) => {
+    const unoriented = gardensWithoutOrientation;
+    const label = t('dashboard.blocks.tips.configureGarden', { count: unoriented.length });
+    return (
+      <InviteCard
+        place={place}
+        icon={<HelpOutlineIcon />}
+        title={t('dashboard.blocks.tips.noOrientationTitle', {
+          gardens: nameList(
+            unoriented.map((garden) => t('dashboard.blocks.tips.quotedGarden', { garden: garden.name })),
+            i18n.language,
+            others
+          ),
+        })}
+        body={t('dashboard.blocks.tips.noOrientationBody', { count: unoriented.length })}
+        gesture={
+          unoriented.length === 1
+            ? { label, to: plannerPath(unoriented[0]!.id) }
+            : { label, items: unoriented.map((garden) => ({ key: garden.id, label: garden.name, to: plannerPath(garden.id) })) }
+        }
+      />
+    );
+  };
 
   /** « N plantes sans exposition connue » — a `.sub` foot, counted (D2), no gesture: the Library cannot take that datum. */
   const unknownFoot = unknownExposure > 0 && (
@@ -527,7 +569,8 @@ export default function TipsBlock({
    * lost 91.5 px alone and 70.5 px beside a checked garden; on a desktop the
    * second of two lost 52.5 of its 65.5 px). When an invitation is drawn the
    * panel yields: the invitation alone says what there is to say, as in
-   * Large where each group carries its own verdict (S-3). The panel stays
+   * Large, where it stands alone in the middle of the card when no garden has
+   * a verdict (SMA-437, A-23). The panel stays
    * when nothing else is drawn — the early return below — where « rien à
    * signaler » is only said of gardens that were checked (T6).
    */
@@ -609,17 +652,15 @@ export default function TipsBlock({
    * primary colour, `.gname` 15 px / 700, the chip; the tips in a column with
    * 14 px between them; a 1 px divider between gardens.
    *
-   * A group holds, in this order: the garden's tips; the A4 invitation when
-   * the garden's orientation is unknown — IN its garden's group, where « rien
-   * à signaler » would go, never under the scrolling zone (round 1, S-3 —
-   * GitHub `4035502545`, arbitrated: outside the zone, with `flexShrink: 0`,
-   * three invitations shrank the zone to 0 px on a phone and the tips went
-   * unseen); « Rien à signaler » when the garden was checked and has nothing
-   * to say (T6). The chip counts the tips, says « rien à signaler » for a
-   * checked garden, and is absent when nothing was checked — a verdict the
-   * widget cannot state.
+   * A group holds the garden's tips, or « Rien à signaler » when the garden
+   * was checked and has nothing to say (T6). The invitation of a garden whose
+   * orientation is unknown is no longer in its group (round 1, S-3, which had
+   * put it there): it is the ONE card at the foot of the zone that names
+   * every such garden (SMA-437, A-21). The chip counts the tips, says « rien
+   * à signaler » for a checked garden, and is absent when nothing was checked
+   * — a verdict the widget cannot state.
    */
-  const group = (entry: GardenAdvice, own: Tip[], unoriented: boolean, last: boolean) => {
+  const group = (entry: GardenAdvice, own: Tip[], last: boolean) => {
     const TypeIcon = gardenTypeIcon(entry.garden.config.gardenType);
     const clear = entry.tips.length === 0 && entry.evaluated;
     const chipLabel =
@@ -658,7 +699,6 @@ export default function TipsBlock({
             {own.map((tip) => row(tip, true))}
           </Box>
         )}
-        {unoriented && invitation(entry.garden)}
         {clear && (
           <Typography
             data-tips-nothing={entry.garden.id}
@@ -679,25 +719,33 @@ export default function TipsBlock({
     // under the reader's hand (the V26 rule).
     const rest = Math.max(0, tips.length - LARGE_ROWS);
     const shownIds = new Set(shown.map((tip) => tip.id));
-    const unorientedIds = new Set(gardensWithoutOrientation.map((garden) => garden.id));
-    // Every garden the widget has something to say about has its group, in
-    // the gardens' order: one with tips shows the ones within the cap; one
-    // whose orientation is unknown carries its invitation; one that was
-    // checked and has none says « rien à signaler ». A garden that could not
-    // be checked for another reason says nothing here (T6, Q7) — its reason
-    // is drawn elsewhere.
+    // Every garden the widget has a verdict about has its group, in the
+    // gardens' order: one with tips shows the ones within the cap; one that
+    // was checked and has none says « rien à signaler ». A garden whose
+    // orientation is unknown is named in the ONE invitation (A-21) — a group
+    // of its own only for the tips it has, the watering ones. A garden that
+    // could not be checked for another reason says nothing here (T6, Q7) —
+    // its reason is drawn elsewhere.
     const groups = byGarden
-      .map((entry) => ({
-        entry,
-        own: entry.tips.filter((tip) => shownIds.has(tip.id)),
-        unoriented: unorientedIds.has(entry.garden.id),
-      }))
-      .filter(({ entry, own, unoriented }) => own.length > 0 || unoriented || (entry.tips.length === 0 && entry.evaluated));
+      .map((entry) => ({ entry, own: entry.tips.filter((tip) => shownIds.has(tip.id)) }))
+      .filter(({ entry, own }) => own.length > 0 || (entry.tips.length === 0 && entry.evaluated));
     const groupsId = `${idPrefix}-groups`;
+    const invites = gardensWithoutOrientation.length > 0;
     if (groups.length === 0) {
+      // No verdict to draw — no tip, no garden checked: the invitation, when
+      // there is one, in the MIDDLE of the card (A-23) — of the space above
+      // the foot, which this box takes whole and centres it in, as V3-06's
+      // `.zone.grow` does: its own scroll should the card be too short —;
+      // the panel otherwise.
       return (
         <>
-          {nothing}
+          {invites ? (
+            <Box data-tips-middle sx={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              {orientationCard('middle')}
+            </Box>
+          ) : (
+            nothing
+          )}
           {weatherNote}
           {unknownFoot}
         </>
@@ -707,16 +755,18 @@ export default function TipsBlock({
       <>
         {/* COMPACT, at the top, and its own scroll when the card is too short
             (the O2 / V26 rules): the foot and the button below stay put. The
-            invitations scroll WITH the groups they belong to (round 1, S-3):
-            drawn under the zone with `flexShrink: 0`, three of them left it
-            0 px on a phone and 13 px on a desktop with six — the tips were
-            not clipped, they were gone. */}
+            invitation is the zone's LAST child, stuck to its bottom (A-21):
+            seen while the zone scrolls, back in the flow after the last group
+            at its end — and, inside the zone, it takes none of the zone's
+            height (round 1, S-3: drawn under the zone with `flexShrink: 0`,
+            three row invitations left it 0 px on a phone). */}
         <Box
           id={groupsId}
           data-tips-groups
           sx={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}
         >
-          {groups.map(({ entry, own, unoriented }, index) => group(entry, own, unoriented, index === groups.length - 1))}
+          {groups.map(({ entry, own }, index) => group(entry, own, index === groups.length - 1))}
+          {invites && orientationCard('foot')}
         </Box>
         {weatherNote}
         {unknownFoot}

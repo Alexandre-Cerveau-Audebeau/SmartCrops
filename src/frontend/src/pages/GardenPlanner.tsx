@@ -44,6 +44,7 @@ import { PlanPrintView } from '../components/Garden/PlanPrintView';
 import GardenConfigDialog, {
   type DialogDimensions,
 } from '../components/Garden/GardenConfigDialog';
+import GardenLocationSection from '../components/Garden/GardenLocationSection';
 import GardenTemplatesDialog from '../components/Garden/GardenTemplatesDialog';
 import ReconnectButton from '../components/ReconnectButton';
 import RemovePlacementDialog from '../components/Garden/RemovePlacementDialog';
@@ -53,7 +54,7 @@ import { useGardenLayout } from '../hooks/useGardenLayout';
 import { useLanguage } from '../hooks/useLanguage';
 import { useScrollHold } from '../hooks/useScrollHold';
 import { useSelection } from '../hooks/useSelection';
-import { updateGarden } from '../services/gardenApi';
+import { fetchGarden, updateGarden } from '../services/gardenApi';
 import { saveLayout } from '../services/gardenLayoutApi';
 import { problemOf, requestFailureKind } from '../services/requestFailure';
 import { isWholeNumber } from '../services/wireChecks';
@@ -723,6 +724,39 @@ export default function GardenPlanner() {
     latitudeBand: garden?.latitudeBand ?? null,
   };
 
+  // SMA-454 — a city set from « Réglages » or the first setup (fix round 1,
+  // R2) goes through its own write (`PUT /api/gardens/{id}/location`, or the
+  // `DELETE` of « Revenir à la ville du profil »), and the server writes the
+  // hemisphere and the latitude band from the city's latitude — always: the
+  // city is authoritative (fix round 1; GardensController.PutLocation /
+  // DeleteLocation). The planner re-reads the
+  // garden, so its exposure reads what is stored, and bumps `locatedSeq` as
+  // the re-read lands: the open dialog then shows the re-read hemisphere and
+  // band over whatever it showed. A re-read still out is dropped by the next
+  // one, by the answer of a config save — the newer garden — and by the
+  // unmount.
+  const gardenRereadRef = useRef<AbortController | null>(null);
+  const [locatedSeq, setLocatedSeq] = useState(0);
+  const handleLocated = useCallback(() => {
+    if (!id) return;
+    gardenRereadRef.current?.abort();
+    const controller = new AbortController();
+    gardenRereadRef.current = controller;
+    fetchGarden(id, controller.signal)
+      .then((fresh) => {
+        if (controller.signal.aborted) return;
+        setGarden(fresh);
+        setLocatedSeq((seq) => seq + 1);
+      })
+      .catch(() => {
+        // A failed re-read leaves the garden as it was read: the city's line
+        // reads the weather aggregate, which its section re-reads itself; the
+        // hemisphere and the band the city has just written stay unseen until
+        // the next load, and a « Save » of the open dialog sends what it shows.
+      });
+  }, [id]);
+  useEffect(() => () => gardenRereadRef.current?.abort(), []);
+
   const persistConfig = async (config: GardenConfig): Promise<boolean> => {
     if (!id || !garden) return false;
     try {
@@ -732,6 +766,10 @@ export default function GardenPlanner() {
         garden.description ?? undefined,
         config
       );
+      // The config's answer is the newer garden: a re-read still out must not
+      // land after it. Dropped on the answer, not on the click — a refused
+      // save leaves it standing, the newest garden there is then.
+      gardenRereadRef.current?.abort();
       setGarden(updated);
       setConfigError(null);
       return true;
@@ -2325,6 +2363,19 @@ export default function GardenPlanner() {
         }
       : null;
 
+  // SMA-454 — the garden's city: the door to the dashboard's location dialog,
+  // on this garden — the sharedSidebarProps rule, one value for the two
+  // dialogs that carry it: the first setup (fix round 1, R2: the city offered
+  // at the creation of a garden too) and « Réglages ». Each mounts it only
+  // while it is open, so the aggregate is read only then.
+  const locationSection =
+    id && garden ? (
+      <GardenLocationSection
+        garden={{ id, name: garden.name }}
+        onLocated={handleLocated}
+      />
+    ) : undefined;
+
   return (
     // Full-width page (R3 item F): the lg Container is replaced by a
     // full-width wrapper with 24px lateral padding — settled #177 layout
@@ -2355,6 +2406,8 @@ export default function GardenPlanner() {
         limitNote={limitNote}
         onConfirm={handleSetupConfigConfirm}
         onCancel={() => navigate('/gardens')}
+        locationSection={locationSection}
+        locatedSeq={locatedSeq}
       />
 
       {/* Config dialog — "Réglages" on an existing garden */}
@@ -2373,6 +2426,8 @@ export default function GardenPlanner() {
         onConfirm={handleSettingsConfigConfirm}
         onCancel={() => setShowConfig(false)}
         onDeleteRequest={handleDeleteGardenRequest}
+        locationSection={locationSection}
+        locatedSeq={locatedSeq}
       />
 
       {/* Garden templates (SMA-18 lot 2) — from the header button at any
@@ -2524,6 +2579,7 @@ export default function GardenPlanner() {
             variant="outlined"
             startIcon={<SettingsIcon sx={{ fontSize: 19 }} />}
             onClick={handleOpenSettings}
+            data-planner-settings
             sx={{
               ...headerBtnSx,
               fontWeight: 700,

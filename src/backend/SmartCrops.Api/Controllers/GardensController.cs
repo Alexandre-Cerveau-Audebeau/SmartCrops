@@ -275,19 +275,21 @@ public class GardensController(
 
     /// <summary>
     /// Sets the garden's own location, every column at once, and stamps the
-    /// resolution instant (UTC). Where the garden carries NO hemisphere or NO
-    /// latitude band yet, the latitude pre-fills them (<see cref="LatitudeBands"/>);
-    /// a value the user set by hand is never overwritten.
+    /// resolution instant (UTC). <b>The city is authoritative</b> (SMA-454,
+    /// fix round 1 — Alexandre's decision of 01/10/2026, which reverses the
+    /// « hand-set values kept » rule of SMA-336 PR 3a/5): the latitude ALWAYS
+    /// writes the garden's hemisphere and latitude band
+    /// (<see cref="LatitudeBands"/>), over values set by hand. The
+    /// configuration of a garden always sets both, so filling only the empty
+    /// ones left a city without effect on them.
     ///
-    /// <para><b>The pre-fill leaves no provenance in the row</b> (review
-    /// round 1, C5): a pre-filled value and a hand-set one are the same
-    /// column, and a later location — another hemisphere, another band —
-    /// does not revisit them, nor does clearing the location. The derivation
-    /// is made VISIBLE instead: this endpoint logs, at Information level, the
-    /// garden id and the derived words it wrote — never the place — so an
-    /// operator can trace where an exposure value came from. A provenance
-    /// column is a schema extension to settle with the front, not this
-    /// lot's.</para>
+    /// <para><b>The derivation leaves no provenance in the row</b> (review
+    /// round 1, C5): a derived value and one set by hand afterwards are the
+    /// same column. The derivation is made VISIBLE instead: this endpoint
+    /// logs, at Information level, the garden id and the derived words it
+    /// wrote — never the place — so an operator can trace where an exposure
+    /// value came from. A provenance column is a schema extension to settle
+    /// with the front, not this lot's.</para>
     ///
     /// <para><c>UpdatedAt</c> moves with this write, by the shared interceptor:
     /// a garden that just learnt where it is reads as « modified just now » on
@@ -309,24 +311,20 @@ public class GardensController(
 
         request.ToGeoLocation(DateTime.UtcNow).ApplyTo(garden);
 
-        var hemisphereFilled = garden.Hemisphere is null;
-        var bandFilled = garden.LatitudeBand is null;
-        if (hemisphereFilled || bandFilled)
-        {
-            var (hemisphere, band) = LatitudeBands.Derive(request.Latitude);
-            garden.Hemisphere ??= hemisphere;
-            garden.LatitudeBand ??= band;
+        // The city is authoritative: both halves, always (SMA-454, fix round 1).
+        var (hemisphere, band) = LatitudeBands.Derive(request.Latitude);
+        garden.Hemisphere = hemisphere;
+        garden.LatitudeBand = band;
 
-            // The only trace that a value came from the latitude (no
-            // provenance column): the garden id and the derived words, and
-            // NOT the coordinates or the place name — the log is not the
-            // place to keep where someone lives.
-            logger.LogInformation(
-                "Garden {GardenId}: exposure pre-filled from its latitude (hemisphere: {Hemisphere}, latitude band: {LatitudeBand}); hand-set values kept",
-                garden.Id,
-                hemisphereFilled ? hemisphere : "kept",
-                bandFilled ? band : "kept");
-        }
+        // The only trace that the values came from the latitude (no
+        // provenance column): the garden id and the derived words, and NOT
+        // the coordinates or the place name — the log is not the place to
+        // keep where someone lives.
+        logger.LogInformation(
+            "Garden {GardenId}: exposure set from its latitude (hemisphere: {Hemisphere}, latitude band: {LatitudeBand})",
+            garden.Id,
+            hemisphere,
+            band);
 
         garden.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(ct);
@@ -336,11 +334,12 @@ public class GardensController(
 
     /// <summary>
     /// Clears the garden's own location: it then inherits the account's
-    /// default again. The hemisphere and band a previous location may have
-    /// pre-filled are KEPT — they are the garden's exposure config now, and
-    /// nothing in the row can tell a pre-filled value from one the user
-    /// confirmed (the trace is the <c>PUT</c>'s log line, see
-    /// <see cref="PutLocation"/>).
+    /// default again — « Revenir à la ville du profil ». The city is
+    /// authoritative here too (SMA-454, fix round 1): when the account HAS a
+    /// city, its latitude writes the garden's hemisphere and latitude band, as
+    /// <see cref="PutLocation"/> does with the garden's own, and the same log
+    /// line says so, never the place. Without one, they stay as they are —
+    /// there is nothing to derive them from.
     /// </summary>
     [HttpDelete("{id:guid}/location")]
     public async Task<IActionResult> DeleteLocation(Guid id, CancellationToken ct = default)
@@ -353,6 +352,21 @@ public class GardensController(
         if (garden == null) return NotFound();
 
         GeoLocation.Clear(garden);
+
+        // The city the garden reads from now on is the account's: it writes
+        // the exposure, when there is one.
+        if (await LoadProfileLocationAsync(userId) is { } profileLocation)
+        {
+            var (hemisphere, band) = LatitudeBands.Derive(profileLocation.Latitude);
+            garden.Hemisphere = hemisphere;
+            garden.LatitudeBand = band;
+            logger.LogInformation(
+                "Garden {GardenId}: exposure set from the profile's latitude (hemisphere: {Hemisphere}, latitude band: {LatitudeBand})",
+                garden.Id,
+                hemisphere,
+                band);
+        }
+
         garden.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(ct);
 

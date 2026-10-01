@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -7,7 +7,8 @@ import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture } from '../test/fixtures/dashboard';
 import { weatherFixture } from '../test/fixtures/weather';
-import type { DashboardLevel } from '../types/Dashboard';
+import { deferred } from '../test/responses';
+import type { DashboardLevel, DashboardPreferences, FormulasCatalog } from '../types/Dashboard';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -210,5 +211,92 @@ describe('every door leads to the choice screen, and none changes the formula it
     await waitFor(() => expect(screen.queryByRole('dialog', CHOICE)).toBeNull(), PATIENCE);
     expect(await screen.findByText('Expert view', {}, PATIENCE)).toBeInTheDocument();
     expect(within(screen.getByRole('dialog', { name: 'Customize' })).getByText('Expert')).toBeInTheDocument();
+  });
+});
+
+// SMA-437, review of the v3, M4 — the Novice page has no Customize panel and
+// no Edit mode: a switch that lands there closes both, so the way back to a
+// grid formula starts at rest. Hidden by its condition alone, the panel kept
+// `panelOpen` true and came back by itself with the grid — the symptom R2-E1
+// fixed for the load error —, and the Edit mode came back with it. Every
+// response that decides a step is HELD, then landed inside `act` (SMA-452
+// § 12): the reads that follow are proofs, without a bound.
+describe('a round trip through the Novice page leaves the Customize panel closed and the Edit mode off (SMA-437, review of the v3, M4)', () => {
+  const NAMES = { novice: 'Novice', gardener: 'Gardener', expert: 'Expert' } as const;
+
+  /** The layout the server reads back once the account stands at `level`. */
+  const preferencesOf = (level: DashboardLevel): DashboardPreferences => ({
+    schemaVersion: 1,
+    level,
+    capabilities: capabilitiesFor(level),
+    isPreset: true,
+    formulaChosen: true,
+    blocks: presetFor(level),
+    updatedAt: null,
+  });
+
+  /** The Gardener's grid, its layout held and landed. */
+  async function renderTheGardenerGrid() {
+    serve('gardener');
+    const layout = deferred<DashboardPreferences>();
+    vi.mocked(fetchDashboardPreferences).mockReturnValueOnce(layout.promise);
+    renderPage();
+    await act(async () => layout.resolve(preferencesOf('gardener')));
+  }
+
+  /**
+   * The choice screen opened by `open`, its catalogue landed (the account at
+   * `from`), `to` chosen, and the switch's read-back landed: the page stands
+   * at `to`, and the screen has left.
+   */
+  async function switchThrough(open: () => void, from: DashboardLevel, to: DashboardLevel) {
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(catalogue.promise);
+    const readBack = deferred<DashboardPreferences>();
+    vi.mocked(fetchDashboardPreferences).mockReturnValueOnce(readBack.promise);
+    const catalogues = vi.mocked(fetchFormulas).mock.calls.length;
+    const reads = vi.mocked(fetchDashboardPreferences).mock.calls.length;
+
+    open();
+    // The screen reads its catalogue as it mounts (`useFormulas`): held, it lands now.
+    await waitFor(() => expect(fetchFormulas).toHaveBeenCalledTimes(catalogues + 1));
+    await act(async () => catalogue.resolve(catalogFor(from, { chosen: true, gardenCount: 2 })));
+    fireEvent.click(within(screen.getByRole('dialog', CHOICE)).getByRole('button', { name: `Choose ${NAMES[to]}` }));
+    // The switch wrote the layout, switched, and asked for it back: held, it lands now.
+    await waitFor(() => expect(fetchDashboardPreferences).toHaveBeenCalledTimes(reads + 1));
+    await act(async () => readBack.resolve(preferencesOf(to)));
+    expect(changeFormula).toHaveBeenLastCalledWith(to);
+    // The screen leaves on MUI's own exit transition — the library's timer, no
+    // bound of ours —, and only a screen mounted anew reads the catalogue that
+    // the next door needs.
+    await waitFor(() => expect(screen.queryByRole('dialog', CHOICE)).toBeNull());
+  }
+
+  it('the panel open, its « Change formula » link, Novice, then Gardener from the Novice page’s chip: the grid comes back without the panel', async () => {
+    await renderTheGardenerGrid();
+    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
+
+    await switchThrough(() => fireEvent.click(within(panel).getByRole('button', { name: 'Change formula' })), 'gardener', 'novice');
+    // The cards page: no panel there.
+    expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Novice view — change formula' })).toBeInTheDocument();
+
+    await switchThrough(() => fireEvent.click(screen.getByRole('button', { name: 'Novice view — change formula' })), 'novice', 'gardener');
+
+    expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Gardener view — change formula' })).toBeInTheDocument();
+  });
+
+  it('the Edit mode on, Novice from the chip, then Gardener from the Novice page’s chip: the grid comes back at rest', async () => {
+    await renderTheGardenerGrid();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+
+    await switchThrough(() => fireEvent.click(screen.getByRole('button', { name: 'Gardener view — change formula' })), 'gardener', 'novice');
+    await switchThrough(() => fireEvent.click(screen.getByRole('button', { name: 'Novice view — change formula' })), 'novice', 'gardener');
+
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
 });

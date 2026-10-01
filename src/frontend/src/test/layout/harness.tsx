@@ -13,7 +13,7 @@ import { createAppTheme } from '../../theme';
 import DashboardActions from '../../components/Dashboard/DashboardActions';
 import DashboardGrid from '../../components/Dashboard/DashboardGrid';
 import GardensOptionsPanel from '../../components/Dashboard/blocks/GardensOptionsPanel';
-import { DASHBOARD_HEADER_SX } from '../../components/Dashboard/dashboardHeader';
+import { DASHBOARD_HEADER_SX, DASHBOARD_TITLE_SX } from '../../components/Dashboard/dashboardHeader';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import { formatSurface } from '../../utils/formatNumber';
 import {
@@ -257,6 +257,8 @@ export interface HeaderMeasure extends CardMeasure {
   statusText: string;
   /** The zone's texts drawn over more than one line — none belongs on two. */
   wrapped: string[];
+  /** SMA-437, lot V3-06 (A-24) — the title's computed size and line height, in px: what the page's own constant draws. */
+  titleFont: { px: number; line: number };
 }
 
 /** What one run of the page returns: the one-card scenes and probes, the grid scenes, and where the focus goes in the reorderable list. */
@@ -405,8 +407,10 @@ function actionsTree(scene: ActionsScene, mode: 'light' | 'dark') {
  * `DashboardActions` under the header's real layout, `DASHBOARD_HEADER_SX`,
  * beside the page's title block as `GardensDashboard` draws it — an h1 with
  * the h4 look, then the meta line of the scenes' three gardens. The title is
- * drawn here and not imported: it lives in the page, which this lot leaves as
- * it is. Two plain wrappers above the header, for `measureCard`.
+ * drawn here — the page's block is not a component of its own — with the
+ * page's own size, `DASHBOARD_TITLE_SX` (SMA-437, lot V3-06, A-24): 28 px on
+ * a phone, 34 from 600 px. Two plain wrappers above the header, for
+ * `measureCard`.
  */
 function headerTree(scene: ActionsScene, mode: 'light' | 'dark') {
   const surface = formatSurface(HEADER_FIGURES.surfaceM2, i18next.language);
@@ -416,7 +420,7 @@ function headerTree(scene: ActionsScene, mode: 'light' | 'dark') {
         <div>
           <Box data-dashboard-header sx={DASHBOARD_HEADER_SX}>
             <Box data-header-title>
-              <Typography variant="h4" component="h1" fontWeight={700} color="primary">
+              <Typography variant="h4" component="h1" fontWeight={700} color="primary" sx={DASHBOARD_TITLE_SX}>
                 {i18next.t('gardens.title')}
               </Typography>
               <Typography sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary' }}>
@@ -489,6 +493,9 @@ function measureHeader(scene: ActionsScene, host: HTMLElement): HeaderMeasure {
       return [part, el ? boxWithin(el, origin) : null];
     })
   ) as HeaderMeasure['parts'];
+  const h1 = title.querySelector('h1');
+  if (!h1) throw new Error(`The header scene ${scene.name} drew no h1.`);
+  const h1Style = getComputedStyle(h1);
   return {
     scene: scene.name,
     viewport: window.innerWidth,
@@ -498,6 +505,7 @@ function measureHeader(scene: ActionsScene, host: HTMLElement): HeaderMeasure {
     parts,
     statusText: zone.querySelector(ZONE_PARTS.status)?.textContent ?? '',
     wrapped: wrappedTexts(zone),
+    titleFont: { px: parseFloat(h1Style.fontSize), line: Math.round(parseFloat(h1Style.lineHeight) * 10) / 10 },
     ...measureCard(header),
   };
 }
