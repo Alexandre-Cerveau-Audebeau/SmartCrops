@@ -356,6 +356,9 @@
     "choice": {
       "title": "Choisissez votre formule",
       "lead": "Trois façons de jardiner avec SmartCrops. Toutes sont gratuites pour le moment, et vous pourrez en changer à tout moment.",
+      "termsNotice": "Nos conditions d’utilisation et notre politique de confidentialité évoluent avec les formules —",
+      "termsLink": "les lire",
+      "termsNewTab": "(nouvel onglet)",
       "welcome": "Bienvenue. Avant d’ouvrir vos jardins, choisissez la formule qui vous ressemble. Vous pourrez en changer quand vous voudrez, dans les deux sens, sans rien perdre.",
       "existing_one": "Vous avez {{count}} jardin. Votre formule actuelle est présélectionnée : gardez-la en un clic, ou choisissez-en une autre. Rien ne sera supprimé.",
       "existing_other": "Vous avez {{count}} jardins. Votre formule actuelle est présélectionnée : gardez-la en un clic, ou choisissez-en une autre. Rien ne sera supprimé.",

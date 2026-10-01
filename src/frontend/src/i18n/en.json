@@ -356,6 +356,9 @@
     "choice": {
       "title": "Choose your formula",
       "lead": "Three ways to garden with SmartCrops. All are free for now, and you can change at any time.",
+      "termsNotice": "Our Terms of Use and our Privacy Policy evolve with the formulas —",
+      "termsLink": "read them",
+      "termsNewTab": "(new tab)",
       "welcome": "Welcome. Before opening your gardens, choose the formula that suits you. You can change whenever you like, in either direction, without losing anything.",
       "existing_one": "You have {{count}} garden. Your current formula is preselected: keep it in one click, or choose another. Nothing will be deleted.",
       "existing_other": "You have {{count}} gardens. Your current formula is preselected: keep it in one click, or choose another. Nothing will be deleted.",

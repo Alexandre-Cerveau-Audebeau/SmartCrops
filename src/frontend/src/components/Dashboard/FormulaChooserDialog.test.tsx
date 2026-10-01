@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 import { catalogFor } from '../../test/fixtures/formulas';
+import { deferred } from '../../test/responses';
 
 vi.mock('../../services/formulasApi', () => ({ fetchFormulas: vi.fn() }));
 
@@ -165,5 +166,77 @@ describe('FormulaChooserDialog — the choice screen (SMA-448, lot F3, L5)', () 
     expect(document.querySelector('[data-formula-offer="expert"]')!.textContent).toContain('Jardins en nombre illimité');
     expect(within(fr).getByRole('button', { name: 'Fermer sans changer de formule' })).toBeInTheDocument();
     await waitFor(() => expect(within(fr).getByText('Comparer les formules')).toBeInTheDocument());
+  });
+});
+
+// SMA-448 — the line of the Terms on the choice screen (« SMA-448 - CGU et
+// confidentialité - texte final.md », § 4.1; Alexandre, 28/09 and 30/09):
+// under the lead, on the MANDATORY screen only — the screen shown once, where
+// article 10 of the Terms says the change is announced —, « read them »
+// opening the Terms in a new tab, the choice left in view. The catalogue
+// HELD (SMA-452 § 12): the line stands in the header, drawn before the
+// offers — said while they load, still said once they landed inside `act`;
+// its absence on the screen the chip reopens is read with the offers drawn.
+describe('the line of the Terms on the choice screen (SMA-448)', () => {
+  const lineOf = (screenOfChoice: HTMLElement) => screenOfChoice.querySelector<HTMLElement>('[data-formula-choice-terms]');
+
+  function holdCatalogue() {
+    const catalogue = deferred<Awaited<ReturnType<typeof fetchFormulas>>>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(catalogue.promise);
+    return catalogue;
+  }
+
+  it('mandatory: the line under the lead, while the offers load and once they landed — « read them » leads to /terms, in a new tab', async () => {
+    const catalogue = holdCatalogue();
+    renderDialog({ mandatory: true });
+
+    const lead = within(dialog()).getByText('Three ways to garden with SmartCrops. All are free for now, and you can change at any time.');
+    expect(document.querySelector('[data-formula-offer]')).toBeNull();
+    expect(lineOf(dialog())?.textContent).toBe('Our Terms of Use and our Privacy Policy evolve with the formulas — read them (new tab)');
+    expect(lead.nextElementSibling).toBe(lineOf(dialog()));
+
+    await act(async () => catalogue.resolve(catalogFor('gardener', { chosen: false, gardenCount: 0 })));
+
+    expect(within(dialog()).getByRole('button', { name: 'Choose Novice' })).toBeInTheDocument();
+    expect(lead.nextElementSibling).toBe(lineOf(dialog()));
+    // The name by a pattern, the words by the link's text: jsdom does not
+    // blockify the off-screen span (`position: absolute`) and the name's
+    // library trims each element's text, so it joins « read them(new tab) »;
+    // a browser keeps the separator the link's text holds.
+    const link = within(dialog()).getByRole('link', { name: /read them.*new tab/i });
+    expect(link.textContent).toBe('read them (new tab)');
+    expect(link).toHaveAttribute('href', '/terms');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(lineOf(dialog())).toContainElement(link);
+  });
+
+  it('closable — the screen the chip reopens: no line, with the offers drawn', async () => {
+    const catalogue = holdCatalogue();
+    renderDialog();
+    await act(async () => catalogue.resolve(catalogFor('gardener', { gardenCount: 2 })));
+
+    expect(within(dialog()).getByRole('button', { name: 'Keep Gardener' })).toBeInTheDocument();
+    expect(lineOf(dialog())).toBeNull();
+    expect(within(dialog()).queryByRole('link', { name: /read them/i })).toBeNull();
+    expect(dialog().textContent).not.toContain('Terms of Use');
+  });
+
+  it('en français, obligatoire : la ligne sous l’accroche — « les lire » mène à /terms, en nouvel onglet', async () => {
+    await i18n.changeLanguage('fr');
+    const catalogue = holdCatalogue();
+    renderDialog({ mandatory: true });
+    await act(async () => catalogue.resolve(catalogFor('gardener', { chosen: false, gardenCount: 0 })));
+
+    const fr = screen.getByRole('dialog', { name: 'Choisissez votre formule' });
+    expect(within(fr).getByRole('button', { name: 'Choisir Novice' })).toBeInTheDocument();
+    const lead = within(fr).getByText('Trois façons de jardiner avec SmartCrops. Toutes sont gratuites pour le moment, et vous pourrez en changer à tout moment.');
+    expect(lineOf(fr)?.textContent).toBe('Nos conditions d’utilisation et notre politique de confidentialité évoluent avec les formules — les lire (nouvel onglet)');
+    expect(lead.nextElementSibling).toBe(lineOf(fr));
+    const link = within(fr).getByRole('link', { name: /les lire.*nouvel onglet/i });
+    expect(link.textContent).toBe('les lire (nouvel onglet)');
+    expect(link).toHaveAttribute('href', '/terms');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 });

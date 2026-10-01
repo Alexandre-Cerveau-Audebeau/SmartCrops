@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import Link from '@mui/material/Link';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import GridOnOutlinedIcon from '@mui/icons-material/GridOnOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -123,6 +126,26 @@ export default function FormulaChoice({ titleId, mandatory, switching, refusal, 
         <Typography sx={{ mt: '10px', fontSize: { xs: 15, sm: 17 }, lineHeight: 1.55, color: 'text.primary', maxWidth: 760 }}>
           {t('dashboard.choice.lead')}
         </Typography>
+        {/* SMA-448 — the notice article 10 of the Terms promises, on the
+            screen shown once (the final text of the Terms and the policy,
+            § 4.1): in the header, so it is read while the offers load and
+            on an error too; « les lire » opens the Terms in a new tab, the
+            mandatory choice — no close, no Escape — left in view. */}
+        {mandatory && (
+          <Typography
+            data-formula-choice-terms
+            sx={{ mt: '8px', fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.5, color: 'text.secondary', maxWidth: 760 }}
+          >
+            {t('dashboard.choice.termsNotice')}{' '}
+            <Link component={RouterLink} to="/terms" target="_blank" rel="noopener noreferrer">
+              {t('dashboard.choice.termsLink')}
+              <Box component="span" sx={visuallyHidden}>
+                {' '}
+                {t('dashboard.choice.termsNewTab')}
+              </Box>
+            </Link>
+          </Typography>
+        )}
       </Box>
 
       {loading && (
