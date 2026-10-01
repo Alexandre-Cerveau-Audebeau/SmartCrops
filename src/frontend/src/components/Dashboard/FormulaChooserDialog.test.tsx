@@ -57,10 +57,18 @@ afterEach(() => {
 
 describe('FormulaChooserDialog — the choice screen (SMA-448, lot F3, L5)', () => {
   it('says it is loading the formulas, then draws the three offers in the catalogue’s order, the current one « Keep »', async () => {
+    // The catalogue HELD, then landed inside `act` (SMA-452 § 12; PR #306,
+    // fix round 1, R0): the loading region is emptied by an effect that runs
+    // AFTER the commit drawing the offers, and a wait for the offers could
+    // end between the two — the read below would find the sentence still there.
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(catalogue.promise);
     renderDialog();
 
     expect(within(dialog()).getByText('Loading the formulas…')).toBeInTheDocument();
-    await within(dialog()).findByRole('button', { name: 'Keep Gardener' });
+    await act(async () => catalogue.resolve(catalogFor('gardener', { gardenCount: 2 })));
+
+    expect(within(dialog()).getByRole('button', { name: 'Keep Gardener' })).toBeInTheDocument();
     expect([...document.querySelectorAll('[data-formula-offer]')].map((card) => card.getAttribute('data-formula-offer'))).toEqual([
       'novice',
       'gardener',
@@ -144,10 +152,18 @@ describe('FormulaChooserDialog — the choice screen (SMA-448, lot F3, L5)', () 
   });
 
   it('the refusal region is born empty, polite, kept mounted; a session that expired offers to sign in again', async () => {
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(catalogue.promise);
     renderDialog({ refusal: { kind: 'unauthorized', formula: 'novice', reasons: [] } });
-    await within(dialog()).findByRole('button', { name: 'Keep Gardener' });
+    await act(async () => catalogue.resolve(catalogFor('gardener', { gardenCount: 2 })));
+
+    expect(within(dialog()).getByRole('button', { name: 'Keep Gardener' })).toBeInTheDocument();
     // Two regions on the screen since M5 (SMA-437 review): its loading one,
-    // empty once the offers landed, then the refusal's.
+    // empty once the offers landed, then the refusal's. The catalogue held,
+    // then landed inside `act` (SMA-452 § 12; PR #306, fix round 1, R0): the
+    // loading one is emptied by an effect that runs after the commit drawing
+    // the offers — a wait for them could end before it, and this read lost
+    // that race under load.
     const regions = within(dialog()).getAllByRole('status');
     expect(regions).toHaveLength(2);
     expect(regions[0]!.textContent).toBe('');

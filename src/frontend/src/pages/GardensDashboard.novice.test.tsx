@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +10,8 @@ import { dashboardFixture } from '../test/fixtures/dashboard';
 import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { gardens as sceneGardens, varieties as sceneVarieties, weatherAll } from '../test/layout/scenes';
 import { rulesFor } from '../test/dashboardDom';
-import type { DashboardBlock, DashboardLevel } from '../types/Dashboard';
+import { deferred } from '../test/responses';
+import type { DashboardBlock, DashboardLevel, FormulasCatalog } from '../types/Dashboard';
 import type { DashboardData } from '../types/DashboardData';
 import type { DashboardWeatherData } from '../types/DashboardWeather';
 
@@ -447,12 +448,18 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
   });
 
   it('the chooser’s regions — its loading one and its refusal’s — are born empty and stay mounted — never assertive', async () => {
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(catalogue.promise);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
     // The catalogue first (SMA-452 § 12): the dialog opens before it, and
-    // while it loads the loading region says « Loading the formulas… ».
-    await within(dialog).findByRole('button', { name: 'Keep Novice' });
+    // while it loads the loading region says « Loading the formulas… » —
+    // emptied by an effect that runs AFTER the commit drawing the offers, so
+    // a wait for the offers could end before it. Held, then landed inside
+    // `act` (PR #306, fix round 1, R0).
+    await act(async () => catalogue.resolve(catalogFor('novice', { gardenCount: 3 })));
+    expect(within(dialog).getByRole('button', { name: 'Keep Novice' })).toBeInTheDocument();
 
     // Two regions, kept mounted (SMA-437 review, M5): the loading one, empty
     // again once the offers landed, then the refusal's.
@@ -606,6 +613,8 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
   });
 
   it('keeps its live regions born empty and mounted — the header’s save indicator, the chooser’s loading and refusal regions — and none assertive', async () => {
+    const catalogue = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(catalogue.promise);
     renderPage();
     await waitFor(() => expect(cards()).toHaveLength(3));
 
@@ -620,9 +629,13 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
     // The catalogue first (SMA-452 § 12): while it loads, the loading region
     // says « Loading the formulas… » — this read lost that race in the merge
     // CI of `e640de7` and of `7e5069d`, when that region was inserted with
-    // its text. Both regions of the chooser, empty once the offers landed,
-    // and kept mounted (SMA-437 review, M5).
-    await within(dialog).findByRole('button', { name: 'Keep Novice' });
+    // its text; since M5 an effect empties it AFTER the commit drawing the
+    // offers, and a wait for them could still end before it. Held, then
+    // landed inside `act` (PR #306, fix round 1, R0). Both regions of the
+    // chooser, empty once the offers landed, and kept mounted (SMA-437
+    // review, M5).
+    await act(async () => catalogue.resolve(catalogFor('novice', { gardenCount: 3 })));
+    expect(within(dialog).getByRole('button', { name: 'Keep Novice' })).toBeInTheDocument();
     const regions = within(dialog).getAllByRole('status');
     expect(regions).toHaveLength(2);
     expect(regions[0]).toBe(dialog.querySelector('[data-formula-choice-status]'));
