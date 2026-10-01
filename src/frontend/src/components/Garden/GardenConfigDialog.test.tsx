@@ -62,6 +62,20 @@ describe('GardenConfigDialog (SMA-17, §12)', () => {
     }
   });
 
+  // SMA-454, fix round 1, R3 — the hemisphere's help says what is true now:
+  // the garden's city fills it in (no « future geolocation API »), and the
+  // choice here is for a garden without one.
+  it('says where the hemisphere comes from — the garden’s city, and a choice here without one —, in English and in French (SMA-454, fix round 1, R3)', async () => {
+    renderDialog();
+    expect(screen.getByText("Filled in from the garden's city; without a city, choose it here.")).toBeInTheDocument();
+    cleanup();
+
+    await i18n.changeLanguage('fr');
+    renderDialog();
+    // The French no-break space before « ; » is matched by \s.
+    expect(screen.getByText(/^Rempli d'après la ville du jardin\s; sans ville, choisissez-le ici\.$/)).toBeInTheDocument();
+  });
+
   it('reveals the lightSchedule zone only when Indoor is selected', () => {
     renderDialog();
     expect(screen.queryByText('Automated lighting (lightSchedule)')).toBeNull();

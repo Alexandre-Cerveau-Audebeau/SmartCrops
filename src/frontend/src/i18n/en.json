@@ -1313,7 +1313,7 @@
         "indoor": "Indoor"
       },
       "hemisphere": "HEMISPHERE",
-      "hemisphereHelp": "Manual estimate — a future geolocation API will pre-fill it from your latitude.",
+      "hemisphereHelp": "Filled in from the garden's city; without a city, choose it here.",
       "hemisphereNorth": "Northern",
       "hemisphereSouth": "Southern",
       "latitudeBand": "LATITUDE BAND",

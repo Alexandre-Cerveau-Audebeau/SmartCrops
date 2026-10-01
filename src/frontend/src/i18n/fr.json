@@ -1313,7 +1313,7 @@
         "indoor": "Intérieur"
       },
       "hemisphere": "HÉMISPHÈRE",
-      "hemisphereHelp": "Estimation manuelle — une future API de géolocalisation la remplira depuis votre latitude.",
+      "hemisphereHelp": "Rempli d'après la ville du jardin\u00a0; sans ville, choisissez-le ici.",
       "hemisphereNorth": "Nord",
       "hemisphereSouth": "Sud",
       "latitudeBand": "BANDE DE LATITUDE",
