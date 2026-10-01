@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Api.Controllers;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
@@ -32,6 +33,15 @@ public class FormulaSwitchTests : IntegrationTestBase
 
     private const string SwitchUrl = "/api/formulas/current";
     private const string PreferencesUrl = "/api/dashboard/preferences";
+
+    /// <summary>
+    /// A plan as the planner writes it (<c>serializeCellsJson</c>,
+    /// <c>GardenLayout.ts</c>): every cell that is not a plain one — a cell
+    /// taken out of the plan, a soil, a wall, a trellis that shades the
+    /// afternoon (PR #306, fix round 1, S1).
+    /// </summary>
+    private const string DrawnPlan =
+        """[{"row":0,"col":14,"active":false},{"row":2,"col":3,"soil":"loam"},{"row":7,"col":0,"infrastructure":"wall"},{"row":7,"col":1,"infrastructure":"trellis","exposureOverride":"afternoon"}]""";
 
     [Fact]
     public async Task PutCurrent_NoBearer_Returns401()
@@ -214,12 +224,18 @@ public class FormulaSwitchTests : IntegrationTestBase
     /// (<see cref="PutCurrent_AFormulaTooSmall_Returns409_ProblemJson_WithItsReasons_AndMovesNothing"/>,
     /// which does not count the gardens); the switch that GOES THROUGH was
     /// proven for the layouts alone. An Expert with two gardens of 15 × 15 —
-    /// what the Novice holds —, each with a plan and placed plants, one
-    /// opened, both ranked (by their own routes): Expert → Gardener → Novice
-    /// → Expert, each switch 204, and after each the gardens read back from
-    /// the database are those of the start — the rows, the geometry, the cell
-    /// size, the plan, the placements, the opening, the place, the last
-    /// modification.
+    /// what the Novice holds —, one opened, both ranked (by their own routes):
+    /// the first DRAWN — its plan and its plants saved by the planner's own
+    /// route —, the second with a plant placed and no plan. Expert → Gardener
+    /// → Novice → Expert, each switch 204, and after each the gardens and
+    /// their placements read back from the database are those of the start
+    /// BYTE FOR BYTE — every row as PostgreSQL writes it out, every column —
+    /// and, read as values, the rows, the geometry, the cell size, the plan,
+    /// the placements, the opening, the place, the last modification.
+    ///
+    /// <para>PR #306, fix round 1, S1 (CodeRabbit, GitHub and the Extension):
+    /// the plan was null before and after every switch — a switch that erased
+    /// it went unseen, and this test passed against a server that did.</para>
     /// </summary>
     [Fact]
     public async Task PutCurrent_ASwitchDownAndBack_LeavesEveryGardenPlanAndPlacement_AsItWas()
@@ -230,10 +246,20 @@ public class FormulaSwitchTests : IntegrationTestBase
         var second = Guid.NewGuid();
         await SeedGardenAsync(userId, first, 15, 15);
         await SeedGardenAsync(userId, second, 15, 15);
-        await SeedPlacementAsync(first, plant, 0, 0, "by the door");
-        await SeedPlacementAsync(first, plant, 4, 6, null);
         await SeedPlacementAsync(second, plant, 14, 14, "the far corner");
         AuthAs(userId);
+        // The first garden drawn: its plan and its plants, saved as the planner saves them.
+        var drawn = new SaveLayoutRequest(
+            Width: 15,
+            Height: 15,
+            CellSize: "50cm",
+            CellsJson: DrawnPlan,
+            Placements:
+            [
+                new(plant, 0, 0, 1, 1, "by the door"),
+                new(plant, 4, 6, 2, 3, null),
+            ]);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync($"/api/gardens/{first}/layout", drawn)).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await Client.PostAsync($"/api/gardens/{first}/open", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync("/api/gardens/order", new { ids = new[] { second, first } })).StatusCode);
         var expertLayout = new SaveDashboardPreferencesRequest(
@@ -242,16 +268,23 @@ public class FormulaSwitchTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(PreferencesUrl, expertLayout)).StatusCode);
 
         var start = await GardensAsync(userId);
+        var stored = await StoredRowsAsync(userId);
         Assert.Equal(new[] { first, second }.Order(), start.Select(g => g.Id).Order());
         Assert.Equal(3, start.Sum(g => g.PlacementCount));
         Assert.All(start, g => Assert.Equal(((int?)15, (int?)15, "50cm"), (g.LayoutWidth, g.LayoutHeight, g.CellSize)));
+        // The plan as drawn, stored as it was sent — never a null compared to a null (S1).
+        Assert.Equal(DrawnPlan, start.Single(g => g.Id == first).CellsJson);
+        Assert.Null(start.Single(g => g.Id == second).CellsJson);
         Assert.NotNull(start.Single(g => g.Id == first).LastOpenedAt);
         Assert.Equal(((int?)1, (int?)0), (start.Single(g => g.Id == first).SortOrder, start.Single(g => g.Id == second).SortOrder));
+        // Two gardens and three placements: the rows compared byte for byte below.
+        Assert.Equal(5, stored.Split('\n').Length);
 
         foreach (var formula in new[] { "gardener", "novice", "expert" })
         {
             Assert.Equal(HttpStatusCode.NoContent, (await SwitchAsync(formula)).StatusCode);
             Assert.Equal(formula, (await AccountAsync(userId)).Formula);
+            Assert.Equal(stored, await StoredRowsAsync(userId));
             Assert.Equal(start, await GardensAsync(userId));
         }
     }
@@ -481,6 +514,26 @@ public class FormulaSwitchTests : IntegrationTestBase
             g.Placements.Count,
             string.Join(" | ", g.Placements.OrderBy(p => p.Id).Select(p =>
                 $"{p.Id} {p.PlantId} {p.StartRow},{p.StartCol} {p.SpanRows}x{p.SpanCols} {p.Notes} {p.PlacedAt:O}")))).ToList();
+    }
+
+    /// <summary>
+    /// The account's gardens and their placements AS STORED, one line per row
+    /// — the gardens, then the placements, each by id —, each row as
+    /// PostgreSQL writes it out (<c>row_to_json</c>): every column, the plan's
+    /// text within. Two reads compared as strings, ordinally, are the same
+    /// bytes (PR #306, fix round 1, S1).
+    /// </summary>
+    private async Task<string> StoredRowsAsync(string userId)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var gardens = await db.Database
+            .SqlQuery<string>($"SELECT row_to_json(g)::text AS \"Value\" FROM \"Gardens\" g WHERE g.\"UserId\" = {userId} ORDER BY g.\"Id\"")
+            .ToListAsync();
+        var placements = await db.Database
+            .SqlQuery<string>($"SELECT row_to_json(p)::text AS \"Value\" FROM \"GardenPlacements\" p JOIN \"Gardens\" g ON g.\"Id\" = p.\"GardenId\" WHERE g.\"UserId\" = {userId} ORDER BY p.\"Id\"")
+            .ToListAsync();
+        return string.Join('\n', gardens.Concat(placements));
     }
 
     private async Task<(string Formula, DateTime? ChosenAt)> AccountAsync(string userId)
