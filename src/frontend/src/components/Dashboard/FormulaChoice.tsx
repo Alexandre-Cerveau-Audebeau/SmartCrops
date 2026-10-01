@@ -7,6 +7,7 @@ import Chip from '@mui/material/Chip';
 import Link from '@mui/material/Link';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import GridOnOutlinedIcon from '@mui/icons-material/GridOnOutlined';
@@ -295,6 +296,10 @@ interface OfferCardProps {
 function OfferCard({ formula, previous, availability, isCurrent, isRecommended, switching, onChoose, nameOf }: OfferCardProps) {
   const { t } = useTranslation();
   const tk = useDashboardTokens();
+  // SMA-437, the complete review of the v3, M10: `primary.dark` at night
+  // read 3.41:1 on a card and 2.96:1 on an unavailable one — `primary.light`
+  // there, as `CompactActionBar` does.
+  const night = useTheme().palette.mode === 'dark';
   const name = nameOf(formula.key);
   const blocked = !availability.available;
   const kept = isCurrent && availability.reasons.length > 0;
@@ -391,7 +396,7 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
         <Typography component="span" sx={{ fontSize: 34, lineHeight: 1.05, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
           {t('dashboard.choice.price')}
         </Typography>
-        <Typography component="span" sx={{ fontSize: 16, fontWeight: 800, color: 'primary.dark' }}>
+        <Typography component="span" sx={{ fontSize: 16, fontWeight: 800, color: night ? 'primary.light' : 'primary.dark' }}>
           {t('dashboard.choice.priceFree')}
         </Typography>
       </Box>
@@ -568,6 +573,9 @@ interface ComparisonProps {
 
 function Comparison({ catalog, nameOf }: ComparisonProps) {
   const { t } = useTranslation();
+  // M10 (the complete review): a « Oui » in `primary.dark` read 3.41:1 on the
+  // table and 2.96:1 on its even rows at night — `primary.light` there.
+  const night = useTheme().palette.mode === 'dark';
 
   /** The rows: the two limits from the catalogue, then the ten of V3-01, as the language says them — each cell with its meaning. */
   const rows: Array<{ key: string; label: string; cells: Array<{ text: string; tone: Tone }> }> = [
@@ -601,7 +609,7 @@ function Comparison({ catalog, nameOf }: ComparisonProps) {
     fontSize: `${DASHBOARD_TYPE.secondary}px`,
     lineHeight: 1.45,
     fontWeight: tone === 'neutral' ? 500 : 700,
-    color: tone === 'yes' ? 'primary.dark' : tone === 'no' ? 'text.secondary' : 'text.primary',
+    color: tone === 'yes' ? (night ? 'primary.light' : 'primary.dark') : tone === 'no' ? 'text.secondary' : 'text.primary',
   });
 
   return (

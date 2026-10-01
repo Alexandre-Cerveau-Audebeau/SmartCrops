@@ -1,7 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ThemeProvider } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
+import { createAppTheme } from '../../theme';
+import { contrast, hex, resolveColor } from '../../test/contrast';
+import { rulesFor } from '../../test/dashboardDom';
 import { catalogFor } from '../../test/fixtures/formulas';
 import { deferred } from '../../test/responses';
 import type { DashboardLevel, FormulasCatalog } from '../../types/Dashboard';
@@ -305,5 +309,55 @@ describe('the choice screen says what the formulas do (SMA-437 review, K1 and M8
       'Le nombre de plantes et la taille de chaque jardin',
     ]);
     expect(fr.querySelector('[data-formula-offer="novice"]')!.textContent).not.toMatch(/surface/i);
+  });
+});
+
+// SMA-437, the complete review of the v3, M10 (§ 4 and § 7, point 1): at
+// night the screen every account must pass wrote « — Gratuit » and each
+// « Oui » of the comparison in `primary.dark` — 3.41:1 on a card, 2.96:1 on
+// an unavailable card and on the table's even rows, under the 4.5:1 of text
+// at 14 and 16 px. Each green text's DECLARED colour is held to 4.5:1 on
+// both grounds it is drawn on — the card (`background.paper`) and the
+// subtle surface (`surfaceSubtle`: an unavailable card, the even rows) —,
+// by day and at night: the idiom of the weather warning's suite
+// (`GardensDashboard.disclaimer.test.tsx`). The catalogue HELD, then landed
+// inside `act`, with Novice unavailable so a card of each ground is drawn.
+describe.each(['light', 'dark'] as const)('the choice screen’s green texts read at WCAG AA, %s theme (SMA-437 review, M10)', (mode) => {
+  it('« — Free » on every offer and every « Yes » of the comparison hold 4.5:1 on the card and on the subtle surface', async () => {
+    const theme = createAppTheme(mode);
+    const held = deferred<FormulasCatalog>();
+    vi.mocked(fetchFormulas).mockReturnValueOnce(held.promise);
+    render(
+      <ThemeProvider theme={theme}>
+        <MemoryRouter>
+          <FormulaChooserDialog open mandatory={false} switching={false} refusal={null} onClose={vi.fn()} onChoose={vi.fn()} />
+        </MemoryRouter>
+      </ThemeProvider>
+    );
+    await act(async () =>
+      held.resolve(catalogFor('gardener', { gardenCount: 5, unavailable: { novice: [{ kind: 'gardens', have: 5, limit: 3 }] } }))
+    );
+    expect(document.querySelector('[data-formula-offer="novice"] [data-offer-tag="unavailable"]')).not.toBeNull();
+
+    const grounds = { card: hex(theme.palette.background.paper), subtle: hex(theme.palette.surfaceSubtle) };
+    const declaredColour = (node: Element) =>
+      [...rulesFor(node).matchAll(/(?:^|[{;])color:([^;}]+)/g)].map((match) => match[1]!.trim()).at(-1);
+    const greens = [
+      ...within(dialog()).getAllByText('— Free').map((node) => ({ what: `« — Free » of ${node.closest('[data-formula-offer]')?.getAttribute('data-formula-offer')}`, node })),
+      ...[...dialog().querySelectorAll('[data-compare-tone="yes"]')].map((node) => ({ what: `the « ${node.textContent} » cell`, node })),
+    ];
+    // Three prices; the « yes » cells of the table and of the phone's lists.
+    expect(greens.filter(({ what }) => what.startsWith('« — Free »'))).toHaveLength(3);
+    expect(greens.length).toBeGreaterThan(3);
+
+    for (const { what, node } of greens) {
+      const declared = declaredColour(node);
+      expect(declared, `${what} declares its own colour`).toBeDefined();
+      for (const [name, ground] of Object.entries(grounds)) {
+        const foreground = resolveColor(declared!, ground);
+        expect(foreground, `${what}: a readable colour « ${declared} »`).not.toBeNull();
+        expect(contrast(foreground!, ground), `${what} « ${declared} » on the ${name} ground`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 });
