@@ -289,13 +289,14 @@ describe('the planner — the city of a garden in « Réglages » (SMA-454)', ()
   });
 });
 
-// SMA-454 — WHAT A CITY CHANGES BESIDE IT: `PUT /api/gardens/{id}/location`
-// pre-fills the hemisphere and the latitude band it finds EMPTY from the
-// latitude (GardensController.PutLocation). Set from « Réglages », where those
-// two fields are, the planner re-reads the garden, and the open dialog adopts
-// what the server filled in a field it seeded from an empty value — never one
-// chosen in it.
-describe('the planner — a city set from « Réglages » and the exposure it pre-fills (SMA-454)', () => {
+// SMA-454 — WHAT A CITY CHANGES BESIDE IT. The city is authoritative (fix
+// round 1, Alexandre's decision of 01/10/2026): `PUT /api/gardens/{id}/location`
+// writes the hemisphere and the latitude band from the city's latitude, always,
+// and « Back to the profile city » from the profile's (GardensController
+// PutLocation / DeleteLocation). Set from « Réglages », where those two fields
+// are, the planner re-reads the garden, and what the re-read brings replaces
+// what the open dialog shows — a value chosen in it included.
+describe('the planner — a city set from « Réglages » and the exposure it writes (SMA-454)', () => {
   /** Terrasse as a garden of before SMA-17's amendment: no hemisphere, no band stored. */
   const UNSET: Garden = { ...GARDEN, hemisphere: null, latitudeBand: null };
   const SYDNEY = pickFixture({ name: 'Sydney', region: 'New South Wales', country: 'Australia', latitude: -33.87, longitude: 151.21 });
@@ -324,14 +325,14 @@ describe('the planner — a city set from « Réglages » and the exposure it pr
     vi.useRealTimers();
   }
 
-  it('the garden is re-read after the write: the hemisphere the server filled shows in the open dialog, a band chosen here is kept, and « Save » sends both', async () => {
+  it('a southern city set from « Réglages » open: the garden is re-read, the hemisphere shown turns « Southern », the band the city wrote replaces one chosen here, and « Save » sends them', async () => {
     const reread = deferred<Garden>();
-    vi.mocked(fetchGarden).mockResolvedValueOnce(UNSET).mockReturnValueOnce(reread.promise);
+    // Terrasse as every configured garden is: « N » / « mid » stored.
+    vi.mocked(fetchGarden).mockResolvedValueOnce(GARDEN).mockReturnValueOnce(reread.promise);
     vi.mocked(searchLocations).mockResolvedValue([SYDNEY]);
-    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...UNSET, ...config, id, name, description }));
+    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...GARDEN, ...config, id, name, description }));
     const settings = await openSettings();
     await within(section()).findByText('Current place: Écully');
-    // Seeded from nothing: the dialog shows its defaults, Northern and Mid.
     expect(within(settings).getByRole('radio', { name: 'Northern' })).toBeChecked();
     // A band chosen HERE before the city is set.
     fireEvent.click(within(settings).getByRole('radio', { name: 'High' }));
@@ -346,14 +347,45 @@ describe('the planner — a city set from « Réglages » and the exposure it pr
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Locate Terrasse' })).toBeNull());
     // The re-read is still out: nothing has moved yet.
     expect(within(settings).getByRole('radio', { name: 'Northern' })).toBeChecked();
+    expect(within(settings).getByRole('radio', { name: 'High' })).toBeChecked();
 
-    await act(async () => reread.resolve({ ...UNSET, hemisphere: 'S', latitudeBand: 'mid' }));
+    // Sydney, 33.87° south: « S » and the temperate band, as the server writes them.
+    await act(async () => reread.resolve({ ...GARDEN, hemisphere: 'S', latitudeBand: 'mid' }));
 
     expect(within(settings).getByRole('radio', { name: 'Southern' })).toBeChecked();
-    expect(within(settings).getByRole('radio', { name: 'High' })).toBeChecked();
+    expect(within(settings).getByRole('radio', { name: 'Mid' })).toBeChecked();
     fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(updateGarden).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(updateGarden).mock.calls[0]![3]).toMatchObject({ hemisphere: 'S', latitudeBand: 'high' });
+    expect(vi.mocked(updateGarden).mock.calls[0]![3]).toMatchObject({ hemisphere: 'S', latitudeBand: 'mid' });
+  });
+
+  it('« Back to the profile city » re-reads values already stored, and they still replace a hand choice in the open dialog — the write says so, not a change of value', async () => {
+    const reread = deferred<Garden>();
+    vi.mocked(fetchGarden).mockResolvedValueOnce(GARDEN).mockReturnValueOnce(reread.promise);
+    vi.mocked(updateGarden).mockImplementation(async (id, name, description, config) => ({ ...GARDEN, ...config, id, name, description }));
+    const settings = await openSettings();
+    await within(section()).findByText('Current place: Écully');
+    // Chosen HERE: the south and the sub-polar band.
+    fireEvent.click(within(settings).getByRole('radio', { name: 'Southern' }));
+    fireEvent.click(within(settings).getByRole('radio', { name: 'High' }));
+    fireEvent.click(within(section()).getByRole('button', { name: 'Change the location' }));
+    const locate = await screen.findByRole('dialog', { name: 'Locate Terrasse' });
+
+    fireEvent.click(within(locate).getByRole('button', { name: 'Back to the profile city' }));
+
+    await waitFor(() => expect(fetchGarden).toHaveBeenCalledTimes(2));
+    expect(clearGardenLocation).toHaveBeenCalledWith('g1');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Locate Terrasse' })).toBeNull());
+    expect(within(settings).getByRole('radio', { name: 'Southern' })).toBeChecked();
+
+    // Lyon, the profile's city, writes « N » / « mid » — what was stored already.
+    await act(async () => reread.resolve(GARDEN));
+
+    expect(within(settings).getByRole('radio', { name: 'Northern' })).toBeChecked();
+    expect(within(settings).getByRole('radio', { name: 'Mid' })).toBeChecked();
+    fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateGarden).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(updateGarden).mock.calls[0]![3]).toMatchObject({ hemisphere: 'N', latitudeBand: 'mid' });
   });
 
   it('a re-read still out never lands over a config save that answered after it — the saved garden stays', async () => {
@@ -380,7 +412,7 @@ describe('the planner — a city set from « Réglages » and the exposure it pr
     expect(within(reopened).getByRole('radio', { name: 'Southern' })).toBeChecked();
   });
 
-  it('a config save the server refuses leaves the re-read standing — no newer garden answered: the open dialog still adopts the hemisphere the server filled, and the retry sends it', async () => {
+  it('a config save the server refuses leaves the re-read standing — no newer garden answered: the open dialog still shows the hemisphere and the band the city wrote, and the retry sends them', async () => {
     const reread = deferred<Garden>();
     vi.mocked(fetchGarden).mockResolvedValueOnce(UNSET).mockReturnValueOnce(reread.promise);
     vi.mocked(searchLocations).mockResolvedValue([SYDNEY]);

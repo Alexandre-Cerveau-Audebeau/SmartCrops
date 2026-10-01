@@ -3,9 +3,9 @@ using SmartCrops.Core.Geo;
 namespace SmartCrops.Api.Tests.Geo;
 
 /// <summary>
-/// SMA-336 PR 3a/5 — the pre-fill rule at its exact bounds: 23.5° opens
-/// « mid », 60° opens « high », the equator reads as the northern hemisphere,
-/// and the southern hemisphere uses the same absolute bounds.
+/// SMA-336 PR 3a/5 — what a city's latitude derives, at its exact bounds:
+/// 23.5° opens « mid », 60° opens « high », the equator reads as the northern
+/// hemisphere, and the southern hemisphere uses the same absolute bounds.
 /// </summary>
 public class LatitudeBandsTests
 {

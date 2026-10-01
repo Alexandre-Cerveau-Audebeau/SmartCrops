@@ -15,11 +15,12 @@ namespace SmartCrops.Api.Tests.Integration.Endpoints;
 /// SMA-336 PR 3a/5 — <c>PUT</c> / <c>DELETE /api/gardens/{id}/location</c>
 /// and the location the garden endpoints now serve. What it pins: the six
 /// columns written together with a fresh UTC stamp; the hemisphere and band
-/// pre-filled ONLY where the garden had none (a hand-set « S » survives);
-/// form validation before any write; ownership as 404, never 403;
-/// <c>UpdatedAt</c> moving with the write; the clear that keeps the derived
-/// exposure; and the effective location on <c>GET</c> — the garden's own,
-/// else the profile's, with the source that says which.
+/// the city's latitude ALWAYS writes — the city is authoritative (SMA-454,
+/// fix round 1), a hand-set « S » included; form validation before any write;
+/// ownership as 404, never 403; <c>UpdatedAt</c> moving with the write; the
+/// clear that derives the exposure from the profile's city when there is
+/// one, and keeps it otherwise; and the effective location on <c>GET</c> —
+/// the garden's own, else the profile's, with the source that says which.
 /// </summary>
 public class GardenLocationEndpointsTests : IntegrationTestBase
 {
@@ -34,10 +35,20 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
         longitude = 4.84,
     };
 
+    /// <summary>Twelve degrees south: the southern hemisphere, the tropical band.</summary>
+    private static readonly object Lima = new
+    {
+        name = "Lima",
+        region = "Lima",
+        country = "Peru",
+        latitude = -12.05,
+        longitude = -77.04,
+    };
+
     // ── PUT ──────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task PutLocation_StoresEveryColumn_StampsResolvedAt_AndPreFillsExposureWhenNull()
+    public async Task PutLocation_StoresEveryColumn_StampsResolvedAt_AndDerivesTheExposure()
     {
         var userId = await SeedUserAsync();
         var gardenId = await SeedGardenAsync(userId, hemisphere: null, band: null);
@@ -56,16 +67,37 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
         Assert.NotNull(garden.LocationResolvedAt);
         Assert.InRange(garden.LocationResolvedAt!.Value, before, DateTime.UtcNow.AddSeconds(1));
         Assert.Equal(DateTimeKind.Utc, garden.LocationResolvedAt.Value.Kind);
-        // 45.76° north: the pre-fill the config dialog promised.
+        // 45.76° north: the hemisphere and the band that latitude implies.
         Assert.Equal("N", garden.Hemisphere);
         Assert.Equal("mid", garden.LatitudeBand);
     }
 
     [Fact]
-    public async Task PutLocation_KeepsHandSetHemisphereAndBand()
+    public async Task PutLocation_LimaOnANorthernGarden_TurnsItSouthern_WithLimasBand()
     {
-        // A value the user set by hand is NEVER overwritten — a southern
-        // hemisphere on a Lyon garden is wrong, and still theirs.
+        // The visual pass of SMA-454 (01/10): the configuration of a garden
+        // always sets a hemisphere and a band, « N » / « mid » by default, and
+        // Lima left them so. The city is authoritative (fix round 1): twelve
+        // degrees south is « S », and the tropical band.
+        var userId = await SeedUserAsync();
+        var gardenId = await SeedGardenAsync(userId, hemisphere: "N", band: "mid");
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", Lima);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var garden = await LoadGardenAsync(gardenId);
+        Assert.Equal("Lima", garden.LocationName);
+        Assert.Equal("S", garden.Hemisphere);
+        Assert.Equal("low", garden.LatitudeBand);
+    }
+
+    [Fact]
+    public async Task PutLocation_OverwritesAHandSetHemisphereAndBand()
+    {
+        // The city is authoritative (SMA-454, fix round 1 — the « hand-set
+        // values kept » rule of SMA-336 reversed): a southern, sub-polar
+        // exposure set by hand on a garden placed in Lyon becomes Lyon's.
         var userId = await SeedUserAsync();
         var gardenId = await SeedGardenAsync(userId, hemisphere: "S", band: "high");
         AuthAs(userId);
@@ -74,13 +106,13 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var garden = await LoadGardenAsync(gardenId);
-        Assert.Equal("S", garden.Hemisphere);
-        Assert.Equal("high", garden.LatitudeBand);
+        Assert.Equal("N", garden.Hemisphere);
+        Assert.Equal("mid", garden.LatitudeBand);
         Assert.Equal("Lyon", garden.LocationName);
     }
 
     [Fact]
-    public async Task PutLocation_PreFillsOnlyTheMissingHalf()
+    public async Task PutLocation_WritesBothHalves_NotOnlyTheMissingOne()
     {
         var userId = await SeedUserAsync();
         var gardenId = await SeedGardenAsync(userId, hemisphere: "S", band: null);
@@ -89,15 +121,15 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
         await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", Lyon);
 
         var garden = await LoadGardenAsync(gardenId);
-        Assert.Equal("S", garden.Hemisphere);
+        Assert.Equal("N", garden.Hemisphere);
         Assert.Equal("mid", garden.LatitudeBand);
     }
 
     [Fact]
-    public async Task PutLocation_SaysInTheLog_WhatItPreFilled_AndNeverThePlace()
+    public async Task PutLocation_SaysInTheLog_WhatItDerived_AndNeverThePlace()
     {
         // Review round 1 (C5): no provenance column, so the log is the trace
-        // that a value came from the latitude — the garden id and the two
+        // that the values came from the latitude — the garden id and the two
         // derived words, never the coordinates or the name.
         var userId = await SeedUserAsync();
         var gardenId = await SeedGardenAsync(userId, hemisphere: null, band: null);
@@ -112,7 +144,7 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var entry = Assert.Single(capture.Entries, e =>
-            e.Level == LogLevel.Information && e.Message.Contains("pre-filled") && e.Message.Contains(gardenId.ToString()));
+            e.Level == LogLevel.Information && e.Message.Contains("set from its latitude") && e.Message.Contains(gardenId.ToString()));
         Assert.Contains("hemisphere: N", entry.Message);
         Assert.Contains("latitude band: mid", entry.Message);
         Assert.DoesNotContain("45.76", entry.Message);
@@ -121,7 +153,7 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task PutLocation_OnlyTheMissingHalf_IsSaidToBePreFilled()
+    public async Task PutLocation_BothHalvesAreSaidInTheLog_EvenTheOneThatWasSet()
     {
         var userId = await SeedUserAsync();
         var gardenId = await SeedGardenAsync(userId, hemisphere: "S", band: null);
@@ -134,13 +166,13 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
 
         await client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", Lyon);
 
-        var entry = Assert.Single(capture.Entries, e => e.Message.Contains("pre-filled") && e.Message.Contains(gardenId.ToString()));
-        Assert.Contains("hemisphere: kept", entry.Message);
+        var entry = Assert.Single(capture.Entries, e => e.Message.Contains("set from its latitude") && e.Message.Contains(gardenId.ToString()));
+        Assert.Contains("hemisphere: N", entry.Message);
         Assert.Contains("latitude band: mid", entry.Message);
     }
 
     [Fact]
-    public async Task PutLocation_HandSetExposure_LogsNoPreFill()
+    public async Task PutLocation_HandSetExposure_IsOverwritten_AndTheLogSaysWhatTheCityWrote()
     {
         var userId = await SeedUserAsync();
         var gardenId = await SeedGardenAsync(userId, hemisphere: "S", band: "high");
@@ -154,7 +186,9 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
         var response = await client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", Lyon);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.DoesNotContain(capture.Entries, e => e.Message.Contains("pre-filled"));
+        var entry = Assert.Single(capture.Entries, e => e.Message.Contains("set from its latitude") && e.Message.Contains(gardenId.ToString()));
+        Assert.Contains("hemisphere: N", entry.Message);
+        Assert.Contains("latitude band: mid", entry.Message);
     }
 
     [Fact]
@@ -340,7 +374,7 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
     // ── DELETE ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task DeleteLocation_ClearsSixColumns_AndKeepsDerivedExposure()
+    public async Task DeleteLocation_ClearsSixColumns_AndWithoutAProfileCity_KeepsTheExposure()
     {
         var userId = await SeedUserAsync();
         var gardenId = await SeedGardenAsync(userId, hemisphere: null, band: null);
@@ -357,9 +391,56 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
         Assert.Null(garden.Latitude);
         Assert.Null(garden.Longitude);
         Assert.Null(garden.LocationResolvedAt);
-        // Nothing can tell a pre-filled value from one the user confirmed.
+        // No city on the profile, nothing to derive from (SMA-454, fix round
+        // 1): the exposure stays what the garden's own city wrote.
         Assert.Equal("N", garden.Hemisphere);
         Assert.Equal("mid", garden.LatitudeBand);
+    }
+
+    [Fact]
+    public async Task DeleteLocation_BackToTheProfileCity_DerivesTheExposureFromIt()
+    {
+        // « Revenir à la ville du profil » (SMA-454, fix round 1): the garden
+        // reads the account's city from now on, and that city writes its
+        // exposure — Lyon's, after Lima's.
+        var userId = await SeedUserAsync();
+        await SetProfileLocationAsync(userId, "Lyon", 45.76, 4.84);
+        var gardenId = await SeedGardenAsync(userId, hemisphere: "S", band: "low");
+        AuthAs(userId);
+        await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", Lima);
+
+        var response = await Client.DeleteAsync($"/api/gardens/{gardenId}/location");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var garden = await LoadGardenAsync(gardenId);
+        Assert.Null(garden.LocationName);
+        Assert.Equal("N", garden.Hemisphere);
+        Assert.Equal("mid", garden.LatitudeBand);
+    }
+
+    [Fact]
+    public async Task DeleteLocation_SaysInTheLog_WhatTheProfileCityWrote_AndNeverThePlace()
+    {
+        var userId = await SeedUserAsync();
+        await SetProfileLocationAsync(userId, "Lyon", 45.76, 4.84);
+        var gardenId = await SeedGardenAsync(userId, hemisphere: "S", band: "low");
+        var capture = new CapturingLoggerProvider();
+        using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureLogging(logging => logging.AddProvider(capture)));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+
+        var response = await client.DeleteAsync($"/api/gardens/{gardenId}/location");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var entry = Assert.Single(capture.Entries, e =>
+            e.Level == LogLevel.Information && e.Message.Contains("set from the profile's latitude") && e.Message.Contains(gardenId.ToString()));
+        Assert.Contains("hemisphere: N", entry.Message);
+        Assert.Contains("latitude band: mid", entry.Message);
+        Assert.DoesNotContain("45.76", entry.Message);
+        Assert.DoesNotContain("4.84", entry.Message);
+        Assert.DoesNotContain("Lyon", entry.Message);
     }
 
     [Fact]

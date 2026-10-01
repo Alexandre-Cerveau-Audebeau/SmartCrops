@@ -725,13 +725,17 @@ export default function GardenPlanner() {
   };
 
   // SMA-454 — a city set from « Réglages » goes through its own write (`PUT
-  // /api/gardens/{id}/location`), and the server pre-fills the hemisphere and
-  // the latitude band it finds EMPTY from the latitude
-  // (GardensController.PutLocation). The planner re-reads the garden, so its
-  // exposure and the open dialog read what is stored. A re-read still out is
-  // dropped by the next one, by the answer of a config save — the newer
-  // garden — and by the unmount.
+  // /api/gardens/{id}/location`, or the `DELETE` of « Revenir à la ville du
+  // profil »), and the server writes the hemisphere and the latitude band from
+  // the city's latitude — always: the city is authoritative (fix round 1;
+  // GardensController.PutLocation / DeleteLocation). The planner re-reads the
+  // garden, so its exposure reads what is stored, and bumps `locatedSeq` as
+  // the re-read lands: the open dialog then shows the re-read hemisphere and
+  // band over whatever it showed. A re-read still out is dropped by the next
+  // one, by the answer of a config save — the newer garden — and by the
+  // unmount.
   const gardenRereadRef = useRef<AbortController | null>(null);
+  const [locatedSeq, setLocatedSeq] = useState(0);
   const handleLocated = useCallback(() => {
     if (!id) return;
     gardenRereadRef.current?.abort();
@@ -739,13 +743,15 @@ export default function GardenPlanner() {
     gardenRereadRef.current = controller;
     fetchGarden(id, controller.signal)
       .then((fresh) => {
-        if (!controller.signal.aborted) setGarden(fresh);
+        if (controller.signal.aborted) return;
+        setGarden(fresh);
+        setLocatedSeq((seq) => seq + 1);
       })
       .catch(() => {
         // A failed re-read leaves the garden as it was read: the city's line
-        // reads the weather aggregate, which its section re-reads itself; only
-        // a hemisphere or a band the server has just pre-filled stays unseen
-        // until the next load.
+        // reads the weather aggregate, which its section re-reads itself; the
+        // hemisphere and the band the city has just written stay unseen until
+        // the next load, and a « Save » of the open dialog sends what it shows.
       });
   }, [id]);
   useEffect(() => () => gardenRereadRef.current?.abort(), []);
@@ -2414,6 +2420,7 @@ export default function GardenPlanner() {
             />
           ) : undefined
         }
+        locatedSeq={locatedSeq}
       />
 
       {/* Garden templates (SMA-18 lot 2) — from the header button at any

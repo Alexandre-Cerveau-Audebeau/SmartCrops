@@ -79,6 +79,17 @@ interface Props {
    * « Réglages » instance only.
    */
   locationSection?: ReactNode;
+  /**
+   * SMA-454, fix round 1 — the city is authoritative (Alexandre's decision of
+   * 01/10/2026): the planner bumps this count each time the garden, re-read
+   * after a city written from the LOCATION section, lands. The dialog then
+   * shows the hemisphere and the latitude band the re-read brings
+   * (`initialConfig`) over whatever it showed, a value chosen here included.
+   * The count, not a change of value, says a city was written: a city whose
+   * values are those already stored (Lyon on a « N » / « mid » garden) still
+   * puts them back over a choice made here.
+   */
+  locatedSeq?: number;
 }
 
 const CELL_SIZES = ['25cm', '50cm', '1m'];
@@ -218,6 +229,7 @@ function GardenConfigDialogInner({
   maxRows = DEFAULT_MAX_GRID,
   limitNote = null,
   locationSection,
+  locatedSeq,
 }: Omit<Props, 'open'>) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -284,45 +296,20 @@ function GardenConfigDialogInner({
   const [latitudeBand, setLatitudeBand] = useState<string>(
     initialConfig.latitudeBand ?? 'mid'
   );
-  // SMA-454 — a city set from the LOCATION section is written at once, by its
-  // own dialog, and the server pre-fills the hemisphere and the band it finds
-  // EMPTY from the latitude (GardensController.PutLocation); the planner then
-  // re-reads the garden. A field this dialog seeded from an EMPTY stored value
-  // adopts what the re-read brings — unless it was chosen here: the server's
-  // own rule, a value set by hand is never overwritten. A value the dialog
-  // was opened with is never moved under the user. Adjusted during render on
-  // the stored values (react-hooks/set-state-in-effect forbids the effect
-  // variant).
-  const [storedExposure, setStoredExposure] = useState({
-    hemisphere: initialConfig.hemisphere,
-    latitudeBand: initialConfig.latitudeBand,
-  });
-  const [chosenExposure, setChosenExposure] = useState({
-    hemisphere: false,
-    latitudeBand: false,
-  });
-  if (
-    initialConfig.hemisphere !== storedExposure.hemisphere ||
-    initialConfig.latitudeBand !== storedExposure.latitudeBand
-  ) {
-    setStoredExposure({
-      hemisphere: initialConfig.hemisphere,
-      latitudeBand: initialConfig.latitudeBand,
-    });
-    if (
-      storedExposure.hemisphere === null &&
-      initialConfig.hemisphere !== null &&
-      !chosenExposure.hemisphere
-    ) {
-      setHemisphere(initialConfig.hemisphere);
-    }
-    if (
-      storedExposure.latitudeBand === null &&
-      initialConfig.latitudeBand !== null &&
-      !chosenExposure.latitudeBand
-    ) {
-      setLatitudeBand(initialConfig.latitudeBand);
-    }
+  // SMA-454, fix round 1 — the city is authoritative: a city set from the
+  // LOCATION section is written at once, by its own dialog, and the server
+  // writes the hemisphere and the band from its latitude, always
+  // (GardensController.PutLocation / DeleteLocation); the planner re-reads
+  // the garden and bumps `locatedSeq` as the re-read lands. What it brings
+  // then replaces what this dialog shows — a value chosen here included —,
+  // the same seeding as at the opening. Adjusted during render on the count
+  // (react-hooks/set-state-in-effect forbids the effect variant); a stored
+  // value that moves without it is never adopted.
+  const [seenLocatedSeq, setSeenLocatedSeq] = useState(locatedSeq);
+  if (locatedSeq !== seenLocatedSeq) {
+    setSeenLocatedSeq(locatedSeq);
+    setHemisphere(initialConfig.hemisphere ?? 'N');
+    setLatitudeBand(initialConfig.latitudeBand ?? 'mid');
   }
 
   const realDimensions = useMemo(() => {
@@ -535,7 +522,8 @@ function GardenConfigDialogInner({
       <Box sx={{ height: '1px', bgcolor: tk.divider, mb: 3 }} />
 
       {/* LOCALISATION (SMA-454) — the garden's city, right before the
-          hemisphere and the band it pre-fills when they were never set. */}
+          hemisphere and the band it writes (the city is authoritative, fix
+          round 1). */}
       {locationSection && (
         <Box data-config-location sx={{ mb: 3 }}>
           <SectionLabel tk={tk}>{t('planner.config.sectionLocation')}</SectionLabel>
@@ -545,12 +533,13 @@ function GardenConfigDialogInner({
 
       {/* Hemisphere + latitude band (engraved SMA-17 amendment, not in the
           mockup): its OWN section below the divider, so it never pushes the
-          compass down. MANUAL, OVERRIDABLE estimate — like the future per-cell
-          exposure override. A garden's location PRE-FILLS both from its
-          latitude when they were never stored (SMA-336 PR 3a/5, PutLocation),
-          without changing the stored contract or the downstream engine; set
-          from the LOCATION section above, this open dialog adopts them
-          (SMA-454, the adjustment beside the state). */}
+          compass down. A garden's city WRITES both from its latitude, always
+          — the city is authoritative (SMA-336 PR 3a/5, PutLocation; SMA-454,
+          fix round 1) —, without changing the stored contract or the
+          downstream engine; set from the LOCATION section above, they
+          replace what this open dialog shows (the adjustment beside the
+          state). Still a MANUAL, OVERRIDABLE choice — the estimate of a
+          garden without a city. */}
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <Box>
@@ -559,10 +548,7 @@ function GardenConfigDialogInner({
               tk={tk}
               ariaLabel={t('planner.config.hemisphere')}
               value={hemisphere}
-              onChange={(value) => {
-                setHemisphere(value);
-                setChosenExposure((chosen) => ({ ...chosen, hemisphere: true }));
-              }}
+              onChange={setHemisphere}
               options={[
                 { value: 'N', label: 'N', ariaLabel: t('planner.config.hemisphereNorth') },
                 { value: 'S', label: 'S', ariaLabel: t('planner.config.hemisphereSouth') },
@@ -578,10 +564,7 @@ function GardenConfigDialogInner({
               tk={tk}
               ariaLabel={t('planner.config.latitudeBand')}
               value={latitudeBand}
-              onChange={(value) => {
-                setLatitudeBand(value);
-                setChosenExposure((chosen) => ({ ...chosen, latitudeBand: true }));
-              }}
+              onChange={setLatitudeBand}
               options={[
                 { value: 'low', label: t('planner.config.latitudeLow') },
                 { value: 'mid', label: t('planner.config.latitudeMid') },
