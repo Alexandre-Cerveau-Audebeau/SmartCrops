@@ -77,13 +77,28 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # The cd-production concurrency group queues by COMPLETION time,
-          # not commit order: CI for old commit A finishing after newer
-          # commit B would otherwise regress production to A — silently and
-          # successfully. Only the newest green push run on main deploys;
-          # every later step in this job and the whole deploy job gate on
-          # this output.
-          latest=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI \
+          # What this gate protects: the cd-production concurrency group
+          # queues by COMPLETION time, not commit order — CI for old commit A
+          # finishing after newer commit B must never regress production to
+          # A, silently and successfully. Every later step in this job and
+          # the whole deploy job gate on this output.
+          # Runs are listed by FILE name, never by the workflow's name: the
+          # SMA-448 pre-flight (§ 1.6 b, 29/09) measured `--workflow CI`
+          # answering wrong, shifting runs (7e64b79 of 22/09, then runs from
+          # July) where `--workflow ci.yml` answered right. On 02/10 the name
+          # form skipped two deploys in green: CD run 36992125175 and its
+          # re-run read 7e64b79 against their own de880f6, while the same
+          # query, run locally at the same moment, answered de880f6.
+          # The list is an index; the commit graph is the truth. When the
+          # listed commit is not this run's, GitHub's compare of the two
+          # decides (it needs contents: read, granted above for the
+          # checkout): "ahead" — the listed commit is an ANCESTOR of this
+          # one, the list lags, this run deploys; "behind" — a newer commit
+          # is green, this run is stale and skips; anything else (diverged,
+          # identical, no answer) fails RED rather than guessing. So A still
+          # never deploys over B: once B's CI is green the list shows B, and
+          # A is behind it.
+          latest=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
             --branch main --event push --status success --limit 1 \
             --json headSha --jq '.[0].headSha')
           # An empty/null answer is an API anomaly, not a verdict: fail RED
@@ -98,8 +113,22 @@ jobs:
           if [ "$latest" = "$HEAD_SHA" ]; then
             echo "is_latest=true" >> "$GITHUB_OUTPUT"
           else
-            echo "is_latest=false" >> "$GITHUB_OUTPUT"
-            echo "stale run - a newer green commit exists; skipping every later step"
+            relation=$(gh api "repos/$GITHUB_REPOSITORY/compare/$latest...$HEAD_SHA" --jq '.status')
+            echo "this run relative to it:          $relation"
+            case "$relation" in
+              ahead)
+                echo "is_latest=true" >> "$GITHUB_OUTPUT"
+                echo "the listed run is an ancestor of this one - the list lags; this run deploys"
+                ;;
+              behind)
+                echo "is_latest=false" >> "$GITHUB_OUTPUT"
+                echo "stale run - a newer green commit exists; skipping every later step"
+                ;;
+              *)
+                echo "neither ahead of nor behind the listed run - failing loudly rather than guessing"
+                exit 1
+                ;;
+            esac
           fi
 
       - name: Checkout the CI-validated commit
