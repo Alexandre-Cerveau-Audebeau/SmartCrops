@@ -345,11 +345,11 @@ const isGardenRecord = matches<DashboardGardenData>({
   // SMA-448, lot F5-a — the three data the widget sorts by, two of them
   // null until the first opening and the first ranking. A server before this
   // lot does not send them, and this guard refuses its records — so the
-  // server of this lot must be up before this client is served. Nothing in
-  // the CD holds that order: `cd.yml` deploys the api and web images of one
-  // SHA TOGETHER, in one `docker compose up`. The order is held by the
-  // promotion procedure (D17), until the deployment chain enforces it
-  // (SMA-447 § 7). PR #299, fix round 1, D.
+  // server of this lot must be up before this client is served. `cd.yml`
+  // holds that order since SMA-447 § 7 — the api alone, health-gated, then
+  // the web — and `rollback.yml` reverses it; no order closes a tab opened
+  // before a rollback, which keeps this client until it reloads.
+  // PR #299, fix round 1, D.
   createdAt: isString,
   lastOpenedAt: isNullableString,
   sortOrder: nullable(isWholeNumber),

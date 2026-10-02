@@ -210,15 +210,29 @@ jobs:
           }
           REMOTE
 
-      - name: Deploy the requested tag
+      - name: Deploy the requested web first (client before server on the way back)
         run: |
           # Runs AFTER the restore: the api starts ONCE, on the restored
           # state (the previous order started it against the unrecovered
-          # database). When no restore was requested this is the straight
-          # pull+up path, unchanged. Same inline-IMAGE_TAG contract as
-          # cd.yml: the VPS .env is never rewritten; the operator names the
-          # exact image set to run.
-          ssh vps "cd /opt/smartcrops && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose pull && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose up -d"
+          # database). Same inline-IMAGE_TAG contract as cd.yml: the VPS
+          # .env is never rewritten; the operator names the exact image set
+          # to run.
+          # Client before server ON THE WAY BACK (D17, the mirror of cd.yml):
+          # the requested — older — web moves first, in front of the newer
+          # api while it still runs (no restore) or of no api at all (a
+          # restore holds it stopped). The rollback itself never serves a
+          # newer client against an older server; a tab opened since the
+          # deploy being undone keeps its newer client until it reloads.
+          # Every image is pulled before anything moves.
+          ssh vps "cd /opt/smartcrops && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose pull && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose up -d --no-deps web"
+
+      - name: Deploy the requested api last
+        run: |
+          # The pre-SMA-447 command, unchanged: it converges what is left —
+          # the api, behind its depends_on conditions on db and typesense,
+          # and anything else the pull refreshed; the web is already at the
+          # requested tag and stays Running.
+          ssh vps "cd /opt/smartcrops && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose up -d"
 
       - name: Health gate (shared action, DNS-independent)
         uses: ./.github/actions/ssh-health-gate
