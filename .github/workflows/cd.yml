@@ -19,8 +19,12 @@
 #   - Lot 4 runbook: the first boot restores the selective dump BEFORE
 #     `up`, so the seeder no-ops instead of reseeding from scratch.
 #   - Lot 4 runbook (SMA-462): the compare-to-production job refuses a
-#     VPS with no api container — a new or rebuilt VPS gets its first
-#     containers by hand (or through rollback.yml) before CD deploys there.
+#     VPS with no api container, and it runs before the deploy job — the
+#     only one that creates the layout and ships the files. So a new or
+#     rebuilt VPS gets, BY HAND, first its layout and its files
+#     (/opt/smartcrops with docker-compose.yml, traefik/dynamic.yml and
+#     .env), then its first containers — by hand or through rollback.yml,
+#     which ships no file — before CD deploys there.
 name: CD
 
 # Branch model (SMA-410): main is what production runs; develop
@@ -187,9 +191,15 @@ jobs:
     # #310 review). This job reads the commit the VPS actually runs and
     # lets the deploy through only if this run IS that commit or descends
     # from it. It changes nothing on the VPS, and it runs before the deploy
-    # job touches anything (files, dump, containers); the cd-production
-    # group holds the whole run, so no other deploy or rollback can move
-    # production between this read and the deploy — only a human could.
+    # job touches anything (files, dump, containers). The cd-production
+    # group holds a run only while it runs: within ONE attempt no other
+    # deploy or rollback can move production between this read and the
+    # deploy — only a human could. Between two attempts nothing holds it,
+    # and a partial re-run that leaves this job out ("Re-run failed jobs"
+    # once it has succeeded, or the deploy job alone) executes deploy on
+    # THIS job's outputs of an earlier attempt, without reading production
+    # again: so deploy re-reads it first, in its freshness step, against
+    # the `production` output below.
     # A job of its own, not a step of deploy: its "no" skips the WHOLE
     # deploy job, so no deploy step — today's or a future one — can run
     # uncleared, and no per-step if: can be forgotten.
@@ -202,6 +212,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       proceed: ${{ steps.compare.outputs.proceed }}
+      production: ${{ steps.compare.outputs.production }}
     steps:
       - name: Checkout the CI-validated commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -243,8 +254,15 @@ jobs:
             exit 1
           fi
           web=$(ssh vps "docker container inspect --format '{{.State.Status}} {{.Config.Image}}' smartcrops-web-1" 2>&1) || web="unreadable: $web"
-          echo "production, api container:  $api"
-          echo "production, web container:  $web"
+          # One log line per remote answer, whatever it holds: a newline or a
+          # carriage return in it would put the VPS's own text at the start
+          # of a log line, where the runner reads workflow commands. Only the
+          # printed copy is flattened — every decision below reads the raw
+          # answer, so an answer of several lines stays red.
+          api_line=${api//[$'\r\n']/ }
+          web_line=${web//[$'\r\n']/ }
+          echo "production, api container:  $api_line"
+          echo "production, web container:  $web_line"
           echo "this run:                   $HEAD_SHA"
           # A stopped api is a production in the middle of an operation:
           # rollback.yml's restore stops it, and keeps it stopped until its
@@ -257,7 +275,8 @@ jobs:
           case "$state" in
             running|restarting) ;;
             *)
-              echo "the api container is '$state', not running - failing loudly rather than guessing"
+              state_line=${state//[$'\r\n']/ }
+              echo "the api container is '$state_line', not running - failing loudly rather than guessing"
               exit 1
               ;;
           esac
@@ -270,6 +289,11 @@ jobs:
             exit 1
           fi
           production=${BASH_REMATCH[1]}
+          # Recorded for the deploy job's freshness step: the 40 characters
+          # the expression just captured, written before the comparison. A
+          # partial re-run hands them to deploy as they are, and deploy
+          # checks production against them before it changes anything.
+          echo "production=$production" >> "$GITHUB_OUTPUT"
           # BASE...HEAD = production...this run. Asked even when both are
           # the same commit: the same-version replay is how this job gets
           # proven in production. On an HTTP error, gh prints the error body
@@ -303,7 +327,12 @@ jobs:
     # Skipped transitively on red/untrusted CI (build-and-push guard) and
     # on a red production read; explicitly on stale runs (the is_latest
     # output) and on runs older than the commit in production (the proceed
-    # output, SMA-462).
+    # output, SMA-462). Both outputs belong to the attempt that wrote them:
+    # a partial re-run of this job only ("Re-run failed jobs" when it alone
+    # failed, or this job alone) executes it on the outputs of an EARLIER
+    # attempt, and neither gate runs again. Hence the freshness step below,
+    # ahead of every step that changes the VPS: it reads production again,
+    # and stops red if it moved.
     needs: [build-and-push, compare-to-production]
     if: needs.build-and-push.outputs.is_latest == 'true' && needs.compare-to-production.outputs.proceed == 'true'
     runs-on: ubuntu-24.04
@@ -325,6 +354,76 @@ jobs:
           host_key: ${{ vars.VPS_HOST_KEY }}
           vps_user: ${{ vars.VPS_USER }}
           vps_host: ${{ vars.VPS_HOST }}
+
+      - name: Confirm production has not moved since the comparison
+        env:
+          RECORDED_PRODUCTION: ${{ needs.compare-to-production.outputs.production }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # The freshness check (SMA-462, the #315 review). A partial re-run
+          # — "Re-run failed jobs" when only this job failed, or this job
+          # alone — executes deploy on the outputs of an EARLIER attempt:
+          # compare-to-production does not run again, and its old "yes"
+          # would let this commit land over whatever another deploy, or a
+          # rollback, has put in production since. So deploy reads
+          # production again before its first change on the VPS, under the
+          # compare step's own rules — the same command, the same two
+          # states, the same anchored expression — and goes on in two cases
+          # only: production is still the commit that was compared, or it
+          # is already this run's commit (the api moves first, so a deploy
+          # that stopped half-way leaves it there). Anything else is red.
+          # When production moved, or when no compared commit reached this
+          # job, the way out is "Re-run all jobs": the run is judged again
+          # from the start, by the list gate and then against production.
+          # An api that is missing, stopped or on a foreign tag is red
+          # there too, until it is repaired (rollback.yml, or by hand).
+          # READ-ONLY on the VPS, and no call to GitHub: the only question
+          # here is whether production moved.
+          if ! api=$(ssh vps "docker container inspect --format '{{.State.Status}} {{.Config.Image}}' smartcrops-api-1"); then
+            echo "could not read the api container in production - failing loudly rather than guessing"
+            exit 1
+          fi
+          # One log line per remote answer, as in the compare step; the raw
+          # answer decides.
+          api_line=${api//[$'\r\n']/ }
+          echo "production, api container:  $api_line"
+          echo "this run:                   $HEAD_SHA"
+          state=${api%% *}
+          image=${api#* }
+          case "$state" in
+            running|restarting) ;;
+            *)
+              state_line=${state//[$'\r\n']/ }
+              echo "the api container is '$state_line', not running - failing loudly rather than guessing"
+              exit 1
+              ;;
+          esac
+          # The compare step's own expression: it now lives twice in this
+          # file, and a change of registry or owner must change both.
+          tag_re='^ghcr[.]io/alexandre-cerveau-audebeau/smartcrops-api:sha-([0-9a-f]{40})$'
+          if [[ ! "$image" =~ $tag_re ]]; then
+            echo "the api image is not a sha-<40> tag this CD publishes - failing loudly rather than guessing"
+            exit 1
+          fi
+          production=${BASH_REMATCH[1]}
+          # What the comparison read: a job output, so 40 hexadecimal
+          # characters or nothing this step can rely on.
+          sha_re='^[0-9a-f]{40}$'
+          if [[ ! "$RECORDED_PRODUCTION" =~ $sha_re ]]; then
+            echo "the comparison left no production commit to check against - failing loudly rather than guessing"
+            echo 'use "Re-run all jobs": the run is judged again from the start, by the list gate and then against production'
+            exit 1
+          fi
+          echo "compared against:           $RECORDED_PRODUCTION"
+          if [ "$production" = "$RECORDED_PRODUCTION" ]; then
+            echo "production unchanged since the comparison"
+          elif [ "$production" = "$HEAD_SHA" ]; then
+            echo "production already runs this commit — a deploy stopped half-way"
+          else
+            echo "production moved since the comparison: it ran $RECORDED_PRODUCTION then, it runs $production now - failing loudly rather than deploying over it"
+            echo 'use "Re-run all jobs", never this job alone: the run is judged again from the start, by the list gate and then against production'
+            exit 1
+          fi
 
       - name: Ensure the deployment layout exists
         run: |
