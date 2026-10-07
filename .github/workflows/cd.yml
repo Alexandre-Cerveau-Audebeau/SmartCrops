@@ -18,6 +18,13 @@
 #     points at the VPS.
 #   - Lot 4 runbook: the first boot restores the selective dump BEFORE
 #     `up`, so the seeder no-ops instead of reseeding from scratch.
+#   - Lot 4 runbook (SMA-462): the compare-to-production job refuses a
+#     VPS with no api container, and it runs before the deploy job — the
+#     only one that creates the layout and ships the files. So a new or
+#     rebuilt VPS gets, BY HAND, first its layout and its files
+#     (/opt/smartcrops with docker-compose.yml, traefik/dynamic.yml and
+#     .env), then its first containers — by hand or through rollback.yml,
+#     which ships no file — before CD deploys there.
 name: CD
 
 # Branch model (SMA-410): main is what production runs; develop
@@ -33,14 +40,18 @@ on:
 
 # Deploys QUEUE and are never cancelled mid-flight: interrupting a
 # half-applied `compose up` is strictly worse than finishing it and then
-# deploying the newer commit.
+# deploying the newer commit. The queue holds NO commit order — GitHub:
+# "ordering is not guaranteed"; at most one run waits, and the next
+# arrival cancels it — so what keeps production from moving backwards is
+# the compare-to-production job, never this queue (SMA-462).
 concurrency:
   group: cd-production
   cancel-in-progress: false
 
 # Token hygiene (R1): the workflow default is read-only; packages: write
-# lives ONLY on the build-and-push job — the deploy job opens an SSH
-# session and never touches GHCR.
+# lives ONLY on the build-and-push job — the compare-to-production and
+# deploy jobs open SSH sessions and never touch GHCR, and the compare API
+# needs nothing beyond this default contents: read.
 permissions:
   contents: read
 
@@ -77,11 +88,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # What this gate protects: the cd-production concurrency group
+          # What this gate is for: the cd-production concurrency group
           # queues by COMPLETION time, not commit order — CI for old commit A
           # finishing after newer commit B must never regress production to
-          # A, silently and successfully. Every later step in this job and
-          # the whole deploy job gate on this output.
+          # A, silently and successfully. This gate is the CHEAP first line:
+          # it spares the build of a run it can already prove stale. Every
+          # later step in this job, the compare-to-production job and the
+          # deploy job gate on this output.
           # Runs are listed by FILE name, never by the workflow's name: the
           # SMA-448 pre-flight (§ 1.6 b, 29/09) measured `--workflow CI`
           # answering wrong, shifting runs (7e64b79 of 22/09, then runs from
@@ -93,11 +106,14 @@ jobs:
           # listed commit is not this run's, GitHub's compare of the two
           # decides (it needs contents: read, granted above for the
           # checkout): "ahead" — the listed commit is an ANCESTOR of this
-          # one, the list lags, this run deploys; "behind" — a newer commit
+          # one, the list lags, this run goes on; "behind" — a newer commit
           # is green, this run is stale and skips; anything else (diverged,
-          # identical, no answer) fails RED rather than guessing. So A still
-          # never deploys over B: once B's CI is green the list shows B, and
-          # A is behind it.
+          # identical, no answer) fails RED rather than guessing. What the
+          # list can NOT prove is that this run is the newest: its order is
+          # undocumented, and a list that misses a newer DEPLOYED commit
+          # makes an older one look "ahead" (the #310 review, SMA-462). The
+          # authority is production itself: the compare-to-production job
+          # reads the commit the VPS runs, and only it lets a deploy through.
           latest=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
             --branch main --event push --status success --limit 1 \
             --json headSha --jq '.[0].headSha')
@@ -118,7 +134,7 @@ jobs:
             case "$relation" in
               ahead)
                 echo "is_latest=true" >> "$GITHUB_OUTPUT"
-                echo "the listed run is an ancestor of this one - the list lags; this run deploys"
+                echo "the listed run is an ancestor of this one - the list lags; production decides next"
                 ;;
               behind)
                 echo "is_latest=false" >> "$GITHUB_OUTPUT"
@@ -169,11 +185,156 @@ jobs:
           push: true
           tags: ghcr.io/alexandre-cerveau-audebeau/smartcrops-web:sha-${{ github.event.workflow_run.head_sha }}
 
-  deploy:
-    # Skipped transitively on red/untrusted CI (build-and-push guard) and
-    # explicitly on stale runs (the is_latest output).
+  compare-to-production:
+    # SMA-462 — never deploy backwards. The list gate above is an index of
+    # CI runs: it cannot prove that no NEWER commit already serves (the
+    # #310 review). This job reads the commit the VPS actually runs and
+    # lets the deploy through only if this run IS that commit or descends
+    # from it. It changes nothing on the VPS, and it runs before the deploy
+    # job touches anything (files, dump, containers). The cd-production
+    # group holds a run only while it runs: within ONE attempt no other
+    # deploy or rollback can move production between this read and the
+    # deploy — only a human could. Between two attempts nothing holds it,
+    # and a partial re-run that leaves this job out ("Re-run failed jobs"
+    # once it has succeeded, or the deploy job alone) executes deploy on
+    # THIS job's outputs of an earlier attempt, without reading production
+    # again: so deploy re-reads it first, in its freshness step, against
+    # the `production` output below.
+    # A job of its own, not a step of deploy: its "no" skips the WHOLE
+    # deploy job, so no deploy step — today's or a future one — can run
+    # uncleared, and no per-step if: can be forgotten.
     needs: build-and-push
     if: needs.build-and-push.outputs.is_latest == 'true'
+    runs-on: ubuntu-24.04
+    # Bounded like every job of the shared queue: the reads below take
+    # seconds, and every ssh inherits the liveness options of the shared
+    # bootstrap's ~/.ssh/config.
+    timeout-minutes: 5
+    outputs:
+      proceed: ${{ steps.compare.outputs.proceed }}
+      production: ${{ steps.compare.outputs.production }}
+    steps:
+      - name: Checkout the CI-validated commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Only to load the shared SSH action — the same pin as deploy, so
+          # both jobs run the action of the commit being deployed.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Bootstrap SSH (shared action, pinned host key)
+        uses: ./.github/actions/ssh-health-gate
+        with:
+          mode: bootstrap
+          ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          host_key: ${{ vars.VPS_HOST_KEY }}
+          vps_user: ${{ vars.VPS_USER }}
+          vps_host: ${{ vars.VPS_HOST }}
+
+      - name: Compare the candidate to the commit in production
+        id: compare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # READ-ONLY on the VPS. The commit in production is the tag of the
+          # api container's image: build-and-push tags every image
+          # sha-<commit>, compose creates the container from that exact
+          # reference, and Config.Image keeps it "as it was passed by the
+          # operator" (Docker's own definition), whatever later happens to
+          # the tag. The name is compose's <project>-<service>-<index>, the
+          # project being the /opt/smartcrops directory, as for the dump's
+          # volume name. The api, not the web, is the reference: D17 moves
+          # the api first on a deploy and last on a rollback, so a deploy, or
+          # a rollback to an older tag, that stops half-way leaves the api
+          # on the NEWER of the two commits. The web is read for the log only.
+          if ! api=$(ssh vps "docker container inspect --format '{{.State.Status}} {{.Config.Image}}' smartcrops-api-1"); then
+            echo "could not read the api container in production - failing loudly rather than guessing"
+            echo "(no api container at all is a runbook case: a new or rebuilt VPS - SMA-462)"
+            exit 1
+          fi
+          web=$(ssh vps "docker container inspect --format '{{.State.Status}} {{.Config.Image}}' smartcrops-web-1" 2>&1) || web="unreadable: $web"
+          # One log line per remote answer, whatever it holds: a newline or a
+          # carriage return in it would put the VPS's own text at the start
+          # of a log line, where the runner reads workflow commands. Only the
+          # printed copy is flattened — every decision below reads the raw
+          # answer, so an answer of several lines stays red.
+          api_line=${api//[$'\r\n']/ }
+          web_line=${web//[$'\r\n']/ }
+          echo "production, api container:  $api_line"
+          echo "production, web container:  $web_line"
+          echo "this run:                   $HEAD_SHA"
+          # A stopped api is a production in the middle of an operation:
+          # rollback.yml's restore stops it, and keeps it stopped until its
+          # replay succeeded — a deploy now would start a new api on
+          # whatever database that left. running, and restarting (the crash
+          # loop of a red health gate, which a fix-forward exists for), go
+          # on; any other state is red.
+          state=${api%% *}
+          image=${api#* }
+          case "$state" in
+            running|restarting) ;;
+            *)
+              state_line=${state//[$'\r\n']/ }
+              echo "the api container is '$state_line', not running - failing loudly rather than guessing"
+              exit 1
+              ;;
+          esac
+          # Exactly the reference this workflow publishes (the api image
+          # line of docker-compose.prod.yml): latest, a digest, a short sha
+          # or another owner is a production this CD did not make.
+          tag_re='^ghcr[.]io/alexandre-cerveau-audebeau/smartcrops-api:sha-([0-9a-f]{40})$'
+          if [[ ! "$image" =~ $tag_re ]]; then
+            echo "the api image is not a sha-<40> tag this CD publishes - failing loudly rather than guessing"
+            exit 1
+          fi
+          production=${BASH_REMATCH[1]}
+          # Recorded for the deploy job's freshness step: the 40 characters
+          # the expression just captured, written before the comparison. A
+          # partial re-run hands them to deploy as they are, and deploy
+          # checks production against them before it changes anything.
+          echo "production=$production" >> "$GITHUB_OUTPUT"
+          # BASE...HEAD = production...this run. Asked even when both are
+          # the same commit: the same-version replay is how this job gets
+          # proven in production. On an HTTP error, gh prints the error body
+          # on stdout and exits non-zero — the exit code decides, never the
+          # text.
+          if ! relation=$(gh api "repos/$GITHUB_REPOSITORY/compare/$production...$HEAD_SHA" --jq '.status'); then
+            echo "GitHub could not compare the two commits - failing loudly rather than guessing"
+            exit 1
+          fi
+          echo "this run relative to it:    $relation"
+          case "$relation" in
+            ahead)
+              echo "proceed=true" >> "$GITHUB_OUTPUT"
+              echo "this run descends from the commit in production - deploying"
+              ;;
+            identical)
+              echo "proceed=true" >> "$GITHUB_OUTPUT"
+              echo "this run is the commit in production - redeploying it"
+              ;;
+            behind)
+              echo "proceed=false" >> "$GITHUB_OUTPUT"
+              echo "::notice title=Deploy skipped::production runs $production, a descendant of this run - nothing was touched"
+              ;;
+            *)
+              echo "neither ahead of, identical to nor behind production - failing loudly rather than guessing"
+              exit 1
+              ;;
+          esac
+
+  deploy:
+    # Skipped transitively on red/untrusted CI (build-and-push guard) and
+    # on a red production read; explicitly on stale runs (the is_latest
+    # output) and on runs older than the commit in production (the proceed
+    # output, SMA-462). Both outputs belong to the attempt that wrote them:
+    # a partial re-run of this job only ("Re-run failed jobs" when it alone
+    # failed, or this job alone) executes it on the outputs of an EARLIER
+    # attempt, and neither gate runs again. Hence the freshness step below,
+    # ahead of every step that changes the VPS: it reads production again,
+    # and stops red if it moved.
+    needs: [build-and-push, compare-to-production]
+    if: needs.build-and-push.outputs.is_latest == 'true' && needs.compare-to-production.outputs.proceed == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -193,6 +354,76 @@ jobs:
           host_key: ${{ vars.VPS_HOST_KEY }}
           vps_user: ${{ vars.VPS_USER }}
           vps_host: ${{ vars.VPS_HOST }}
+
+      - name: Confirm production has not moved since the comparison
+        env:
+          RECORDED_PRODUCTION: ${{ needs.compare-to-production.outputs.production }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # The freshness check (SMA-462, the #315 review). A partial re-run
+          # — "Re-run failed jobs" when only this job failed, or this job
+          # alone — executes deploy on the outputs of an EARLIER attempt:
+          # compare-to-production does not run again, and its old "yes"
+          # would let this commit land over whatever another deploy, or a
+          # rollback, has put in production since. So deploy reads
+          # production again before its first change on the VPS, under the
+          # compare step's own rules — the same command, the same two
+          # states, the same anchored expression — and goes on in two cases
+          # only: production is still the commit that was compared, or it
+          # is already this run's commit (the api moves first, so a deploy
+          # that stopped half-way leaves it there). Anything else is red.
+          # When production moved, or when no compared commit reached this
+          # job, the way out is "Re-run all jobs": the run is judged again
+          # from the start, by the list gate and then against production.
+          # An api that is missing, stopped or on a foreign tag is red
+          # there too, until it is repaired (rollback.yml, or by hand).
+          # READ-ONLY on the VPS, and no call to GitHub: the only question
+          # here is whether production moved.
+          if ! api=$(ssh vps "docker container inspect --format '{{.State.Status}} {{.Config.Image}}' smartcrops-api-1"); then
+            echo "could not read the api container in production - failing loudly rather than guessing"
+            exit 1
+          fi
+          # One log line per remote answer, as in the compare step; the raw
+          # answer decides.
+          api_line=${api//[$'\r\n']/ }
+          echo "production, api container:  $api_line"
+          echo "this run:                   $HEAD_SHA"
+          state=${api%% *}
+          image=${api#* }
+          case "$state" in
+            running|restarting) ;;
+            *)
+              state_line=${state//[$'\r\n']/ }
+              echo "the api container is '$state_line', not running - failing loudly rather than guessing"
+              exit 1
+              ;;
+          esac
+          # The compare step's own expression: it now lives twice in this
+          # file, and a change of registry or owner must change both.
+          tag_re='^ghcr[.]io/alexandre-cerveau-audebeau/smartcrops-api:sha-([0-9a-f]{40})$'
+          if [[ ! "$image" =~ $tag_re ]]; then
+            echo "the api image is not a sha-<40> tag this CD publishes - failing loudly rather than guessing"
+            exit 1
+          fi
+          production=${BASH_REMATCH[1]}
+          # What the comparison read: a job output, so 40 hexadecimal
+          # characters or nothing this step can rely on.
+          sha_re='^[0-9a-f]{40}$'
+          if [[ ! "$RECORDED_PRODUCTION" =~ $sha_re ]]; then
+            echo "the comparison left no production commit to check against - failing loudly rather than guessing"
+            echo 'use "Re-run all jobs": the run is judged again from the start, by the list gate and then against production'
+            exit 1
+          fi
+          echo "compared against:           $RECORDED_PRODUCTION"
+          if [ "$production" = "$RECORDED_PRODUCTION" ]; then
+            echo "production unchanged since the comparison"
+          elif [ "$production" = "$HEAD_SHA" ]; then
+            echo "production already runs this commit — a deploy stopped half-way"
+          else
+            echo "production moved since the comparison: it ran $RECORDED_PRODUCTION then, it runs $production now - failing loudly rather than deploying over it"
+            echo 'use "Re-run all jobs", never this job alone: the run is judged again from the start, by the list gate and then against production'
+            exit 1
+          fi
 
       - name: Ensure the deployment layout exists
         run: |
