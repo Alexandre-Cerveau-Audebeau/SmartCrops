@@ -1,5 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HttpStatusError } from '../services/httpStatusError';
 import { gardenFixture } from '../test/fixtures/dashboard';
 import { SAVE_DEBOUNCE_MS } from './useDashboardPreferences';
 import { useGardenOrder } from './useGardenOrder';
@@ -13,8 +14,9 @@ import { saveGardenOrder } from '../services/gardenSettingsApi';
 
 // SMA-448, lot F5-a — the account's custom order (A-N5): applied at once,
 // written after the pause the layout takes, said in the panel's own region;
-// a failed write keeps the user's order and the next move retries. ONE write
-// on the wire at a time, always the latest list (PR #299, fix round 1, C).
+// a failed write keeps the user's order and the next move retries — and is
+// named for what it is (SMA-437, review of the v3, M3: R3-E1). ONE write on
+// the wire at a time, always the latest list (PR #299, fix round 1, C).
 
 const ranked = (id: string, sortOrder: number | null, createdAt: string) =>
   gardenFixture({ id, name: id, sortOrder, createdAt });
@@ -95,7 +97,7 @@ describe('useGardenOrder', () => {
     expect(result.current.order).toEqual(['b', 'a', 'n']);
   });
 
-  it('keeps the user’s order when the write fails — a 403, a server before this lot — says it, and the next move retries', async () => {
+  it('keeps the user’s order when the write fails — a 503 the server did not explain — says a failure, and the next move retries', async () => {
     const failed = deferred<void>();
     vi.mocked(saveGardenOrder).mockReturnValueOnce(failed.promise);
     const { result } = renderHook(() => useGardenOrder(GARDENS));
@@ -105,11 +107,12 @@ describe('useGardenOrder', () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
     });
     await act(async () => {
-      failed.reject(new Error('403'));
+      failed.reject(new HttpStatusError('Request failed (503)', 503));
       await failed.promise.catch(() => undefined);
     });
 
     expect(result.current.state).toBe('error');
+    expect(result.current.failure).toEqual({ kind: 'failed' });
     expect(result.current.ids).toEqual(['a', 'b', 'n']);
 
     vi.mocked(saveGardenOrder).mockResolvedValueOnce(undefined);
@@ -120,8 +123,63 @@ describe('useGardenOrder', () => {
     });
     await flushWrite();
     expect(result.current.state).toBe('saved');
+    expect(result.current.failure).toBeNull();
     expect(saveGardenOrder).toHaveBeenCalledTimes(2);
     expect(vi.mocked(saveGardenOrder).mock.calls[1]![0]).toEqual(['n', 'a', 'b']);
+  });
+
+  // SMA-437, review of the v3, M3 — R3-E1 applied to the order: a write that
+  // did not go through is named for what it is, so the panel never promises a
+  // retry to a session that is gone, nor to a formula without the order.
+  describe('why the write failed, named for what it is (SMA-437, review of the v3, M3 — R3-E1)', () => {
+    /** One move, written after the pause and refused with `error`: the hook once the refusal landed. */
+    async function writeRefusedWith(error: unknown) {
+      const failed = deferred<void>();
+      vi.mocked(saveGardenOrder).mockReturnValueOnce(failed.promise);
+      const { result } = renderHook(() => useGardenOrder(GARDENS));
+      act(() => result.current.move(0, 2));
+      await act(async () => {
+        vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      });
+      await act(async () => {
+        failed.reject(error);
+        await failed.promise.catch(() => undefined);
+      });
+      return result;
+    }
+
+    it('a bare Error — a network that dropped before any status — is a failure a retry may cure', async () => {
+      const result = await writeRefusedWith(new TypeError('Failed to fetch'));
+
+      expect(result.current.state).toBe('error');
+      expect(result.current.failure).toEqual({ kind: 'failed' });
+      expect(result.current.ids).toEqual(['a', 'b', 'n']);
+    });
+
+    it('a session that expired — 401 — is said as such, the order kept', async () => {
+      const result = await writeRefusedWith(new HttpStatusError('Request failed (401)', 401));
+
+      expect(result.current.state).toBe('error');
+      expect(result.current.failure).toEqual({ kind: 'unauthorized' });
+      expect(result.current.ids).toEqual(['a', 'b', 'n']);
+    });
+
+    it('a formula without the custom order — 403 formula.gardenOrder — is the formula’s refusal, with the formula', async () => {
+      const result = await writeRefusedWith(
+        new HttpStatusError('Request failed (403)', 403, { status: 403, code: 'formula.gardenOrder', formula: 'gardener' })
+      );
+
+      expect(result.current.state).toBe('error');
+      expect(result.current.failure).toEqual({ kind: 'refused', formula: 'gardener' });
+      expect(result.current.ids).toEqual(['a', 'b', 'n']);
+    });
+
+    it('a 403 the server did not explain is a right the account lacks', async () => {
+      const result = await writeRefusedWith(new HttpStatusError('Request failed (403)', 403));
+
+      expect(result.current.state).toBe('error');
+      expect(result.current.failure).toEqual({ kind: 'forbidden' });
+    });
   });
 
   it('puts a garden created after the order was set at the head, without a write, and forgets a deleted one', async () => {

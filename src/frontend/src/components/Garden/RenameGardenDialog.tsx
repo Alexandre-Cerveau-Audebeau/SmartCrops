@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -9,7 +10,9 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import ReconnectButton from '../ReconnectButton';
 import { updateGarden } from '../../services/gardenApi';
+import { requestFailureKind, type RequestFailureKind } from '../../services/requestFailure';
 import type { DashboardGardenData } from '../../types/DashboardData';
 
 interface Props {
@@ -32,14 +35,17 @@ interface Props {
  * a second surface drawing the same dialog is what makes it a component of
  * its own — the same dialog by construction, like `DeleteGardenDialog`
  * beside it. It owns the API call, so the pending and error states live in
- * one place: a failure keeps it open with the typed values intact for a retry.
+ * one place: a failure keeps it open with the typed values intact for a retry
+ * — and is named for what it is (SMA-437, review of the v3, M3 — R3-E1, as
+ * the creation of a garden does): a session that expired, with the way to
+ * sign in again; a right the account lacks; a failure and its retry.
  */
 export default function RenameGardenDialog({ garden, onClose, onRenamed }: Props) {
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<RequestFailureKind | null>(null);
 
   // The fields take the garden's own values on the OPENING edge — a garden
   // where there was none, or another garden — and a stale error goes with
@@ -52,7 +58,7 @@ export default function RenameGardenDialog({ garden, onClose, onRenamed }: Props
     if (garden) {
       setName(garden.name);
       setDescription(garden.description ?? '');
-      setError(false);
+      setError(null);
     }
   }
 
@@ -67,20 +73,20 @@ export default function RenameGardenDialog({ garden, onClose, onRenamed }: Props
    */
   const handleClose = () => {
     if (saving) return;
-    setError(false);
+    setError(null);
     onClose();
   };
 
   const handleSave = async () => {
     if (!garden || saving) return;
     setSaving(true);
-    setError(false);
+    setError(null);
     try {
       await updateGarden(garden.id, name, description || undefined);
       onClose();
       onRenamed();
-    } catch {
-      setError(true);
+    } catch (failure) {
+      setError(requestFailureKind(failure));
     } finally {
       setSaving(false);
     }
@@ -92,7 +98,18 @@ export default function RenameGardenDialog({ garden, onClose, onRenamed }: Props
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 1 }}>
-            {t('gardens.mutationError')}
+            {error === 'unauthorized'
+              ? t('common.sessionExpired')
+              : error === 'forbidden'
+                ? t('common.forbidden')
+                : t('gardens.mutationError')}
+            {/* The way back, beside the words — as the planner's toast
+                places it (R3-E1, L4). */}
+            {error === 'unauthorized' && (
+              <Box component="span" sx={{ display: 'inline-block', ml: 1 }}>
+                <ReconnectButton />
+              </Box>
+            )}
           </Alert>
         )}
         <TextField

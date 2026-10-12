@@ -757,6 +757,7 @@
           "newChip": "Nouveau",
           "orderSaved": "Ordre enregistré.",
           "orderError": "Ordre non enregistré — la prochaine modification réessaie.",
+          "orderRefused": "Ordre non enregistré — votre formule {{formula}} ne permet pas l’ordre personnalisé.",
           "notReady": "Vos jardins se chargent…",
           "place_ordinal_one": "{{count}}ʳᵉ position",
           "place_ordinal_two": "{{count}}ᵉ position",

@@ -13,7 +13,9 @@ import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import ReconnectButton from '../ReconnectButton';
 import { deleteGarden } from '../../services/gardenApi';
+import { requestFailureKind, type RequestFailureKind } from '../../services/requestFailure';
 
 /**
  * What the dialog can say about the consequences, per caller:
@@ -48,7 +50,10 @@ const PAPER_MAX_WIDTH_PX = 560;
  * DeleteAccountDialog brake (SMA-341) applied to gardens, reused from BOTH
  * the "Mes Jardins" card and the planner's settings Danger zone. The dialog
  * owns the API call so the pending/error states live in one place: a failure
- * keeps it open with the typed value intact for a retry. The name field takes
+ * keeps it open with the typed value intact for a retry — and is named for
+ * what it is (SMA-437, review of the v3, M3 — R3-E1, as the creation of a
+ * garden does): a session that expired, with the way to sign in again; a
+ * right the account lacks; a failure and its retry. The name field takes
  * the initial focus — typing the name is the first expected gesture (round 1).
  */
 export default function DeleteGardenDialog({
@@ -65,7 +70,7 @@ export default function DeleteGardenDialog({
   const inputId = useId();
   const [typed, setTyped] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<RequestFailureKind | null>(null);
 
   // Reset the brake on the CLOSING edge (open → false), whichever side closed
   // it: handleClose resets on its own, but a parent that flips `open` itself
@@ -78,7 +83,7 @@ export default function DeleteGardenDialog({
     setPrevOpen(open);
     if (!open) {
       setTyped('');
-      setError(false);
+      setError(null);
     }
   }
 
@@ -92,21 +97,21 @@ export default function DeleteGardenDialog({
   const handleClose = () => {
     if (deleting) return;
     setTyped('');
-    setError(false);
+    setError(null);
     onClose();
   };
 
   const handleConfirm = async () => {
     if (!matches || deleting) return;
-    setError(false);
+    setError(null);
     setDeleting(true);
     try {
       await deleteGarden(gardenId);
       setTyped('');
       setDeleting(false);
       onDeleted();
-    } catch {
-      setError(true);
+    } catch (failure) {
+      setError(requestFailureKind(failure));
       setDeleting(false);
     }
   };
@@ -180,7 +185,20 @@ export default function DeleteGardenDialog({
           </Typography>
         </Box>
         {error && (
-          <Alert severity="error">{t('gardens.deleteDialog.error')}</Alert>
+          <Alert severity="error">
+            {error === 'unauthorized'
+              ? t('common.sessionExpired')
+              : error === 'forbidden'
+                ? t('common.forbidden')
+                : t('gardens.deleteDialog.error')}
+            {/* The way back, beside the words — as the planner's toast
+                places it (R3-E1, L4). */}
+            {error === 'unauthorized' && (
+              <Box component="span" sx={{ display: 'inline-block', ml: 1 }}>
+                <ReconnectButton />
+              </Box>
+            )}
+          </Alert>
         )}
         <Box>
           <Typography

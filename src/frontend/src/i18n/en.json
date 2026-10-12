@@ -757,6 +757,7 @@
           "newChip": "New",
           "orderSaved": "Order saved.",
           "orderError": "Order not saved — the next change retries.",
+          "orderRefused": "Order not saved — your {{formula}} formula does not allow a custom order.",
           "notReady": "Your gardens are loading…",
           "place_ordinal_one": "{{count}}st position",
           "place_ordinal_two": "{{count}}nd position",

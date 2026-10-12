@@ -1,9 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
+import { HttpStatusError } from '../services/httpStatusError';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
@@ -95,11 +96,16 @@ function renderPage(level: DashboardLevel, options: Record<string, unknown> | nu
     blocks: gardensBlocks(level, options),
     updatedAt: null,
   });
+  // On its route, with the login page beside it: the way back « Sign in
+  // again » offers (SMA-437, review of the v3, M3) has somewhere to lead.
   render(
     <LanguageProvider>
       <UnitSystemProvider>
-        <MemoryRouter>
-          <GardensDashboard />
+        <MemoryRouter initialEntries={['/gardens']}>
+          <Routes>
+            <Route path="/gardens" element={<GardensDashboard />} />
+            <Route path="/login" element={<div>login page</div>} />
+          </Routes>
         </MemoryRouter>
       </UnitSystemProvider>
     </LanguageProvider>
@@ -143,6 +149,8 @@ afterEach(() => {
   // test (the `beforeEach` above clears that mock again; this hook no longer
   // relies on it). Unmounted here, it is cleared with them.
   cleanup();
+  // The clock a test faked once its page was up (the refusals below): real again, after the unmount.
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -322,17 +330,88 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     await waitFor(() => expect(region.textContent).toBe('Order saved.'));
   });
 
-  it('a write the server refuses — 403 formula.gardenOrder — keeps the order on screen and says it is not saved', async () => {
-    vi.mocked(saveGardenOrder).mockRejectedValue(new Error('403'));
-    const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
-    const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+  // SMA-437, review of the v3, M3 — R3-E1 applied to the order's region: a
+  // write that did not go through is said for what it is — a failure and its
+  // retry, as before; a formula without the custom order; a session that
+  // expired, with the way to sign in again — never « the next change retries »
+  // to a user it would mislead. The pause before the write is advanced on a
+  // clock faked once the page and the panel are up (never before a find), and
+  // the refusal is flushed through the hook's promise chain before the region
+  // is read — no wait on a timer.
+  describe('a write that did not go through, said for what it is (SMA-437, review of the v3, M3 — R3-E1)', () => {
+    /** One move, its write let out after the pause, and its refusal landed. */
+    async function moveAndLetTheWriteFail(panel: HTMLElement) {
+      vi.useFakeTimers();
+      fireEvent.click(within(panel).getByRole('button', { name: 'Move “Carré aromatique” down' }));
+      await act(async () => {
+        vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      });
+      expect(saveGardenOrder).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        for (let hop = 0; hop < 6; hop++) await Promise.resolve();
+      });
+    }
 
-    fireEvent.click(within(panel).getByRole('button', { name: 'Move “Carré aromatique” down' }));
-    await act(() => new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100)));
+    const orderKept = (panel: HTMLElement) => {
+      const list = within(panel).getByRole('list', { name: 'Your gardens, in your order' });
+      expect(within(list).getAllByRole('listitem')[1]!.textContent).toContain('Carré aromatique');
+    };
 
-    await waitFor(() => expect(region.textContent).toBe('Order not saved — the next change retries.'));
-    const list = within(panel).getByRole('list', { name: 'Your gardens, in your order' });
-    expect(within(list).getAllByRole('listitem')[1]!.textContent).toContain('Carré aromatique');
+    it('a failure the server did not explain — a 503 — keeps the order on screen and says the next change retries, as before', async () => {
+      vi.mocked(saveGardenOrder).mockRejectedValue(new HttpStatusError('Request failed (503)', 503));
+      const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+      const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+
+      await moveAndLetTheWriteFail(panel);
+
+      expect(region.textContent).toBe('Order not saved — the next change retries.');
+      orderKept(panel);
+      expect(within(panel).queryByRole('button', { name: 'Sign in again' })).toBeNull();
+    });
+
+    it('a bare Error — a network that dropped before any status — says the same', async () => {
+      vi.mocked(saveGardenOrder).mockRejectedValue(new TypeError('Failed to fetch'));
+      const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+      const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+
+      await moveAndLetTheWriteFail(panel);
+
+      expect(region.textContent).toBe('Order not saved — the next change retries.');
+      orderKept(panel);
+    });
+
+    it('a write the server refuses — 403 formula.gardenOrder — keeps the order on screen and says the formula has no custom order, never a retry', async () => {
+      vi.mocked(saveGardenOrder).mockRejectedValue(
+        new HttpStatusError('Request failed (403)', 403, { status: 403, code: 'formula.gardenOrder', formula: 'gardener' })
+      );
+      const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+      const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+
+      await moveAndLetTheWriteFail(panel);
+
+      expect(region.textContent).toBe('Order not saved — your Gardener formula does not allow a custom order.');
+      expect(region.textContent).not.toMatch(/retries/);
+      orderKept(panel);
+      expect(within(panel).queryByRole('button', { name: 'Sign in again' })).toBeNull();
+    });
+
+    it('a session that expired — 401 — says so, and « Sign in again » leads to the login page — never « the next change retries »', async () => {
+      vi.mocked(saveGardenOrder).mockRejectedValue(new HttpStatusError('Request failed (401)', 401));
+      const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+      const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+
+      await moveAndLetTheWriteFail(panel);
+
+      expect(region.textContent).toBe('Your session has expired. Sign in again to continue.');
+      expect(region.textContent).not.toMatch(/retries/);
+      orderKept(panel);
+      fireEvent.click(within(panel).getByRole('button', { name: 'Sign in again' }));
+      // `useReconnect` awaits the logout before it navigates: microtasks, flushed here — no timer, the clock is faked.
+      await act(async () => {
+        for (let hop = 0; hop < 6; hop++) await Promise.resolve();
+      });
+      expect(screen.getByText('login page')).toBeInTheDocument();
+    });
   });
 
   // SMA-437, lot V3-07, P2 (contract A-17 — Alexandre, 28/09): « Réinitialiser »
