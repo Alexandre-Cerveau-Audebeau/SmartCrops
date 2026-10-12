@@ -1,10 +1,18 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using SmartCrops.Api.Controllers;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -15,7 +23,8 @@ namespace SmartCrops.Api.Tests.Integration.Endpoints;
 /// (pre-flight F5 § C.1, § C.2; decided by Alexandre on 28/09 — contract v3
 /// A-N5, A-N6): <c>POST /api/gardens/{id}/open</c>, the ONE stamp of a
 /// garden's last opening, and <c>PUT /api/gardens/order</c>, the account's
-/// custom order, set-based and without a ceiling. Both leave
+/// custom order, set-based and without a ceiling on the number of gardens
+/// (its body has one since SMA-437 M6 — the last test of its section). Both leave
 /// <c>UpdatedAt</c> INTACT — « dernière modification » stays true — which is
 /// the proof the pre-flight asks for first (§ D, proof 1): a write through a
 /// tracked entity would make <c>UpdateTimestampInterceptor</c> advance it.
@@ -288,6 +297,49 @@ public class GardensSettingsEndpointsTests : IntegrationTestBase
         var response = await Client.PutAsJsonAsync("/api/gardens/order", new { ids = new[] { Guid.NewGuid() } });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>
+    /// SMA-437, review of the v3, M6 — the body of <c>PUT /api/gardens/order</c>
+    /// carries the ceiling <c>PUT /api/dashboard/preferences</c> gave itself in
+    /// #267: <c>[RequestSizeLimit]</c>, one MiB, applied before model binding.
+    /// TestServer does not provide <c>IHttpMaxRequestBodySizeFeature</c> (#267's
+    /// probe, repeated for this lot: a 1.2 MB body sent through
+    /// <see cref="IntegrationTestBase.Client"/> is bound in full and refused on
+    /// its ids, never 413), so no request can prove the ceiling here. The
+    /// attribute is read on the action by reflection, and the filter it builds
+    /// is run against a body-size feature of this test's own — the feature
+    /// Kestrel consults — which must come out at 1 048 576 bytes.
+    /// </summary>
+    [Fact]
+    public void PutOrder_CarriesTheBodyCeiling_OneMiB_SetOnTheBodySizeFeature()
+    {
+        var action = typeof(GardensController).GetMethod(nameof(GardensController.PutOrder));
+        Assert.NotNull(action);
+        var attribute = action!.GetCustomAttribute<RequestSizeLimitAttribute>();
+        Assert.NotNull(attribute);
+
+        // The attribute is a filter factory, and MVC registers the filter it
+        // resolves: built from the application's own services, the filter sets
+        // the limit on the request's body-size feature when it is the closest
+        // size policy of the action — so it is run as the one filter of its list.
+        using var scope = CreateScope();
+        var filter = Assert.IsAssignableFrom<IAuthorizationFilter>(((IFilterFactory)attribute!).CreateInstance(scope.ServiceProvider));
+        var feature = new BodySizeFeature();
+        var httpContext = new DefaultHttpContext();
+        httpContext.Features.Set<IHttpMaxRequestBodySizeFeature>(feature);
+        var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
+
+        filter.OnAuthorization(new AuthorizationFilterContext(actionContext, [filter]));
+
+        Assert.Equal(1_048_576L, feature.MaxRequestBodySize);
+    }
+
+    /// <summary>A request's body-size feature as Kestrel exposes it: writable, and empty until a policy sets it.</summary>
+    private sealed class BodySizeFeature : IHttpMaxRequestBodySizeFeature
+    {
+        public bool IsReadOnly => false;
+        public long? MaxRequestBodySize { get; set; }
     }
 
     // ── DELETE /api/gardens/{id} — the opening and the place go with the garden ──

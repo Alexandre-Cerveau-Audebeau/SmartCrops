@@ -13,7 +13,9 @@ namespace SmartCrops.Api.Controllers;
 /// other meaning on the gardens' routes, where ownership answers 404 and
 /// authentication 401. The switch of formula keeps its own 409
 /// <c>formula.tooSmall</c> (<see cref="FormulasController"/>): there the
-/// STATE blocks, not the right.
+/// STATE blocks, not the right. One refusal is a <b>400</b>, <see cref="Stale"/>:
+/// the layout write of a stale tab (SMA-437, review of the v3, M11) — the
+/// status and the message it always had, in the form of the others.
 /// </summary>
 public static class FormulaRefusals
 {
@@ -27,6 +29,29 @@ public static class FormulaRefusals
     public const string GardenOrderCode = "formula.gardenOrder";
 
     /// <summary>
+    /// SMA-437, review of the v3, M11 — the level of a layout is not the
+    /// account's formula: the tab that wrote it is STALE, its formula changed
+    /// on another device since it read its layout.
+    /// </summary>
+    public const string StaleCode = "formula.stale";
+
+    /// <summary>
+    /// <c>{ code: "formula.stale", formula }</c> — <b>400</b>, not 403: the
+    /// refusal of before, its status and its message unchanged (the request
+    /// is not one this server can store for THIS account — its level is a
+    /// formula the account no longer has, R8), as a problem a client reads:
+    /// the layout it holds visited the formula it left, and re-reading the
+    /// formula and its layout is the cure, never a retry.
+    /// </summary>
+    public static ObjectResult Stale(string level, string formula)
+    {
+        var problem = Problem($"level '{level}' is not the account's formula '{formula}'", StatusCodes.Status400BadRequest);
+        problem.Extensions["code"] = StaleCode;
+        problem.Extensions["formula"] = formula;
+        return Refusal(problem);
+    }
+
+    /// <summary>
     /// <c>{ code: "formula.gardenOrder", formula }</c>: the account's formula
     /// does not serve the custom order of its gardens, so its write surface
     /// (<c>PUT /api/gardens/order</c>) is refused — the right is checked here,
@@ -37,7 +62,7 @@ public static class FormulaRefusals
         var problem = Problem("The formula has no custom order of its gardens.");
         problem.Extensions["code"] = GardenOrderCode;
         problem.Extensions["formula"] = formula.Key;
-        return Forbidden(problem);
+        return Refusal(problem);
     }
 
     /// <summary>
@@ -52,7 +77,7 @@ public static class FormulaRefusals
         problem.Extensions["formula"] = formula.Key;
         problem.Extensions["limit"] = formula.GardenLimit;
         problem.Extensions["current"] = current;
-        return Forbidden(problem);
+        return Refusal(problem);
     }
 
     /// <summary>
@@ -69,20 +94,22 @@ public static class FormulaRefusals
         problem.Extensions["limit"] = Size(formula.MaxGardenSize);
         problem.Extensions["current"] = current is null ? null : Size(current);
         problem.Extensions["requested"] = Size(requested);
-        return Forbidden(problem);
+        return Refusal(problem);
     }
 
     private static object Size(GardenSize size) => new { width = size.Width, height = size.Height };
 
-    private static ProblemDetails Problem(string title) => new()
+    /// <summary>The problem, at its status — 403 unless said otherwise (<see cref="Stale"/>).</summary>
+    private static ProblemDetails Problem(string title, int status = StatusCodes.Status403Forbidden) => new()
     {
-        Status = StatusCodes.Status403Forbidden,
+        Status = status,
         Title = title,
     };
 
-    private static ObjectResult Forbidden(ProblemDetails problem) => new(problem)
+    /// <summary>The problem on the wire, at the status it carries: one builder for the four refusals.</summary>
+    private static ObjectResult Refusal(ProblemDetails problem) => new(problem)
     {
-        StatusCode = StatusCodes.Status403Forbidden,
+        StatusCode = problem.Status,
         ContentTypes = { "application/problem+json" },
     };
 }

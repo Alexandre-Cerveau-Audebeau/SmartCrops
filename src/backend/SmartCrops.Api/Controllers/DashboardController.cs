@@ -631,6 +631,12 @@ public class DashboardController(
     /// a save never lands on a row a switch has just refilled, and two first
     /// saves never race on the unique index — the second finds the first's
     /// row.</para>
+    ///
+    /// <para>SMA-437, review of the v3, M11 — the level that is not the
+    /// account's formula is refused as a problem the client reads,
+    /// <c>formula.stale</c> (<see cref="FormulaRefusals.Stale"/>): the tab
+    /// that sent it read its layout before the formula changed on another
+    /// device, and must re-read rather than retry.</para>
     /// </summary>
     [HttpPut("preferences")]
     [RequestSizeLimit(MaxRequestBodyBytes)]
@@ -645,6 +651,19 @@ public class DashboardController(
 
         var formula = await AccountFormulaLock.LockAsync(context, userId, ct);
         if (formula is null) return Unauthorized();
+
+        // SMA-437, review of the v3, M11 — a known level that is not the
+        // account's formula names a STALE tab: its formula changed on another
+        // device since it read its layout (only PUT /api/formulas/current
+        // changes it, R8), and the layout it sends visited the formula it
+        // left. Refused as before — 400, the same message — but as a problem
+        // the client reads: a code to branch on and the account's formula, so
+        // the tab re-reads instead of retrying. Before `Validate`, whose other
+        // refusals stay the plain 400 they were.
+        if (DashboardPresets.IsKnownLevel(request.Level) && request.Level != formula)
+        {
+            return FormulaRefusals.Stale(request.Level, formula);
+        }
 
         if (Validate(request, formula) is { } error) return BadRequest(new { error });
 
@@ -856,6 +875,8 @@ public class DashboardController(
     private static string? Validate(SaveDashboardPreferencesRequest request, string formula)
     {
         if (!DashboardPresets.IsKnownLevel(request.Level)) return "unknown level";
+        // Answered by PutPreferences as `formula.stale` before this runs (SMA-437,
+        // review of the v3, M11); kept so the check holds on its own.
         if (request.Level != formula) return $"level '{request.Level}' is not the account's formula '{formula}'";
         if (DashboardPresets.For(request.Level).Count == 0) return $"level '{request.Level}' has no dashboard block to store";
         if (request.Blocks.Count == 0) return "blocks must not be empty";

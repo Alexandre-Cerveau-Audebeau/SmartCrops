@@ -72,7 +72,7 @@ describe('GardensOptionsPanel — the « Nouveau » chip reads the list once, ne
   it('on the server’s places: 2 chips of 3, 20 of 30 — and the same lookups in the list for 30 rows as for 3', () => {
     const scan = (count: number) => {
       const gardens = panelGardens(count);
-      const order: GardenOrder = { ids: customOrderIds(gardens), order: null, state: 'idle', move: () => {} };
+      const order: GardenOrder = { ids: customOrderIds(gardens), order: null, state: 'idle', failure: null, move: () => {} };
       let chips = 0;
       const lookups = lookupsIn({ gardens }, () => {
         chips = newChips(gardens, order);
@@ -90,7 +90,7 @@ describe('GardensOptionsPanel — the « Nouveau » chip reads the list once, ne
     const scan = (count: number) => {
       const gardens = panelGardens(count);
       const local = gardens.filter((_, index) => index % 3 === 0).map((garden) => garden.id);
-      const order: GardenOrder = { ids: customOrderIds(gardens, local), order: local, state: 'idle', move: () => {} };
+      const order: GardenOrder = { ids: customOrderIds(gardens, local), order: local, state: 'idle', failure: null, move: () => {} };
       let chips = 0;
       const lookups = lookupsIn({ gardens, local }, () => {
         chips = newChips(gardens, order);

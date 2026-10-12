@@ -335,6 +335,7 @@
     "levelChipAdjusted": "Vue {{level}} · ajustée",
     "loadError": "Impossible de charger votre tableau de bord.",
     "retry": "Réessayer",
+    "formulaChanged": "Votre formule a changé sur un autre appareil : la page s’est mise à jour.",
     "soon": "Bientôt disponible",
     "novice": {
       "list": "Vos jardins",
@@ -426,8 +427,6 @@
       "compare": {
         "title": "Comparer les formules",
         "subtitle": "Tout ce qui change d’une formule à l’autre, ligne par ligne.",
-        "yes": "Oui",
-        "no": "Non",
         "unlimited": "Sans limite",
         "upTo_one": "Jusqu’à {{count}}",
         "upTo_other": "Jusqu’à {{count}}",
@@ -500,7 +499,6 @@
     },
     "formulaChooser": {
       "title": "Changer de formule",
-      "promise": "Changez quand vous voulez, dans les deux sens, sans rien perdre.",
       "close": "Fermer sans changer de formule",
       "chipLabel": "Vue {{level}} — changer de formule",
       "tooltip": "Changer de formule"
@@ -760,6 +758,7 @@
           "newChip": "Nouveau",
           "orderSaved": "Ordre enregistré.",
           "orderError": "Ordre non enregistré — la prochaine modification réessaie.",
+          "orderRefused": "Ordre non enregistré — votre formule {{formula}} ne permet pas l’ordre personnalisé.",
           "notReady": "Vos jardins se chargent…",
           "place_ordinal_one": "{{count}}ʳᵉ position",
           "place_ordinal_two": "{{count}}ᵉ position",
@@ -1561,6 +1560,12 @@
       "cellRange": "{{from}}–{{to}}",
       "cancel": "Annuler",
       "confirm": "Retirer"
+    },
+    "leaveDialog": {
+      "title": "Quitter sans enregistrer ?",
+      "body": "Vos modifications non enregistrées seront perdues si vous quittez le planificateur maintenant.",
+      "stay": "Rester",
+      "leave": "Quitter sans enregistrer"
     },
     "templates": {
       "title": "Modèles de jardin",
