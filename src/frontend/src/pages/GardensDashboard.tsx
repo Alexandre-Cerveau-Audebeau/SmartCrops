@@ -1146,7 +1146,10 @@ export default function GardensDashboard() {
           capabilities={capabilities}
           blocks={blocks}
           adjusted={adjusted}
-          switching={switching}
+          // SMA-437, review of the v3, M11 — a stale re-read replaces the
+          // layout as a switch does: the panel takes no change meanwhile
+          // (the hook refuses it too) and comes back live on the fresh one.
+          switching={switching || loading}
           onClose={() => setPanelOpen(false)}
           // SMA-448, PR #297, fix round 1 (A1) — the panel chooses no formula
           // any more: its link opens the choice screen, like the chip.

@@ -288,11 +288,14 @@ export function useDashboardPreferences() {
   /**
    * Applies a layout locally and schedules its write. The ONE side-effect path
    * — and so the one place a change is refused while a switch is in flight
-   * (S5): nothing is drawn that the switch would then take away.
+   * (S5), or a stale re-read (M11): nothing is drawn that the switch or the
+   * read would then take away, and nothing is written under the formula left
+   * — refused again, as stale. The page's panel is inert meanwhile, as during
+   * a switch.
    */
   const commit = useCallback(
     (next: Layout) => {
-      if (switchingRef.current) return;
+      if (switchingRef.current || staleRef.current) return;
       layoutRef.current = next;
       unsavedRef.current = true;
       setLayout(next);

@@ -9,7 +9,7 @@ import { dashboardFixture } from '../test/fixtures/dashboard';
 import { weatherFixture } from '../test/fixtures/weather';
 import { deferred } from '../test/responses';
 import { SAVE_DEBOUNCE_MS } from '../hooks/useDashboardPreferences';
-import type { DashboardLevel } from '../types/Dashboard';
+import type { DashboardLevel, DashboardPreferences } from '../types/Dashboard';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -193,5 +193,86 @@ describe('a tab whose formula changed on another device (SMA-437, review of the 
     expect(changeFormula).not.toHaveBeenCalled();
     expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Changes not saved')).toBeNull();
+  });
+
+  /** The Customize panel open on the page up as a Gardener. */
+  async function openCustomize() {
+    const customize = await screen.findByRole('button', { name: 'Customize' });
+    await waitFor(() => expect(customize).toBeEnabled());
+    fireEvent.click(customize);
+    return await screen.findByRole('dialog', { name: 'Customize' });
+  }
+
+  // The adversarial re-read of the diff before the PR: the panel stayed live
+  // over the re-read, and a change made then was drawn on the layout being
+  // replaced and written under the formula left; and the panel's closing on
+  // a choice that ended `stale` was claimed, not pinned.
+  it('while the page re-reads itself, the Customize panel takes no change — its controls disabled, as during a switch — and comes back live on the fresh page', async () => {
+    const server = serve('gardener');
+    renderPage();
+    const panel = await openCustomize();
+    const tips = () => within(panel).getByRole('switch', { name: 'Show — Tips' });
+    expect(tips()).toBeEnabled();
+
+    // On the phone, meanwhile: the account goes Expert. The re-read HELD on
+    // the wire: the window a change could fall in.
+    server.formula = 'expert';
+    const reread = deferred<DashboardPreferences>();
+    vi.mocked(fetchDashboardPreferences).mockReturnValueOnce(reread.promise);
+
+    vi.useFakeTimers();
+    fireEvent.click(tips());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(SAID)).toBeInTheDocument();
+    expect(tips()).toBeDisabled();
+
+    await act(async () => {
+      reread.resolve({
+        schemaVersion: 1,
+        level: 'expert',
+        capabilities: capabilitiesFor('expert'),
+        isPreset: true,
+        formulaChosen: true,
+        blocks: presetFor('expert'),
+        updatedAt: null,
+      });
+      await reread.promise;
+    });
+    expect(within(panel).getAllByRole('switch')[0]).toBeEnabled();
+    // The panel still stands over the page, which MUI hides from assistive technology: the chip is read through it.
+    expect(screen.getByRole('button', { name: 'Expert view — change formula', hidden: true })).toBeInTheDocument();
+  });
+
+  it('a change of formula asked from the Customize panel: the panel closes with the screen, over the re-read page', async () => {
+    const server = serve('gardener');
+    renderPage();
+    const panel = await openCustomize();
+    server.formula = 'expert';
+    // A change whose write is HELD (as above): the choice writes it first
+    // (S2) and meets the refusal there — released inside `act`.
+    const write = deferred<void>();
+    vi.mocked(saveDashboardPreferences).mockReturnValueOnce(write.promise);
+    fireEvent.click(within(panel).getByRole('switch', { name: 'Show — Tips' }));
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Change formula' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Novice' }));
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      write.reject(new HttpStatusError('Request failed (400)', 400, { status: 400, code: 'formula.stale', formula: 'expert' }));
+      await write.promise.catch(() => undefined);
+    });
+
+    expect(await screen.findByText(SAID)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull());
+    expect(await screen.findByRole('button', { name: 'Expert view — change formula' })).toBeInTheDocument();
+    expect(changeFormula).not.toHaveBeenCalled();
   });
 });

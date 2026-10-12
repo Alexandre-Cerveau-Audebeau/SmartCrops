@@ -45,18 +45,10 @@ public static class FormulaRefusals
     /// </summary>
     public static ObjectResult Stale(string level, string formula)
     {
-        var problem = new ProblemDetails
-        {
-            Status = StatusCodes.Status400BadRequest,
-            Title = $"level '{level}' is not the account's formula '{formula}'",
-        };
+        var problem = Problem($"level '{level}' is not the account's formula '{formula}'", StatusCodes.Status400BadRequest);
         problem.Extensions["code"] = StaleCode;
         problem.Extensions["formula"] = formula;
-        return new ObjectResult(problem)
-        {
-            StatusCode = StatusCodes.Status400BadRequest,
-            ContentTypes = { "application/problem+json" },
-        };
+        return Refusal(problem);
     }
 
     /// <summary>
@@ -70,7 +62,7 @@ public static class FormulaRefusals
         var problem = Problem("The formula has no custom order of its gardens.");
         problem.Extensions["code"] = GardenOrderCode;
         problem.Extensions["formula"] = formula.Key;
-        return Forbidden(problem);
+        return Refusal(problem);
     }
 
     /// <summary>
@@ -85,7 +77,7 @@ public static class FormulaRefusals
         problem.Extensions["formula"] = formula.Key;
         problem.Extensions["limit"] = formula.GardenLimit;
         problem.Extensions["current"] = current;
-        return Forbidden(problem);
+        return Refusal(problem);
     }
 
     /// <summary>
@@ -102,20 +94,22 @@ public static class FormulaRefusals
         problem.Extensions["limit"] = Size(formula.MaxGardenSize);
         problem.Extensions["current"] = current is null ? null : Size(current);
         problem.Extensions["requested"] = Size(requested);
-        return Forbidden(problem);
+        return Refusal(problem);
     }
 
     private static object Size(GardenSize size) => new { width = size.Width, height = size.Height };
 
-    private static ProblemDetails Problem(string title) => new()
+    /// <summary>The problem, at its status — 403 unless said otherwise (<see cref="Stale"/>).</summary>
+    private static ProblemDetails Problem(string title, int status = StatusCodes.Status403Forbidden) => new()
     {
-        Status = StatusCodes.Status403Forbidden,
+        Status = status,
         Title = title,
     };
 
-    private static ObjectResult Forbidden(ProblemDetails problem) => new(problem)
+    /// <summary>The problem on the wire, at the status it carries: one builder for the four refusals.</summary>
+    private static ObjectResult Refusal(ProblemDetails problem) => new(problem)
     {
-        StatusCode = StatusCodes.Status403Forbidden,
+        StatusCode = problem.Status,
         ContentTypes = { "application/problem+json" },
     };
 }
