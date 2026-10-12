@@ -145,6 +145,8 @@ export default function GardensDashboard() {
     switching,
     refusal,
     dismissRefusal,
+    formulaChangedElsewhere,
+    dismissFormulaChange,
     adjusted,
     reload,
     setBlocks,
@@ -471,14 +473,21 @@ export default function GardensDashboard() {
   // this screen and switches nothing itself.
   const chooseFormula = async (level: DashboardLevel) => {
     const outcome = await setLevel(level);
-    if (outcome === 'switched' || outcome === 'unread') setChooserOpen(false);
+    // SMA-437, review of the v3, M11 — `stale`: the formula changed on
+    // another device, and the choice began by writing a layout the server
+    // refused as stale; the page is re-reading its formula and its layout
+    // and says why (the notice below). The screen closes over the fresh page
+    // — the formula it would name is not the account's any more —, and the
+    // user chooses again from there if they still want to.
+    if (outcome === 'switched' || outcome === 'unread' || outcome === 'stale') setChooserOpen(false);
     // PR #293, fix round 2 (R2-E1) — a switch whose layout could not be read
     // back (S6) leaves the page on its load error: the panel the screen may
     // have been opened from is closed HERE, in the handler that sees it,
     // never from an effect. Hidden by its condition alone, it would have
     // named the default level over the error, and come back by itself once
-    // « Réessayer » had succeeded.
-    if (outcome === 'unread') setPanelOpen(false);
+    // « Réessayer » had succeeded. The same for a stale tab (M11): the page
+    // behind is re-read whole.
+    if (outcome === 'unread' || outcome === 'stale') setPanelOpen(false);
   };
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -1273,6 +1282,26 @@ export default function GardensDashboard() {
           sx={{ width: '100%' }}
         >
           {t('gardens.deleteDialog.successToast')}
+        </Alert>
+      </Snackbar>
+
+      {/* SMA-437, review of the v3, M11 — the formula changed on another
+          device: a write of this tab's layout was refused as stale, the page
+          re-read its formula and its layout, and says why. The deletion
+          toast's own idiom, in the info tone. */}
+      <Snackbar
+        open={formulaChangedElsewhere}
+        autoHideDuration={6000}
+        onClose={() => dismissFormulaChange()}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => dismissFormulaChange()}
+          severity="info"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {t('dashboard.formulaChanged')}
         </Alert>
       </Snackbar>
     </Container>

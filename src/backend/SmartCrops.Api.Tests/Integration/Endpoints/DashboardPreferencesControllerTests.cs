@@ -891,9 +891,17 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// layout is refused, and nothing is stored; only the formula switch
     /// (<c>PUT /api/formulas/current</c>) changes the level. On develop any
     /// known level was accepted (<c>Validate</c>, l. 805): 204.
+    ///
+    /// <para>SMA-437, review of the v3, M11 — and the refusal is one the
+    /// CLIENT can read: the tab that sends it is STALE — its formula changed
+    /// on another device since it read its layout — and must re-read rather
+    /// than retry. The 400 is an <c>application/problem+json</c> document
+    /// (the form of lot F3's refusals, <c>FormulaRefusals</c>) with the code
+    /// <c>formula.stale</c> and the account's formula; its message is the one
+    /// of before. Red on <c>f4e6057</c>: <c>application/json</c>, no code.</para>
     /// </summary>
     [Fact]
-    public async Task PutPreferences_AGardenerSendingAnExpertLayout_Returns400_AndStoresNothing()
+    public async Task PutPreferences_AGardenerSendingAnExpertLayout_Returns400_FormulaStale_AndStoresNothing()
     {
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
@@ -902,9 +910,13 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         var response = await Client.PutAsJsonAsync(Url, ValidRequest(DashboardLayout.Levels.Expert));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(
-            "level 'expert' is not the account's formula 'gardener'",
-            await response.Content.ReadAsStringAsync());
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("level 'expert' is not the account's formula 'gardener'", body);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        using var problem = JsonDocument.Parse(body);
+        Assert.Equal("formula.stale", problem.RootElement.GetProperty("code").GetString());
+        Assert.Equal(DashboardLayout.Levels.Gardener, problem.RootElement.GetProperty("formula").GetString());
+        Assert.Equal(400, problem.RootElement.GetProperty("status").GetInt32());
         await AssertNothingStoredAsync(userId);
     }
 

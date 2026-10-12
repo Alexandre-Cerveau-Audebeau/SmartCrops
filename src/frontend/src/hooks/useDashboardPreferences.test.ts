@@ -66,7 +66,12 @@ function serveFormulas(formula: DashboardLevel, blocks: DashboardBlock[] | null)
     })
   );
   vi.mocked(saveDashboardPreferences).mockImplementation(async ({ level, blocks: saved }) => {
-    if (level !== server.formula) throw new HttpStatusError('Request failed (400)', 400);
+    // The real server's refusal of a level that is not the account's formula
+    // (SMA-437, review of the v3, M11): 400 `formula.stale`, the account's
+    // formula named — the tab that wrote it is stale.
+    if (level !== server.formula) {
+      throw new HttpStatusError('Request failed (400)', 400, { status: 400, code: 'formula.stale', formula: server.formula });
+    }
     server.current = structuredClone(saved);
   });
   vi.mocked(changeFormula).mockImplementation(async (to) => {
@@ -1080,5 +1085,101 @@ describe('useDashboardPreferences — the three ends of a switch that does not g
     });
     expect(result.current.refusal).toBeNull();
     expect(result.current.level).toBe('expert');
+  });
+});
+
+// SMA-437, review of the v3, M11 — THE STALE TAB: the formula changed on
+// another device, and this tab still holds the layout of the formula it left.
+// Every write of that layout was refused (400, R8) as a plain failure —
+// « Modifications non enregistrées », and the next change met the same
+// refusal, forever — and a change of formula began by writing it (`persist`,
+// S2): refused too, the button seemed to do nothing. The server now names the
+// refusal (`formula.stale`), and the hook re-reads the formula and its layout
+// instead of retrying, and says why.
+describe('useDashboardPreferences — a tab whose formula changed elsewhere re-reads it (SMA-437, review of the v3, M11)', () => {
+  const moved = () => {
+    const blocks = presetFor('gardener');
+    blocks[0]!.size = 'small';
+    return blocks;
+  };
+
+  it('the formula changed elsewhere, then a layout write: refused as stale, the write is NOT retried — the formula and its layout are read again, and the change is said', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.formulaChangedElsewhere).toBe(false);
+
+    // On the phone: the account goes Expert. This tab knows nothing of it.
+    server.formula = 'expert';
+    server.current = null;
+
+    // The layout is read: the clock is simulated from here (never before a
+    // find), so the write leaves when the pause is over — then the refusal,
+    // and the re-read it triggers, land on the microtasks a 0 ms advance flushes.
+    vi.useFakeTimers();
+    act(() => result.current.setBlocks(moved()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+    expect(result.current.formulaChangedElsewhere).toBe(true);
+    expect(result.current.level).toBe('expert');
+    expect(result.current.blocks).toEqual(presetFor('expert'));
+    expect(result.current.capabilities).toEqual(capabilitiesFor('expert'));
+    expect(result.current.saveState).not.toBe('error');
+    expect(result.current.loadError).toBe(false);
+    // Past another pause: the layout left is never written again.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.dismissFormulaChange());
+    expect(result.current.formulaChangedElsewhere).toBe(false);
+  });
+
+  it('the formula changed elsewhere, then a change of formula: the switch ends `stale` — nothing written under the formula left, no switch sent, the page re-read and the change said', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    server.formula = 'expert';
+    server.current = null;
+    // A change still inside its pause: the switch writes it first (S2) — and
+    // meets the refusal there.
+    act(() => result.current.setBlocks(moved()));
+
+    let outcome: SwitchOutcome | undefined;
+    await act(async () => {
+      outcome = await result.current.setLevel('novice');
+    });
+
+    expect(outcome).toBe('stale');
+    expect(changeFormula).not.toHaveBeenCalled();
+    // Written once, refused once: `persist` does not write a stale layout again.
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+    expect(result.current.formulaChangedElsewhere).toBe(true);
+    expect(result.current.switching).toBe(false);
+    await waitFor(() => expect(result.current.level).toBe('expert'));
+    expect(result.current.blocks).toEqual(presetFor('expert'));
+    expect(result.current.saveState).not.toBe('error');
+    expect(result.current.refusal).toBeNull();
+  });
+
+  it('a 400 the server does not name — not stale — stays the failure it was: « not saved », no re-read', async () => {
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
+    vi.mocked(saveDashboardPreferences).mockRejectedValue(new HttpStatusError('Request failed (400)', 400));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.setBlocks(moved()));
+
+    await waitFor(() => expect(result.current.saveState).toBe('error'));
+    expect(result.current.formulaChangedElsewhere).toBe(false);
+    expect(fetchDashboardPreferences).toHaveBeenCalledTimes(1);
+    expect(result.current.blocks).toEqual(moved());
   });
 });

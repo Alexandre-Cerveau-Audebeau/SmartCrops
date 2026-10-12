@@ -13,7 +13,9 @@ namespace SmartCrops.Api.Controllers;
 /// other meaning on the gardens' routes, where ownership answers 404 and
 /// authentication 401. The switch of formula keeps its own 409
 /// <c>formula.tooSmall</c> (<see cref="FormulasController"/>): there the
-/// STATE blocks, not the right.
+/// STATE blocks, not the right. One refusal is a <b>400</b>, <see cref="Stale"/>:
+/// the layout write of a stale tab (SMA-437, review of the v3, M11) — the
+/// status and the message it always had, in the form of the others.
 /// </summary>
 public static class FormulaRefusals
 {
@@ -25,6 +27,37 @@ public static class FormulaRefusals
 
     /// <summary>The formula has no custom order of its gardens (SMA-448, lot F5-a — A-N3: the Expert's alone).</summary>
     public const string GardenOrderCode = "formula.gardenOrder";
+
+    /// <summary>
+    /// SMA-437, review of the v3, M11 — the level of a layout is not the
+    /// account's formula: the tab that wrote it is STALE, its formula changed
+    /// on another device since it read its layout.
+    /// </summary>
+    public const string StaleCode = "formula.stale";
+
+    /// <summary>
+    /// <c>{ code: "formula.stale", formula }</c> — <b>400</b>, not 403: the
+    /// refusal of before, its status and its message unchanged (the request
+    /// is not one this server can store for THIS account — its level is a
+    /// formula the account no longer has, R8), as a problem a client reads:
+    /// the layout it holds visited the formula it left, and re-reading the
+    /// formula and its layout is the cure, never a retry.
+    /// </summary>
+    public static ObjectResult Stale(string level, string formula)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = $"level '{level}' is not the account's formula '{formula}'",
+        };
+        problem.Extensions["code"] = StaleCode;
+        problem.Extensions["formula"] = formula;
+        return new ObjectResult(problem)
+        {
+            StatusCode = StatusCodes.Status400BadRequest,
+            ContentTypes = { "application/problem+json" },
+        };
+    }
 
     /// <summary>
     /// <c>{ code: "formula.gardenOrder", formula }</c>: the account's formula
