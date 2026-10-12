@@ -109,7 +109,6 @@ export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?
         .then(() => {
           // A newer list waits its turn: its own write will speak.
           if (pendingRef.current !== null) return;
-          setFailure(null);
           setState('saved');
           onSavedRef.current?.();
         })
@@ -132,6 +131,10 @@ export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?
   const schedule = useCallback(
     (next: string[]) => {
       pendingRef.current = next;
+      // The failure is the LAST write's: a list waiting its turn has none yet
+      // (`failure` is null unless `state` is 'error' — the only way out of
+      // 'error' is here, so this is the one place that clears it).
+      setFailure(null);
       setState('pending');
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS);

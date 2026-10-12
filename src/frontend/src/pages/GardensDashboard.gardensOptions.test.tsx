@@ -395,6 +395,19 @@ describe('the custom order (A-N5) — the Expert alone', () => {
       expect(within(panel).queryByRole('button', { name: 'Sign in again' })).toBeNull();
     });
 
+    it('a 403 the server did not explain — a right the account lacks — says so, never a retry, and no way to sign in again', async () => {
+      vi.mocked(saveGardenOrder).mockRejectedValue(new HttpStatusError('Request failed (403)', 403));
+      const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+      const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+
+      await moveAndLetTheWriteFail(panel);
+
+      expect(region.textContent).toBe('Your account is not allowed to do this.');
+      expect(region.textContent).not.toMatch(/retries/);
+      orderKept(panel);
+      expect(within(panel).queryByRole('button', { name: 'Sign in again' })).toBeNull();
+    });
+
     it('a session that expired — 401 — says so, and « Sign in again » leads to the login page — never « the next change retries »', async () => {
       vi.mocked(saveGardenOrder).mockRejectedValue(new HttpStatusError('Request failed (401)', 401));
       const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });

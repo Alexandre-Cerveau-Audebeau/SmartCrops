@@ -118,6 +118,8 @@ describe('useGardenOrder', () => {
     vi.mocked(saveGardenOrder).mockResolvedValueOnce(undefined);
     act(() => result.current.move(2, 0));
     expect(result.current.state).toBe('pending');
+    // The failure is the LAST write's: a retry waiting its turn has none yet — null unless `state` is 'error'.
+    expect(result.current.failure).toBeNull();
     await act(async () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
     });
