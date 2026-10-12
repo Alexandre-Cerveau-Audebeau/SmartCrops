@@ -426,8 +426,6 @@
       "compare": {
         "title": "Compare the formulas",
         "subtitle": "Everything that changes from one formula to the next, line by line.",
-        "yes": "Yes",
-        "no": "No",
         "unlimited": "No limit",
         "upTo_one": "Up to {{count}}",
         "upTo_other": "Up to {{count}}",
@@ -500,7 +498,6 @@
     },
     "formulaChooser": {
       "title": "Change formula",
-      "promise": "Change whenever you like, in either direction, without losing anything.",
       "close": "Close without changing formula",
       "chipLabel": "{{level}} view — change formula",
       "tooltip": "Change formula"
