@@ -317,4 +317,31 @@ describe('« See the formulas » on a modified plan asks before leaving (SMA-437
 
     expect(await screen.findByText('gardens — formulas open')).toBeInTheDocument();
   });
+
+  // The contract of « Rester » beyond its button (the commit's own words): the
+  // initial focus — so Enter loses nothing — and Escape, as `RemovePlacementDialog`
+  // pins them for its Cancel. Each is one attribute of the dialog, and nothing
+  // else held it.
+  it('« Stay » has the initial focus — the safe default', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(refusedBySize());
+    const alert = await growAndSave();
+    fireEvent.click(within(alert).getByRole('button', { name: 'See the formulas' }));
+    const dialog = await screen.findByRole('dialog', LEAVE);
+
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Stay' })).toHaveFocus());
+  });
+
+  it('Escape stays: the dialog closes, the plan stays modified on the planner, nothing navigates', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(refusedBySize());
+    const alert = await growAndSave();
+    fireEvent.click(within(alert).getByRole('button', { name: 'See the formulas' }));
+    const dialog = await screen.findByRole('dialog', LEAVE);
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog', LEAVE)).toBeNull());
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+    expect(within(alert).getByRole('button', { name: 'See the formulas' })).toBeInTheDocument();
+    expect(screen.queryByText('gardens — formulas open')).toBeNull();
+  });
 });
