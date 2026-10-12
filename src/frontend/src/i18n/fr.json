@@ -1560,6 +1560,12 @@
       "cancel": "Annuler",
       "confirm": "Retirer"
     },
+    "leaveDialog": {
+      "title": "Quitter sans enregistrer ?",
+      "body": "Vos modifications non enregistrées seront perdues si vous quittez le planificateur maintenant.",
+      "stay": "Rester",
+      "leave": "Quitter sans enregistrer"
+    },
     "templates": {
       "title": "Modèles de jardin",
       "subtitle": "Partez d'une disposition prête à l'emploi — au setup comme à tout moment",

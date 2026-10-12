@@ -194,32 +194,34 @@ describe('the planner bounded by the formula (SMA-448, lot F3, L3)', () => {
 // formula's limit and the plan's size, with a door to the choice of
 // formula; a session that expired says so and how to sign in again; a right
 // the account lacks says the right; a failure proposes to try again.
-describe('the save refused or failed, said truthfully (SMA-448, lot F3, L4 — R3-E1)', () => {
-  /** A dirty plan: the catalogue unreadable — the server the judge — and one row added. */
-  async function growAndSave() {
-    serve('novice', 20, 20);
-    vi.mocked(fetchFormulas).mockRejectedValue(new Error('down'));
-    renderPlanner();
-    await enterShapeMode();
-    fireEvent.click(screen.getByRole('button', { name: 'Add row at top' }));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
-    await waitFor(() => expect(saveLayout).toHaveBeenCalled());
-    // The planner's one toast, by its mark: the page has other alerts.
-    await waitFor(() => expect(document.querySelector('[data-planner-toast]')).not.toBeNull());
-    return document.querySelector<HTMLElement>('[data-planner-toast]')!;
-  }
+/** The server's refusal of a 21st row on a Novice plan of 20 × 20. */
+const refusedBySize = () =>
+  new HttpStatusError('Request failed (403)', 403, {
+    status: 403,
+    code: 'formula.gardenSize',
+    formula: 'novice',
+    limit: { width: 20, height: 20 },
+    current: { width: 20, height: 20 },
+    requested: { width: 20, height: 21 },
+  });
 
-  it('a plan beyond the formula: the toast says the limit and the size asked, and « See the formulas » leads to Mes Jardins with the choice open', async () => {
-    vi.mocked(saveLayout).mockRejectedValue(
-      new HttpStatusError('Request failed (403)', 403, {
-        status: 403,
-        code: 'formula.gardenSize',
-        formula: 'novice',
-        limit: { width: 20, height: 20 },
-        current: { width: 20, height: 20 },
-        requested: { width: 20, height: 21 },
-      })
-    );
+/** A dirty plan: the catalogue unreadable — the server the judge — and one row added, then saved: the planner's one toast, by its mark. */
+async function growAndSave() {
+  serve('novice', 20, 20);
+  vi.mocked(fetchFormulas).mockRejectedValue(new Error('down'));
+  renderPlanner();
+  await enterShapeMode();
+  fireEvent.click(screen.getByRole('button', { name: 'Add row at top' }));
+  fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+  await waitFor(() => expect(saveLayout).toHaveBeenCalled());
+  // The planner's one toast, by its mark: the page has other alerts.
+  await waitFor(() => expect(document.querySelector('[data-planner-toast]')).not.toBeNull());
+  return document.querySelector<HTMLElement>('[data-planner-toast]')!;
+}
+
+describe('the save refused or failed, said truthfully (SMA-448, lot F3, L4 — R3-E1)', () => {
+  it('a plan beyond the formula: the toast says the limit and the size asked, and — the refused change undone, nothing unsaved left — « See the formulas » leads to Mes Jardins with the choice open', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(refusedBySize());
 
     const alert = await growAndSave();
 
@@ -227,6 +229,12 @@ describe('the save refused or failed, said truthfully (SMA-448, lot F3, L4 — R
     expect(alert.textContent).toContain('20 × 20');
     expect(alert.textContent).toContain('20 × 21');
     expect(alert.textContent).not.toMatch(/failed to save/i);
+    // The row the server refused, undone: the plan is as it was saved — the
+    // reducer's undo restores the captured `isDirty`, so nothing unsaved is
+    // left to lose (SMA-437, review of the v3, M9) and the door leads
+    // straight to Mes Jardins, as it always did.
+    fireEvent.click(screen.getByRole('button', { name: 'Undo last action' }));
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
     fireEvent.click(within(alert).getByRole('button', { name: 'See the formulas' }));
     expect(await screen.findByText('gardens — formulas open')).toBeInTheDocument();
   });
@@ -259,5 +267,54 @@ describe('the save refused or failed, said truthfully (SMA-448, lot F3, L4 — R
     expect(alert.textContent).toContain('Failed to save layout.');
     expect(within(alert).queryByRole('button', { name: 'See the formulas' })).toBeNull();
     expect(within(alert).queryByRole('button', { name: 'Sign in again' })).toBeNull();
+  });
+});
+
+// SMA-437, review of the v3, M9 — « See the formulas » on a plan with UNSAVED
+// changes, the only case it shows in practice (it follows a refused save):
+// the door used to leave the planner at once and throw the draft away,
+// placements included, without a word. It now asks first — the bar's own
+// state, `isDirty` (SMA-309), the one source of truth of « modifié » — and a
+// plan with nothing unsaved (the undo above) keeps today's direct way.
+describe('« See the formulas » on a modified plan asks before leaving (SMA-437, review of the v3, M9)', () => {
+  const LEAVE = { name: 'Leave without saving?' };
+
+  it('the click opens the confirmation — the unsaved changes would be lost — and nothing navigates', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(refusedBySize());
+    const alert = await growAndSave();
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'See the formulas' }));
+
+    const dialog = await screen.findByRole('dialog', LEAVE);
+    expect(dialog).toHaveAccessibleDescription(/unsaved changes will be lost/i);
+    expect(screen.queryByText('gardens — formulas open')).toBeNull();
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+  });
+
+  it('« Stay » keeps everything: the dialog closes, the plan stays modified on the planner, the toast and its door stay', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(refusedBySize());
+    const alert = await growAndSave();
+    fireEvent.click(within(alert).getByRole('button', { name: 'See the formulas' }));
+    const dialog = await screen.findByRole('dialog', LEAVE);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stay' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', LEAVE)).toBeNull());
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add row at top' })).toBeInTheDocument();
+    expect(within(alert).getByRole('button', { name: 'See the formulas' })).toBeInTheDocument();
+    expect(screen.queryByText('gardens — formulas open')).toBeNull();
+  });
+
+  it('« Leave without saving » leads to Mes Jardins with the choice open', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(refusedBySize());
+    const alert = await growAndSave();
+    fireEvent.click(within(alert).getByRole('button', { name: 'See the formulas' }));
+    const dialog = await screen.findByRole('dialog', LEAVE);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Leave without saving' }));
+
+    expect(await screen.findByText('gardens — formulas open')).toBeInTheDocument();
   });
 });

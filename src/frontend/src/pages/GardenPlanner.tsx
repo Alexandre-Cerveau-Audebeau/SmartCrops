@@ -46,6 +46,7 @@ import GardenConfigDialog, {
 } from '../components/Garden/GardenConfigDialog';
 import GardenLocationSection from '../components/Garden/GardenLocationSection';
 import GardenTemplatesDialog from '../components/Garden/GardenTemplatesDialog';
+import LeaveUnsavedDialog from '../components/Garden/LeaveUnsavedDialog';
 import ReconnectButton from '../components/ReconnectButton';
 import RemovePlacementDialog from '../components/Garden/RemovePlacementDialog';
 import { STICKY_OFFSET } from '../constants/layout';
@@ -315,6 +316,14 @@ export default function GardenPlanner() {
   const [deleteGardenTarget, setDeleteGardenTarget] =
     useState<DeleteGardenTarget | null>(null);
   const [deleteGardenOpen, setDeleteGardenOpen] = useState(false);
+  // SMA-437, review of the v3, M9 — the question asked before « Voir les
+  // formules » leaves a plan with UNSAVED changes (`isDirty`, the bar's own
+  // state — the one source of truth of « modifié », SMA-309): the toast's
+  // door is the only one the page itself offers OUT of a draft it knows
+  // unsaved, and it threw the draft away without a word. Nothing else is
+  // guarded here (« Retour à mes jardins », the navbar, a refresh stay the
+  // browser's business, as before) [P].
+  const [leaveUnsavedOpen, setLeaveUnsavedOpen] = useState(false);
   if (removeDialogOpen && selectedPlacement === null) {
     setRemoveDialogOpen(false);
   }
@@ -1722,6 +1731,19 @@ export default function GardenPlanner() {
     navigate('/gardens', { replace: true, state: { toast: 'gardenDeleted' } });
   }, [navigate]);
 
+  // « Voir les formules » (R3-E1, L4): Mes Jardins with the choice of formula
+  // open — at once on a plan with nothing unsaved, after the question above
+  // on a modified one (M9). « Quitter sans enregistrer » takes the same way.
+  const seeFormulas = useCallback(
+    () => navigate('/gardens', { state: { formulas: true } }),
+    [navigate]
+  );
+  const handleSeeFormulas = useCallback(() => {
+    if (isDirty) setLeaveUnsavedOpen(true);
+    else seeFormulas();
+  }, [isDirty, seeFormulas]);
+  const handleStay = useCallback(() => setLeaveUnsavedOpen(false), []);
+
   // ── Footprint panel wiring (SMA-193 lot 3) ──────────────────────────────
   // The panel's fit checks and the reducer guard share footprintFits at the
   // placement's own anchor (itself excluded) — the warn and the dispatch can
@@ -2467,6 +2489,12 @@ export default function GardenPlanner() {
           onConfirm={handleRemoveSelectedPlacement}
         />
       )}
+      {/* Before « Voir les formules » leaves a modified plan (SMA-437, M9) */}
+      <LeaveUnsavedDialog
+        open={leaveUnsavedOpen}
+        onStay={handleStay}
+        onLeave={seeFormulas}
+      />
 
       {/* Toolbar */}
       <Button
@@ -2745,7 +2773,7 @@ export default function GardenPlanner() {
               <Button
                 color="inherit"
                 size="small"
-                onClick={() => navigate('/gardens', { state: { formulas: true } })}
+                onClick={handleSeeFormulas}
                 sx={{ ml: 1, textTransform: 'none', fontWeight: 700, textDecoration: 'underline' }}
               >
                 {t('gardens.refusal.viewFormulas')}
