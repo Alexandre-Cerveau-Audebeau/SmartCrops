@@ -76,7 +76,7 @@ function serve(level: DashboardLevel) {
   }));
   vi.mocked(saveDashboardPreferences).mockImplementation(async ({ level: written }) => {
     if (written !== server.formula) {
-      throw new HttpStatusError('Request failed (400)', 400, { status: 400, code: 'formula.stale', formula: server.formula });
+      throw new HttpStatusError('Request failed (409)', 409, { status: 409, code: 'formula.stale', formula: server.formula });
     }
   });
   vi.mocked(fetchFormulas).mockImplementation(async () => catalogFor(server.formula, { gardenCount: 0 }));
@@ -183,7 +183,7 @@ describe('a tab whose formula changed on another device (SMA-437, review of the 
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Novice' }));
     await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalledTimes(1));
     await act(async () => {
-      write.reject(new HttpStatusError('Request failed (400)', 400, { status: 400, code: 'formula.stale', formula: 'expert' }));
+      write.reject(new HttpStatusError('Request failed (409)', 409, { status: 409, code: 'formula.stale', formula: 'expert' }));
       await write.promise.catch(() => undefined);
     });
 
@@ -265,7 +265,7 @@ describe('a tab whose formula changed on another device (SMA-437, review of the 
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Novice' }));
     await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalledTimes(1));
     await act(async () => {
-      write.reject(new HttpStatusError('Request failed (400)', 400, { status: 400, code: 'formula.stale', formula: 'expert' }));
+      write.reject(new HttpStatusError('Request failed (409)', 409, { status: 409, code: 'formula.stale', formula: 'expert' }));
       await write.promise.catch(() => undefined);
     });
 

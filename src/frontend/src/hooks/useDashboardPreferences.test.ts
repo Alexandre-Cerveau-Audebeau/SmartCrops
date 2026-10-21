@@ -68,10 +68,12 @@ function serveFormulas(formula: DashboardLevel, blocks: DashboardBlock[] | null)
   );
   vi.mocked(saveDashboardPreferences).mockImplementation(async ({ level, blocks: saved }) => {
     // The real server's refusal of a level that is not the account's formula
-    // (SMA-437, review of the v3, M11): 400 `formula.stale`, the account's
-    // formula named — the tab that wrote it is stale.
+    // (SMA-437, review of the v3, M11): `formula.stale`, the account's formula
+    // named — the tab that wrote it is stale. At 409 since SMA-457 (PR #319,
+    // fix round 1, [P11]) — a state conflict, like the switch's
+    // `formula.tooSmall`; the hook reads the code, never the status.
     if (level !== server.formula) {
-      throw new HttpStatusError('Request failed (400)', 400, { status: 400, code: 'formula.stale', formula: server.formula });
+      throw new HttpStatusError('Request failed (409)', 409, { status: 409, code: 'formula.stale', formula: server.formula });
     }
     server.current = structuredClone(saved);
   });
@@ -1226,7 +1228,7 @@ describe('useDashboardPreferences — a tab whose formula changed elsewhere re-r
     expect(result.current.saveState).toBe('pending');
 
     await act(async () => {
-      write.reject(new HttpStatusError('Request failed (400)', 400, { status: 400, code: 'formula.stale', formula: 'expert' }));
+      write.reject(new HttpStatusError('Request failed (409)', 409, { status: 409, code: 'formula.stale', formula: 'expert' }));
       await write.promise.catch(() => undefined);
     });
     await act(async () => {
@@ -1255,7 +1257,7 @@ describe('useDashboardPreferences — a tab whose formula changed elsewhere re-r
     // and the re-read HELD too: the second refusal lands in a turn of its
     // own, once the first has been handled and the page has begun to re-read
     // (in one turn, React would fold the two `reload()` into one render).
-    const stale = () => new HttpStatusError('Request failed (400)', 400, { status: 400, code: 'formula.stale', formula: 'expert' });
+    const stale = () => new HttpStatusError('Request failed (409)', 409, { status: 409, code: 'formula.stale', formula: 'expert' });
     const first = deferred<void>();
     const second = deferred<void>();
     vi.mocked(saveDashboardPreferences).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
