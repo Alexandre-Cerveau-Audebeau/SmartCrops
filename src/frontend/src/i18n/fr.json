@@ -335,7 +335,7 @@
     "levelChipAdjusted": "Vue {{level}} · ajustée",
     "loadError": "Impossible de charger votre tableau de bord.",
     "retry": "Réessayer",
-    "formulaChanged": "Votre formule a changé sur un autre appareil : la page s’est mise à jour.",
+    "formulaChanged": "Votre formule a changé depuis un autre onglet ou appareil : la page s’est mise à jour.",
     "soon": "Bientôt disponible",
     "novice": {
       "list": "Vos jardins",

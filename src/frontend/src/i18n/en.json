@@ -335,7 +335,7 @@
     "levelChipAdjusted": "{{level}} view · adjusted",
     "loadError": "Couldn’t load your dashboard.",
     "retry": "Try again",
-    "formulaChanged": "Your formula changed on another device: the page has been refreshed.",
+    "formulaChanged": "Your formula was changed from another tab or device: the page has been refreshed.",
     "soon": "Coming soon",
     "novice": {
       "list": "Your gardens",

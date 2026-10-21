@@ -60,7 +60,7 @@ import { HttpStatusError } from '../services/httpStatusError';
 // why; a choice made from the stale tab ends on that re-read, the screen
 // closed over the fresh page.
 
-const SAID = 'Your formula changed on another device: the page has been refreshed.';
+const SAID = 'Your formula was changed from another tab or device: the page has been refreshed.';
 
 /** The server: the account's formula, which another device may move; the layout write refuses any other level, as R8 does. */
 function serve(level: DashboardLevel) {

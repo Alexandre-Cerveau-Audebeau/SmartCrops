@@ -497,11 +497,16 @@ export default function GardensDashboard() {
   const [isMutating, setIsMutating] = useState(false);
 
   const navState = location.state as GardensNavState;
-  // ONE toast kind today. The planner's displayedToast rationale, both halves:
-  // the open flag is separate so the copy survives the Snackbar's exit
-  // transition, and `toastSeq` keys the Snackbar so a second deletion inside
-  // the first toast's window remounts it with a FULL auto-hide window (MUI
-  // restarts the timer on `open`, not on a same-value write).
+  // TWO notices share this anchor (SMA-457, PR #319, fix round 1 — [P12]):
+  // the deletion toast below, and the stale-formula notice of M11 at the end
+  // of the page, which has no key — a second stale refusal inside the first
+  // notice's window would not restart it; a double coincidence, and the same
+  // sentence either way, accepted as is. For the deletion, the planner's
+  // displayedToast rationale, both halves: the open flag is separate so the
+  // copy survives the Snackbar's exit transition, and `toastSeq` keys the
+  // Snackbar so a second deletion inside the first toast's window remounts
+  // it with a FULL auto-hide window (MUI restarts the timer on `open`, not on
+  // a same-value write).
   const [toastSeq, setToastSeq] = useState(() =>
     navState?.toast === 'gardenDeleted' ? 1 : 0
   );
