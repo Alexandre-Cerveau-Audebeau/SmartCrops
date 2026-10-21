@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -10,7 +8,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import ReconnectButton from '../ReconnectButton';
+import RequestFailureAlert from '../RequestFailureAlert';
 import { updateGarden } from '../../services/gardenApi';
 import { requestFailureKind, type RequestFailureKind } from '../../services/requestFailure';
 import type { DashboardGardenData } from '../../types/DashboardData';
@@ -96,22 +94,7 @@ export default function RenameGardenDialog({ garden, onClose, onRenamed }: Props
     <Dialog open={garden !== null} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>{t('gardens.editDialogTitle')}</DialogTitle>
       <DialogContent>
-        {error && (
-          <Alert severity="error" sx={{ mb: 1 }}>
-            {error === 'unauthorized'
-              ? t('common.sessionExpired')
-              : error === 'forbidden'
-                ? t('common.forbidden')
-                : t('gardens.mutationError')}
-            {/* The way back, beside the words — as the planner's toast
-                places it (R3-E1, L4). */}
-            {error === 'unauthorized' && (
-              <Box component="span" sx={{ display: 'inline-block', ml: 1 }}>
-                <ReconnectButton />
-              </Box>
-            )}
-          </Alert>
-        )}
+        {error && <RequestFailureAlert kind={error} fallback={t('gardens.mutationError')} sx={{ mb: 1 }} />}
         <TextField
           label={t('gardens.gardenName')}
           fullWidth

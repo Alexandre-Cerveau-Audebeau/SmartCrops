@@ -1,6 +1,5 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -13,7 +12,7 @@ import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import ReconnectButton from '../ReconnectButton';
+import RequestFailureAlert from '../RequestFailureAlert';
 import { deleteGarden } from '../../services/gardenApi';
 import { requestFailureKind, type RequestFailureKind } from '../../services/requestFailure';
 
@@ -184,22 +183,7 @@ export default function DeleteGardenDialog({
             {t('gardens.deleteDialog.irreversible')}
           </Typography>
         </Box>
-        {error && (
-          <Alert severity="error">
-            {error === 'unauthorized'
-              ? t('common.sessionExpired')
-              : error === 'forbidden'
-                ? t('common.forbidden')
-                : t('gardens.deleteDialog.error')}
-            {/* The way back, beside the words — as the planner's toast
-                places it (R3-E1, L4). */}
-            {error === 'unauthorized' && (
-              <Box component="span" sx={{ display: 'inline-block', ml: 1 }}>
-                <ReconnectButton />
-              </Box>
-            )}
-          </Alert>
-        )}
+        {error && <RequestFailureAlert kind={error} fallback={t('gardens.deleteDialog.error')} />}
         <Box>
           <Typography
             component="label"
