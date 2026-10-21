@@ -425,6 +425,72 @@ describe('the custom order (A-N5) — the Expert alone', () => {
       });
       expect(screen.getByText('login page')).toBeInTheDocument();
     });
+
+    // SMA-457, PR #319, fix round 1 — S1 (CodeRabbit Extension, draw 1a5247d8,
+    // minor): the hook is the page's and outlives the panel. A panel closed and
+    // reopened while the hook still holds an 'error' must say it — a failure is
+    // the PRESENT until the next move clears it (`schedule`), not the past a
+    // « saved » that landed is. The reopened panel is a FRESH mount: the
+    // Popover unmounts its content on « Done » (no `keepMounted`), so the region
+    // is born empty again and the ref is seeded again.
+    /** « Done », the Popover's exit run on the faked clock — the panel UNMOUNTED —, then the gear again: a fresh panel. */
+    async function closeAndReopen(panel: HTMLElement): Promise<HTMLElement> {
+      fireEvent.click(within(panel).getByRole('button', { name: 'Done' }));
+      await act(async () => {
+        await vi.runOnlyPendingTimersAsync();
+      });
+      // Gone, not hidden: a reopen is a remount, or the test proves nothing.
+      expect(screen.queryByRole('dialog', { name: 'Gardens Widget options' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Gardens options' }));
+      return screen.getByRole('dialog', { name: 'Gardens Widget options' });
+    }
+
+    it('closed and reopened after a 401: the fresh panel says the session expired, and « Sign in again » is there (SMA-457, PR #319, fix round 1 — S1)', async () => {
+      vi.mocked(saveGardenOrder).mockRejectedValue(new HttpStatusError('Request failed (401)', 401));
+      const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+      await moveAndLetTheWriteFail(panel);
+      expect((panel.querySelector('[data-gardens-options-said]') as HTMLElement).textContent).toBe('Your session has expired. Sign in again to continue.');
+
+      const reopened = await closeAndReopen(panel);
+
+      const region = reopened.querySelector('[data-gardens-options-said]') as HTMLElement;
+      expect(region.textContent).toBe('Your session has expired. Sign in again to continue.');
+      expect(region.textContent).not.toMatch(/retries/);
+      expect(within(reopened).getByRole('button', { name: 'Sign in again' })).toBeInTheDocument();
+    });
+
+    it('closed and reopened after a 503: the fresh panel says the next change retries, and offers no way to sign in again (S1)', async () => {
+      vi.mocked(saveGardenOrder).mockRejectedValue(new HttpStatusError('Request failed (503)', 503));
+      const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+      await moveAndLetTheWriteFail(panel);
+
+      const reopened = await closeAndReopen(panel);
+
+      const region = reopened.querySelector('[data-gardens-options-said]') as HTMLElement;
+      expect(region.textContent).toBe('Order not saved — the next change retries.');
+      expect(within(reopened).queryByRole('button', { name: 'Sign in again' })).toBeNull();
+    });
+
+    it('closed and reopened after a write that LANDED: the fresh panel says nothing — the past stays unannounced (S1, the kept half of the rule)', async () => {
+      const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
+      const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+      // The same gestures as `moveAndLetTheWriteFail`, the write let LAND: the proof it did is the sentence.
+      vi.useFakeTimers();
+      fireEvent.click(within(panel).getByRole('button', { name: 'Move “Carré aromatique” down' }));
+      await act(async () => {
+        vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      });
+      expect(saveGardenOrder).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        for (let hop = 0; hop < 6; hop++) await Promise.resolve();
+      });
+      expect(region.textContent).toBe('Order saved.');
+
+      const reopened = await closeAndReopen(panel);
+
+      expect((reopened.querySelector('[data-gardens-options-said]') as HTMLElement).textContent).toBe('');
+      expect(within(reopened).queryByRole('button', { name: 'Sign in again' })).toBeNull();
+    });
   });
 
   // SMA-437, lot V3-07, P2 (contract A-17 — Alexandre, 28/09): « Réinitialiser »

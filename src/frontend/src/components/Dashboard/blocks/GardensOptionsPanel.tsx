@@ -16,7 +16,7 @@ import ReconnectButton from '../../ReconnectButton';
 import ReorderableList from '../ReorderableList';
 import { useHoldOptionsPanelEscape } from '../optionsPanelEscape';
 import { defaultGardensCount, gardensCap, gardensOptions } from './gardensOptions';
-import type { GardenOrder, GardenOrderFailure } from '../../../hooks/useGardenOrder';
+import type { GardenOrder, GardenOrderFailure, GardenOrderState } from '../../../hooks/useGardenOrder';
 import { DASHBOARD_KEY_FIGURES as K, DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import { GARDENS_COUNTS, GARDENS_COUNT_ALL, type GardenSort, type GardensCount } from '../../../types/Dashboard';
@@ -109,10 +109,16 @@ export default function GardensOptionsPanel({ options, sorts, gardens, ready, on
   // What the last write of the ORDER did, said when it lands or fails —
   // never while it waits: a move is announced by the list the instant it is
   // made, and « pending » would overwrite that sentence before it is heard
-  // [P]. Never at the mount either: a panel opened after a write must not
-  // announce the past. A DOM write from the ref, no state. A failure is said
-  // for what it is (`orderFailureText`, M3).
-  const saidStateRef = useRef(order.state);
+  // [P]. Never the PAST at the mount: a panel opened after a write that
+  // landed must not announce it. A failure the hook still holds IS the
+  // present — `failure` is cleared by the next move alone (`schedule`,
+  // useGardenOrder.ts) — so a panel mounted on 'error' says it (SMA-457,
+  // PR #319, fix round 1, S1 — CodeRabbit Extension, draw 1a5247d8): the
+  // ref is seeded as if nothing had been said yet, the region is born empty
+  // and then changes, hence announced; nothing is drawn twice, the button
+  // beside it being rendered from the same state. A DOM write from the ref,
+  // no state. A failure is said for what it is (`orderFailureText`, M3).
+  const saidStateRef = useRef<GardenOrderState>(order.state === 'error' ? 'idle' : order.state);
   useEffect(() => {
     if (saidStateRef.current === order.state) return;
     saidStateRef.current = order.state;
