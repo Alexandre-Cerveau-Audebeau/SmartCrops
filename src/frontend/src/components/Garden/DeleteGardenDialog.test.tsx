@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
+import { HttpStatusError } from '../../services/httpStatusError';
 
 vi.mock('../../services/gardenApi', () => ({ deleteGarden: vi.fn() }));
 
@@ -344,5 +346,83 @@ describe('DeleteGardenDialog (SMA-18 lot 1, round 1) — focus and parent-driven
     expect(confirmButton()).toBeDisabled();
     expect(onClose).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
+  });
+});
+
+// ── SMA-437, review of the v3, M3 — R3-E1 applied to the deletion: a request
+// that did not go through is named for what it is, and « try again » is never
+// said to a session that is gone, nor to a right the account lacks.
+describe('DeleteGardenDialog (SMA-437, review of the v3, M3) — refused or failed, said truthfully', () => {
+  /** The dialog on its route, the login page beside it: where « Sign in again » leads. */
+  function renderDialogOnTheRoute() {
+    const onClose = vi.fn();
+    const onDeleted = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/gardens']}>
+        <Routes>
+          <Route
+            path="/gardens"
+            element={
+              <DeleteGardenDialog
+                open
+                gardenId="g1"
+                gardenName="Casa Lolo"
+                summary={{ kind: 'unknown' }}
+                onClose={onClose}
+                onDeleted={onDeleted}
+              />
+            }
+          />
+          <Route path="/login" element={<div>login page</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    return { onClose, onDeleted };
+  }
+
+  it('a session that expired — 401 — says so, and « Sign in again » leads to the login page — never « try again »', async () => {
+    vi.mocked(deleteGarden).mockRejectedValueOnce(new HttpStatusError('Request failed (401)', 401));
+    const { onClose, onDeleted } = renderDialogOnTheRoute();
+
+    fireEvent.change(nameInput(), { target: { value: 'Casa Lolo' } });
+    fireEvent.click(confirmButton());
+
+    const dialog = screen.getByRole('dialog');
+    expect(
+      await within(dialog).findByText('Your session has expired. Sign in again to continue.')
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/try again/i)).toBeNull();
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sign in again' }));
+    expect(await screen.findByText('login page')).toBeInTheDocument();
+  });
+
+  it('a right the account lacks — a 403 the server did not explain — says the right, not a retry', async () => {
+    vi.mocked(deleteGarden).mockRejectedValueOnce(new HttpStatusError('Request failed (403)', 403));
+    renderDialog();
+
+    fireEvent.change(nameInput(), { target: { value: 'Casa Lolo' } });
+    fireEvent.click(confirmButton());
+
+    expect(
+      await screen.findByText('Your account is not allowed to do this.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/try again/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in again' })).toBeNull();
+  });
+
+  it('a failure the server did not explain — a 503 — says « Please try again », as a bare Error does, and offers no way back', async () => {
+    vi.mocked(deleteGarden).mockRejectedValueOnce(new HttpStatusError('Request failed (503)', 503));
+    renderDialog();
+
+    fireEvent.change(nameInput(), { target: { value: 'Casa Lolo' } });
+    fireEvent.click(confirmButton());
+
+    expect(
+      await screen.findByText("Couldn't delete the garden. Please try again.")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in again' })).toBeNull();
+    expect(confirmButton()).toBeEnabled();
   });
 });

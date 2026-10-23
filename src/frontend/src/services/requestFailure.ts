@@ -23,3 +23,19 @@ export function requestFailureKind(error: unknown): RequestFailureKind {
   }
   return 'failed';
 }
+
+/**
+ * SMA-437, review of the v3, M11 — whether a layout write was refused because
+ * THIS TAB IS STALE: its level is a formula the account no longer has (409
+ * `formula.stale`, `DashboardController` — the formula changed in another tab
+ * or device since the tab read its layout, and only `PUT /api/formulas/current`
+ * changes it; a 400 until SMA-457, PR #319, fix round 1 — [P11] — and read by
+ * its code here, never by its status). Not a failure a retry may cure: the
+ * layout on screen visited the formula it left, and only a re-read of the
+ * formula and its layout brings the tab back. Here, beside `problemOf`, and
+ * not in `dashboardApi`: the page suites mock that module whole, and a
+ * predicate the hook reads from it would be missing from every one of them.
+ */
+export function isStaleFormulaRefusal(error: unknown): boolean {
+  return problemOf(error)?.code === 'formula.stale';
+}

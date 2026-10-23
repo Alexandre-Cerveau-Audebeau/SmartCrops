@@ -620,9 +620,10 @@ public class DashboardController(
 
     /// <summary>
     /// Replaces the caller's layout, creating the row on first save. 400 when the
-    /// document is not one this server can store: unknown level, a level that is
-    /// not the account's formula, unknown or duplicated block key, a block or a
-    /// size the formula does not permit, or an attempt to hide the gardens block.
+    /// document is not one this server can store: unknown level, unknown or
+    /// duplicated block key, a block or a size the formula does not permit, or an
+    /// attempt to hide the gardens block; 409 when its level is a known one that
+    /// is not the account's formula — a stale tab (below).
     ///
     /// <para>SMA-448, lot F1, step S4 — the level of a layout is the account's
     /// formula (R8): only <c>PUT /api/formulas/current</c> changes it. The
@@ -631,6 +632,12 @@ public class DashboardController(
     /// a save never lands on a row a switch has just refilled, and two first
     /// saves never race on the unique index — the second finds the first's
     /// row.</para>
+    ///
+    /// <para>SMA-437, review of the v3, M11 — the level that is not the
+    /// account's formula is refused as a problem the client reads,
+    /// <c>formula.stale</c> (<see cref="FormulaRefusals.Stale"/>): the tab
+    /// that sent it read its layout before the formula changed in another
+    /// tab or device, and must re-read rather than retry.</para>
     /// </summary>
     [HttpPut("preferences")]
     [RequestSizeLimit(MaxRequestBodyBytes)]
@@ -645,6 +652,21 @@ public class DashboardController(
 
         var formula = await AccountFormulaLock.LockAsync(context, userId, ct);
         if (formula is null) return Unauthorized();
+
+        // SMA-437, review of the v3, M11 — a known level that is not the
+        // account's formula names a STALE tab: its formula changed in another
+        // tab or device since it read its layout (only PUT /api/formulas/current
+        // changes it, R8), and the layout it sends visited the formula it
+        // left. Refused with the same message as before, as a problem the
+        // client reads — a code to branch on and the account's formula, so the
+        // tab re-reads instead of retrying — and at 409 since SMA-457 (PR #319,
+        // fix round 1, [P11]): a valid request the account's STATE blocks, as
+        // the switch's formula.tooSmall is. Before `Validate`, whose other
+        // refusals stay the plain 400 they were.
+        if (DashboardPresets.IsKnownLevel(request.Level) && request.Level != formula)
+        {
+            return FormulaRefusals.Stale(request.Level, formula);
+        }
 
         if (Validate(request, formula) is { } error) return BadRequest(new { error });
 
@@ -856,6 +878,8 @@ public class DashboardController(
     private static string? Validate(SaveDashboardPreferencesRequest request, string formula)
     {
         if (!DashboardPresets.IsKnownLevel(request.Level)) return "unknown level";
+        // Answered by PutPreferences as `formula.stale` before this runs (SMA-437,
+        // review of the v3, M11); kept so the check holds on its own.
         if (request.Level != formula) return $"level '{request.Level}' is not the account's formula '{formula}'";
         if (DashboardPresets.For(request.Level).Count == 0) return $"level '{request.Level}' has no dashboard block to store";
         if (request.Blocks.Count == 0) return "blocks must not be empty";

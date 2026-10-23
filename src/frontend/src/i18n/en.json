@@ -335,6 +335,7 @@
     "levelChipAdjusted": "{{level}} view · adjusted",
     "loadError": "Couldn’t load your dashboard.",
     "retry": "Try again",
+    "formulaChanged": "Your formula was changed from another tab or device: the page has been refreshed.",
     "soon": "Coming soon",
     "novice": {
       "list": "Your gardens",
@@ -426,8 +427,6 @@
       "compare": {
         "title": "Compare the formulas",
         "subtitle": "Everything that changes from one formula to the next, line by line.",
-        "yes": "Yes",
-        "no": "No",
         "unlimited": "No limit",
         "upTo_one": "Up to {{count}}",
         "upTo_other": "Up to {{count}}",
@@ -500,7 +499,6 @@
     },
     "formulaChooser": {
       "title": "Change formula",
-      "promise": "Change whenever you like, in either direction, without losing anything.",
       "close": "Close without changing formula",
       "chipLabel": "{{level}} view — change formula",
       "tooltip": "Change formula"
@@ -760,6 +758,7 @@
           "newChip": "New",
           "orderSaved": "Order saved.",
           "orderError": "Order not saved — the next change retries.",
+          "orderRefused": "Order not saved — your {{formula}} formula does not allow a custom order.",
           "notReady": "Your gardens are loading…",
           "place_ordinal_one": "{{count}}st position",
           "place_ordinal_two": "{{count}}nd position",
@@ -1561,6 +1560,12 @@
       "cellRange": "{{from}}–{{to}}",
       "cancel": "Cancel",
       "confirm": "Remove"
+    },
+    "leaveDialog": {
+      "title": "Leave without saving?",
+      "body": "Your unsaved changes will be lost if you leave the planner now.",
+      "stay": "Stay",
+      "leave": "Leave without saving"
     },
     "templates": {
       "title": "Garden templates",
