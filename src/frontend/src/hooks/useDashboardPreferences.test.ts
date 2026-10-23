@@ -1308,6 +1308,91 @@ describe('useDashboardPreferences — a tab whose formula changed elsewhere re-r
     expect(result.current.formulaChangedElsewhere).toBe(true);
   });
 
+  // SMA-457, PR #319, fix round 2 — E7 (the Extension's minor on flush's two
+  // arms): the MIRROR of the case above. The second write went out behind the
+  // first, under the formula left; its refusal lands AFTER the re-read did.
+  // That refusal is moot — the read has already answered it: no second
+  // re-read, the notice not raised again, and an edit of the fresh page still
+  // inside its pause is kept, and written under the fresh formula.
+  it('a stale refusal that lands after the re-read is moot: no second re-read, the notice not re-raised, an edit of the fresh page kept and written under the fresh formula', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    server.formula = 'expert';
+    server.current = null;
+
+    // The same set-up as above: two writes HELD on the chain, the re-read HELD.
+    const stale = () => new HttpStatusError('Request failed (409)', 409, { status: 409, code: 'formula.stale', formula: 'expert' });
+    const first = deferred<void>();
+    const second = deferred<void>();
+    vi.mocked(saveDashboardPreferences).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const reread = deferred<DashboardPreferences>();
+    vi.mocked(fetchDashboardPreferences).mockReturnValueOnce(reread.promise);
+    vi.useFakeTimers();
+    act(() => result.current.setBlocks(moved()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.setBlocks(movedTwice()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      first.reject(stale());
+      await first.promise.catch(() => undefined);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // The first refusal: the page re-reads itself; the second write went out behind the first.
+    expect(fetchDashboardPreferences).toHaveBeenCalledTimes(2);
+    expect(result.current.loading).toBe(true);
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(2);
+
+    // THEN the mirror: the read lands first — the Expert's page, the change
+    // said; the user closes the notice and edits the fresh page.
+    await act(async () => {
+      reread.resolve(preferences({ level: 'expert', blocks: presetFor('expert') }));
+      await reread.promise;
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.level).toBe('expert');
+    expect(result.current.formulaChangedElsewhere).toBe(true);
+    act(() => result.current.dismissFormulaChange());
+    expect(result.current.formulaChangedElsewhere).toBe(false);
+    const expertMoved = presetFor('expert');
+    expertMoved[0]!.size = 'small';
+    act(() => result.current.setBlocks(expertMoved));
+    expect(result.current.saveState).toBe('pending');
+
+    // The second write's refusal lands now, after the read: moot.
+    await act(async () => {
+      second.reject(stale());
+      await second.promise.catch(() => undefined);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchDashboardPreferences).toHaveBeenCalledTimes(2);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.formulaChangedElsewhere).toBe(false);
+    expect(result.current.blocks).toEqual(expertMoved);
+    expect(result.current.saveState).toBe('pending');
+
+    // Past the pause: the edit is written, under the Expert.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(saveDashboardPreferences).mock.calls[2]![0]).toEqual({ level: 'expert', blocks: expertMoved });
+    expect(result.current.saveState).toBe('saved');
+  });
+
   it('a change made while the re-read is out is not taken: nothing drawn on the layout being replaced, nothing written under the formula left, the indicator silent — and the fresh layout takes the next one', async () => {
     const server = serveFormulas('gardener', presetFor('gardener'));
     const { result } = renderHook(() => useDashboardPreferences());

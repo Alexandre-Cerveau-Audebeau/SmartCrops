@@ -115,6 +115,12 @@ export function useDashboardPreferences() {
   // `persist` writes nothing more and `setLevel` ends on it; lowered by the
   // read that lands. A ref, read after awaits — never from a stale render.
   const staleRef = useRef(false);
+  // M11, round 2 (E7) — how many reads have landed: the stale refusal of a
+  // write issued BEFORE the last read landed is moot — that read has already
+  // answered it. A write chained behind a refused one leaves under the
+  // formula left; its refusal may land after the re-read, and must not drop
+  // an edit of the fresh page, re-raise the notice or read a second time.
+  const loadGenRef = useRef(0);
   // S5 — a switch of formula in flight, from its first write to the layout it
   // reads back. No change is taken meanwhile: it would be drawn on the layout
   // of the formula being left, then replaced by the one of the formula
@@ -152,7 +158,9 @@ export function useDashboardPreferences() {
    * layout are read again from the server (`reload`), the indicator says
    * nothing is unsaved — the layout left is replaced, not kept — and the page
    * is told why. Once per refusal: a second stale refusal before the read
-   * lands adds nothing.
+   * lands adds nothing — and a refusal that lands after it is moot, told by
+   * the load generation `flush` captured when the write was issued (round
+   * 2, E7).
    */
   const staleRefresh = useCallback(() => {
     pendingRef.current = null;
@@ -259,11 +267,20 @@ export function useDashboardPreferences() {
       // it (M11): registered on the write right after the chain's own
       // settlement, they run before whoever awaits the chain resumes — so
       // `persist` reads `staleRef` settled, as it reads `unsavedRef`.
+      const issuedAt = loadGenRef.current;
       send(pending, keepalive).then(
         () => say('saved'),
         (error: unknown) => {
-          if (isStaleFormulaRefusal(error)) staleRefresh();
-          else say('error');
+          if (isStaleFormulaRefusal(error)) {
+            // E7 — issued before the last read landed: that read has already
+            // answered this refusal. Nothing is dropped, nothing re-read,
+            // nothing said again; the indicator stays as it is — 'pending' if
+            // an edit of the fresh page waits (its own write will say
+            // 'saved'), 'idle' otherwise. `settle` has marked the layout
+            // unsaved, so the next `persist` rewrites it once, under the
+            // fresh formula: harmless.
+            if (issuedAt === loadGenRef.current) staleRefresh();
+          } else say('error');
         }
       );
     },
@@ -313,6 +330,7 @@ export function useDashboardPreferences() {
         layoutRef.current = loaded;
         unsavedRef.current = false;
         staleRef.current = false;
+        loadGenRef.current += 1;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
         setFormulaChosen(preferences.formulaChosen);
@@ -322,6 +340,7 @@ export function useDashboardPreferences() {
         if (controller.signal.aborted) return;
         layoutRef.current = null;
         staleRef.current = false;
+        loadGenRef.current += 1;
         setLayout(null);
         setCapabilities(null);
         setFormulaChosen(null);
