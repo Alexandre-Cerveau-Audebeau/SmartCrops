@@ -229,7 +229,10 @@ describe('a tab whose formula changed on another device (SMA-437, review of the 
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(SAID)).toBeInTheDocument();
+    // SMA-457, PR #319, fix round 2 (G1): the notice says the page HAS BEEN
+    // refreshed — not while the read is still out; it is read below, once
+    // the read has landed.
+    expect(screen.queryByText(SAID)).toBeNull();
     expect(tips()).toBeDisabled();
 
     await act(async () => {
@@ -244,6 +247,7 @@ describe('a tab whose formula changed on another device (SMA-437, review of the 
       });
       await reread.promise;
     });
+    expect(screen.getByText(SAID)).toBeInTheDocument();
     expect(within(panel).getAllByRole('switch')[0]).toBeEnabled();
     // The panel still stands over the page, which MUI hides from assistive technology: the chip is read through it.
     expect(screen.getByRole('button', { name: 'Expert view — change formula', hidden: true })).toBeInTheDocument();
@@ -274,5 +278,56 @@ describe('a tab whose formula changed on another device (SMA-437, review of the 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull());
     expect(await screen.findByRole('button', { name: 'Expert view — change formula' })).toBeInTheDocument();
     expect(changeFormula).not.toHaveBeenCalled();
+  });
+
+  // SMA-457, PR #319, fix round 2 — G1 (the GitHub review's outside-diff
+  // Minor on the Snackbar's `open`): the notice is a sentence in the past
+  // tense, so it follows the read it names — never on the skeletons, never
+  // beside the load error, and after a « Try again » that lands.
+  it('a stale refusal whose re-read FAILS: the load error and « Try again », no notice — and the retry that lands brings the notice, on the Expert’s page', async () => {
+    const LOAD_ERROR = 'Couldn’t load your dashboard.';
+    const RETRY = 'Try again';
+    const server = serve('gardener');
+    renderPage();
+    await openEditMode();
+    expect(screen.getByRole('button', { name: 'Gardener view — change formula' })).toBeInTheDocument();
+
+    // On the phone, meanwhile: the account goes Expert. The re-read HELD on
+    // the wire — and about to fail.
+    server.formula = 'expert';
+    const reread = deferred<DashboardPreferences>();
+    vi.mocked(fetchDashboardPreferences).mockReturnValueOnce(reread.promise);
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Tips' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    // The read fails: the page says it could not load and offers « Try
+    // again » — and does NOT say it has been refreshed.
+    await act(async () => {
+      reread.reject(new HttpStatusError('Request failed (503)', 503));
+      await reread.promise.catch(() => undefined);
+    });
+    expect(screen.getByText(LOAD_ERROR)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: RETRY })).toBeInTheDocument();
+    expect(screen.queryByText(SAID)).toBeNull();
+
+    // « Try again »: the fake server answers at once — the Expert's page,
+    // and the notice, true now.
+    fireEvent.click(screen.getByRole('button', { name: RETRY }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText(SAID)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expert view — change formula' })).toBeInTheDocument();
+    expect(screen.queryByText(LOAD_ERROR)).toBeNull();
+    // The Gardener's layout is never written again.
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
   });
 });

@@ -1296,9 +1296,13 @@ export default function GardensDashboard() {
       {/* SMA-437, review of the v3, M11 — the formula changed on another
           device: a write of this tab's layout was refused as stale, the page
           re-read its formula and its layout, and says why. The deletion
-          toast's own idiom, in the info tone. */}
+          toast's own idiom, in the info tone. SMA-457, PR #319, fix round 2
+          (G1): the notice follows the read it names — closed while the read
+          is out, closed on its failure beside the load error and its
+          « Réessayer », opened by the read that lands (a retry's included),
+          so MUI's six seconds run on the fresh page. */}
       <Snackbar
-        open={formulaChangedElsewhere}
+        open={formulaChangedElsewhere && !loading && !loadError}
         autoHideDuration={6000}
         onClose={() => dismissFormulaChange()}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
