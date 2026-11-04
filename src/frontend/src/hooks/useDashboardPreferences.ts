@@ -38,7 +38,10 @@ export type SaveState = 'idle' | 'pending' | 'saved' | 'error';
  * (S6); `ignored`, no layout yet or a switch already in flight (S5); `stale`,
  * a layout the server refused as stale before the switch — the formula
  * changed on another device, and the tab is re-reading it (SMA-437, review of
- * the v3, M11): the switch asked for ends there, said by the page.
+ * the v3, M11) — or a read that landed while the switch waited its turn
+ * behind the writes (SMA-457, PR #319, fix round 3, G2): the formula chosen
+ * from is not the account's any more. The switch asked for ends there, said
+ * by the page.
  */
 export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'failed' | 'unread' | 'ignored' | 'stale';
 
@@ -277,8 +280,11 @@ export function useDashboardPreferences() {
             // nothing said again; the indicator stays as it is — 'pending' if
             // an edit of the fresh page waits (its own write will say
             // 'saved'), 'idle' otherwise. `settle` has marked the layout
-            // unsaved, so the next `persist` rewrites it once, under the
-            // fresh formula: harmless.
+            // unsaved: the next `persist` of an edit made on the fresh page
+            // rewrites it once, under the fresh formula — harmless; a
+            // `persist` that WAITED across that read writes nothing and ends
+            // stale (round 3, G2) — the switch it serves was asked from the
+            // formula left.
             if (issuedAt === loadGenRef.current) staleRefresh();
           } else say('error');
         }
@@ -380,13 +386,21 @@ export function useDashboardPreferences() {
    * screen, and says whether it does: the write the debounce still owes leaves
    * now, every write in flight settles, and a layout that a write FAILED to
    * carry is written again, once. Resolves true when the layout on screen is
-   * the one the server holds.
+   * the one the server holds — and false, too, when a read landed while it
+   * waited (SMA-457, PR #319, fix round 3, G2): the formula on screen is no
+   * longer the one the caller asked from, and nothing more is written.
    */
   const persist = useCallback(async (): Promise<boolean> => {
+    // G2 — the load generation at the start, E7's own clock: a read that
+    // lands while the chain is awaited has answered every write ahead of it,
+    // and ends the switch this persist serves.
+    const issuedAt = loadGenRef.current;
     flush();
     await chainRef.current;
-    // M11 — refused as stale: nothing more is written, the tab is re-reading.
-    if (staleRef.current) return false;
+    // M11 — refused as stale, or re-read while this write waited (round 3,
+    // G2): nothing more is written — the tab is re-reading, or has re-read,
+    // its formula, and the layout on screen is the server's, or none.
+    if (staleRef.current || loadGenRef.current !== issuedAt) return false;
     if (unsavedRef.current && layoutRef.current) {
       pendingRef.current = layoutRef.current;
       flush();
@@ -428,16 +442,21 @@ export function useDashboardPreferences() {
     async (level: DashboardLevel): Promise<SwitchOutcome> => {
       if (!layoutRef.current || switchingRef.current) return 'ignored';
       switchingRef.current = true;
+      // G2 (round 3) — the load generation the switch is asked at: a read
+      // that lands while its writes are out means the formula chosen from is
+      // not the account's any more — the switch ends `stale` on it.
+      const issuedAt = loadGenRef.current;
       setSwitching(true);
       setRefusal(null);
       // Where the switch stands when it fails decides what is true of it.
       let stage: 'writing' | 'switching' | 'reading' = 'writing';
       try {
         if (!(await persist())) {
-          // M11 — a stale refusal: the tab is re-reading its formula; the
-          // switch asked for ends here, said by the page — nothing is
-          // unsaved, the layout left is replaced.
-          if (staleRef.current) return 'stale';
+          // M11 — a stale refusal, or a read that landed while the writes
+          // were out (round 3, G2): the formula on screen is not the one
+          // chosen from; the switch asked for ends here, said by the page —
+          // nothing is unsaved, the layout left is replaced.
+          if (staleRef.current || loadGenRef.current !== issuedAt) return 'stale';
           say('error');
           return 'unsaved';
         }
