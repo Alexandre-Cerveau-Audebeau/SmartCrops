@@ -2754,7 +2754,17 @@ export default function GardenPlanner() {
         // accepted the overlap while toasts were transient; round 3 made
         // errors persist until dismissed, and a failed save then buried the
         // very Save/Cancel buttons the toast asks you to retry with.
-        sx={isDirty ? { bottom: `${dirtyBarHeight + 32}px` } : undefined}
+        // SMA-457, PR #319, fix round 3 (E9): while the M9 confirmation
+        // (« Quitter sans enregistrer ? ») is open, the toast steps UNDER the
+        // modal — MUI paints snackbars at 1400, modals at 1300 — or, on a
+        // short viewport, it covers « Rester » / « Quitter sans enregistrer »
+        // and takes their clicks. Still above the dirty bar (appBar), dimmed
+        // by the backdrop; back to its own tier the moment the question
+        // closes — « Rester » finds the toast and its door again.
+        sx={{
+          ...(isDirty && { bottom: `${dirtyBarHeight + 32}px` }),
+          ...(leaveUnsavedOpen && { zIndex: (theme: Theme) => theme.zIndex.modal - 1 }),
+        }}
         TransitionProps={{ onExited: () => setDisplayedToast(null) }}
       >
         {displayedToast ? (

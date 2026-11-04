@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { createTheme } from '@mui/material/styles';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/i18n';
@@ -305,6 +306,39 @@ describe('« See the formulas » on a modified plan asks before leaving (SMA-437
     expect(screen.getByRole('button', { name: 'Add row at top' })).toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: 'See the formulas' })).toBeInTheDocument();
     expect(screen.queryByText('gardens — formulas open')).toBeNull();
+  });
+
+  // SMA-457, PR #319, fix round 3 — E9 (the Extension's minor on the dialog
+  // above): MUI paints snackbars (1400) above modals (1300), and the refusal
+  // toast stays open under the question — on purpose, « Rester » finds it
+  // again. On a short viewport its box covered « Rester » / « Quitter sans
+  // enregistrer » and took their clicks. While the question is open the
+  // toast steps under the modal; « Stay » puts it back above the page. The
+  // tiers are MUI's defaults — the suite renders no theme of its own, and the
+  // app's theme customizes no zIndex (CookieBanner.test.tsx reads them the
+  // same way) — and jsdom resolves the computed z-index from emotion's
+  // styles: a value that is not a number fails here, it never passes.
+  it('while the question is open the toast rides under the modal — and back above the page once « Stay » closes it', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(refusedBySize());
+    const alert = await growAndSave();
+    const snackbar = alert.closest('.MuiSnackbar-root') as HTMLElement | null;
+    expect(snackbar).not.toBeNull();
+    const { modal } = createTheme().zIndex;
+    const zIndexOf = (el: Element) => {
+      const z = getComputedStyle(el).zIndex;
+      expect(z).toMatch(/^\d+$/);
+      return Number(z);
+    };
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'See the formulas' }));
+    const dialog = await screen.findByRole('dialog', LEAVE);
+    expect(zIndexOf(snackbar!)).toBeLessThan(modal);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stay' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', LEAVE)).toBeNull());
+    expect(zIndexOf(snackbar!)).not.toBeLessThan(modal);
+    expect(within(alert).getByRole('button', { name: 'See the formulas' })).toBeInTheDocument();
   });
 
   it('« Leave without saving » leads to Mes Jardins with the choice open', async () => {
