@@ -145,6 +145,8 @@ export default function GardensDashboard() {
     switching,
     refusal,
     dismissRefusal,
+    formulaChangedElsewhere,
+    dismissFormulaChange,
     adjusted,
     reload,
     setBlocks,
@@ -471,14 +473,21 @@ export default function GardensDashboard() {
   // this screen and switches nothing itself.
   const chooseFormula = async (level: DashboardLevel) => {
     const outcome = await setLevel(level);
-    if (outcome === 'switched' || outcome === 'unread') setChooserOpen(false);
+    // SMA-437, review of the v3, M11 — `stale`: the formula changed on
+    // another device, and the choice began by writing a layout the server
+    // refused as stale; the page is re-reading its formula and its layout
+    // and says why (the notice below). The screen closes over the fresh page
+    // — the formula it would name is not the account's any more —, and the
+    // user chooses again from there if they still want to.
+    if (outcome === 'switched' || outcome === 'unread' || outcome === 'stale') setChooserOpen(false);
     // PR #293, fix round 2 (R2-E1) — a switch whose layout could not be read
     // back (S6) leaves the page on its load error: the panel the screen may
     // have been opened from is closed HERE, in the handler that sees it,
     // never from an effect. Hidden by its condition alone, it would have
     // named the default level over the error, and come back by itself once
-    // « Réessayer » had succeeded.
-    if (outcome === 'unread') setPanelOpen(false);
+    // « Réessayer » had succeeded. The same for a stale tab (M11): the page
+    // behind is re-read whole.
+    if (outcome === 'unread' || outcome === 'stale') setPanelOpen(false);
   };
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -488,11 +497,16 @@ export default function GardensDashboard() {
   const [isMutating, setIsMutating] = useState(false);
 
   const navState = location.state as GardensNavState;
-  // ONE toast kind today. The planner's displayedToast rationale, both halves:
-  // the open flag is separate so the copy survives the Snackbar's exit
-  // transition, and `toastSeq` keys the Snackbar so a second deletion inside
-  // the first toast's window remounts it with a FULL auto-hide window (MUI
-  // restarts the timer on `open`, not on a same-value write).
+  // TWO notices share this anchor (SMA-457, PR #319, fix round 1 — [P12]):
+  // the deletion toast below, and the stale-formula notice of M11 at the end
+  // of the page, which has no key — a second stale refusal inside the first
+  // notice's window would not restart it; a double coincidence, and the same
+  // sentence either way, accepted as is. For the deletion, the planner's
+  // displayedToast rationale, both halves: the open flag is separate so the
+  // copy survives the Snackbar's exit transition, and `toastSeq` keys the
+  // Snackbar so a second deletion inside the first toast's window remounts
+  // it with a FULL auto-hide window (MUI restarts the timer on `open`, not on
+  // a same-value write).
   const [toastSeq, setToastSeq] = useState(() =>
     navState?.toast === 'gardenDeleted' ? 1 : 0
   );
@@ -1137,7 +1151,10 @@ export default function GardensDashboard() {
           capabilities={capabilities}
           blocks={blocks}
           adjusted={adjusted}
-          switching={switching}
+          // SMA-437, review of the v3, M11 — a stale re-read replaces the
+          // layout as a switch does: the panel takes no change meanwhile
+          // (the hook refuses it too) and comes back live on the fresh one.
+          switching={switching || loading}
           onClose={() => setPanelOpen(false)}
           // SMA-448, PR #297, fix round 1 (A1) — the panel chooses no formula
           // any more: its link opens the choice screen, like the chip.
@@ -1273,6 +1290,30 @@ export default function GardensDashboard() {
           sx={{ width: '100%' }}
         >
           {t('gardens.deleteDialog.successToast')}
+        </Alert>
+      </Snackbar>
+
+      {/* SMA-437, review of the v3, M11 — the formula changed on another
+          device: a write of this tab's layout was refused as stale, the page
+          re-read its formula and its layout, and says why. The deletion
+          toast's own idiom, in the info tone. SMA-457, PR #319, fix round 2
+          (G1): the notice follows the read it names — closed while the read
+          is out, closed on its failure beside the load error and its
+          « Réessayer », opened by the read that lands (a retry's included),
+          so MUI's six seconds run on the fresh page. */}
+      <Snackbar
+        open={formulaChangedElsewhere && !loading && !loadError}
+        autoHideDuration={6000}
+        onClose={() => dismissFormulaChange()}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => dismissFormulaChange()}
+          severity="info"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {t('dashboard.formulaChanged')}
         </Alert>
       </Snackbar>
     </Container>

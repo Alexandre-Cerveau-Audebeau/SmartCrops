@@ -90,7 +90,9 @@ public record SavePlacementRequest(
 /// SMA-448, lot F5-a — <c>PUT /api/gardens/order</c>: the account's gardens in
 /// the order the user set, first to last. Distinct, and every one the
 /// caller's; a list may name SOME of the gardens (the others keep their place)
-/// and has no ceiling — the Expert's gardens are unlimited (A-N5).
+/// and has no ceiling on its length — the Expert's gardens are unlimited
+/// (A-N5). The body it travels in has one, applied before the binding
+/// (SMA-437, review of the v3, M6: <c>GardensController.MaxOrderBodyBytes</c>).
 /// </summary>
 public record SaveGardenOrderRequest([Required] List<Guid> Ids);
 
@@ -101,6 +103,22 @@ public class GardensController(
     SmartCropsDbContext context,
     ILogger<GardensController> logger) : ControllerBase
 {
+    /// <summary>
+    /// Ceiling on the whole body of <c>PUT /api/gardens/order</c>, in bytes
+    /// (SMA-437, review of the v3, M6 — the hygiene #267 gave
+    /// <c>PUT /api/dashboard/preferences</c>, forgotten by F5-a). The list has
+    /// no ceiling on its length (A-N5), which never asked for an unbounded
+    /// body: without this one, Kestrel's default (30 MB; nothing in
+    /// <c>Program.cs</c>) is the only bound, and an authenticated caller can
+    /// have ≈ 770 000 ids bound in full, walked by <c>Distinct()</c> and sent
+    /// as one array to PostgreSQL by the ownership count — BEFORE the 400 that
+    /// refuses them. Applied by <c>[RequestSizeLimit]</c> before model
+    /// binding, so an oversized document costs a rejected request instead of
+    /// a parsed one. One MiB is ≈ 26 000 ids of 39 JSON bytes each: every
+    /// realistic account passes. A constant, since the attribute takes one.
+    /// </summary>
+    private const int MaxOrderBodyBytes = 1_048_576;
+
     /// <summary>
     /// Garden cards list (SMA-6 / SMA-155): each garden ships its DISTINCT placed
     /// plants (from Placements — the sole plant-membership truth post SMA-6
@@ -414,8 +432,10 @@ public class GardensController(
     /// (A-N5, decided by Alexandre on 28/09): each garden named takes its
     /// index as <c>SortOrder</c>, in ONE set-based UPDATE over the list, under
     /// the account's formula lock — a switch of formula and an order write
-    /// apply one after the other. <b>Without a ceiling</b>: the list travels
-    /// as one array parameter, not one parameter per garden. Strict on write:
+    /// apply one after the other. <b>Without a ceiling on its length</b>: the
+    /// list travels as one array parameter, not one parameter per garden; its
+    /// body is bounded, though — one MiB, <see cref="MaxOrderBodyBytes"/>,
+    /// applied before the binding (SMA-437, review of the v3, M6). Strict on write:
     /// 400 for an empty list or a duplicated id, decided on the request alone
     /// before the lock (S1); 403 <c>formula.gardenOrder</c> for a formula
     /// without the custom order (<see cref="FormulaRefusals.GardenOrder"/>,
@@ -425,6 +445,7 @@ public class GardensController(
     /// unranked garden (null) is read at the head by the client.
     /// </summary>
     [HttpPut("order")]
+    [RequestSizeLimit(MaxOrderBodyBytes)]
     public async Task<IActionResult> PutOrder([FromBody] SaveGardenOrderRequest request, CancellationToken ct = default)
     {
         var userId = GetCurrentUserId();

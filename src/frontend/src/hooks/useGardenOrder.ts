@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { customOrderIds } from '../components/Dashboard/blocks/gardensOptions';
 import { saveGardenOrder } from '../services/gardenSettingsApi';
+import { problemOf, requestFailureKind, type RequestFailureKind } from '../services/requestFailure';
+import { isDashboardLevel, type DashboardLevel } from '../types/Dashboard';
 import type { DashboardGardenData } from '../types/DashboardData';
 import { moveItem } from '../utils/dashboardLayoutGrid';
 import { SAVE_DEBOUNCE_MS } from './useDashboardPreferences';
 
 /** What the last write of the order did: nothing yet, waiting its turn, landed, or failed. */
 export type GardenOrderState = 'idle' | 'pending' | 'saved' | 'error';
+
+/**
+ * SMA-437, review of the v3, M3 — WHY the last write failed (R3-E1, the rule
+ * of `requestFailure`), read as the creation of a garden reads its refusal:
+ * the formula without the custom order the server names (403
+ * `formula.gardenOrder`, with the formula), or a failure named for what it is
+ * — the session expired, a right the account lacks, a failure a retry may
+ * cure. Only the last one is a failure « the next move retries » is true of.
+ */
+export type GardenOrderFailure = { kind: 'refused'; formula: DashboardLevel } | { kind: RequestFailureKind };
 
 export interface GardenOrder {
   /**
@@ -19,8 +31,19 @@ export interface GardenOrder {
   /** The local order — the ids the user moved, not yet or just written — or null to read the server's places. */
   order: string[] | null;
   state: GardenOrderState;
+  /** Why the last write failed, while `state` is `'error'`; null otherwise. */
+  failure: GardenOrderFailure | null;
   /** A garden moved from `from` to `to` — by ▲, ▼ or a drop: applied at once, written after a pause. */
   move: (from: number, to: number) => void;
+}
+
+/** The write's refusal, read from the problem the server served — or the failure's kind. */
+function orderFailureOf(error: unknown): GardenOrderFailure {
+  const problem = problemOf(error);
+  if (problem?.code === 'formula.gardenOrder' && typeof problem.formula === 'string' && isDashboardLevel(problem.formula)) {
+    return { kind: 'refused', formula: problem.formula };
+  }
+  return { kind: requestFailureKind(error) };
 }
 
 /**
@@ -37,7 +60,9 @@ export interface GardenOrder {
  * promise chain, never synchronously in an effect body; a write that failed —
  * a 403 from a formula without the order, a server before this lot, a network
  * that dropped — does not roll the local order back: the user keeps what they
- * arranged, the region says it, and the next move retries.
+ * arranged, the region says it, and the next move retries. And it says WHY
+ * (SMA-437, review of the v3, M3 — `failure`), so the region never promises
+ * that retry to a session that is gone, nor to a formula without the order.
  *
  * ONE write on the wire at a time, and always the LATEST list (PR #299, fix
  * round 1, C): a move made while a write is out waits its turn and goes
@@ -56,6 +81,7 @@ export interface GardenOrder {
 export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?: () => void): GardenOrder {
   const [order, setOrder] = useState<string[] | null>(null);
   const [state, setState] = useState<GardenOrderState>('idle');
+  const [failure, setFailure] = useState<GardenOrderFailure | null>(null);
   const pendingRef = useRef<string[] | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightRef = useRef(false);
@@ -86,9 +112,10 @@ export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?
           setState('saved');
           onSavedRef.current?.();
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           // A newer list waits its turn: it retries, and its outcome speaks.
           if (pendingRef.current !== null) return;
+          setFailure(orderFailureOf(error));
           setState('error');
         })
         .finally(() => {
@@ -104,6 +131,10 @@ export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?
   const schedule = useCallback(
     (next: string[]) => {
       pendingRef.current = next;
+      // The failure is the LAST write's: a list waiting its turn has none yet
+      // (`failure` is null unless `state` is 'error' — the only way out of
+      // 'error' is here, so this is the one place that clears it).
+      setFailure(null);
       setState('pending');
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
@@ -125,5 +156,5 @@ export function useGardenOrder(gardens: readonly DashboardGardenData[], onSaved?
   // Never a keepalive, the layout's teardown keeps that channel.
   useEffect(() => () => flush(), [flush]);
 
-  return { ids, order, state, move };
+  return { ids, order, state, failure, move };
 }

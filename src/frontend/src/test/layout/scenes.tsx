@@ -668,7 +668,7 @@ export function panelSceneData(scene: PanelScene): {
   const list = panelGardens(scene.gardens);
   return {
     gardens: list,
-    order: { ids: customOrderIds(list), order: null, state: 'idle', move: noop },
+    order: { ids: customOrderIds(list), order: null, state: 'idle', failure: null, move: noop },
     sorts: capabilitiesFor('expert').gardenSorts,
   };
 }

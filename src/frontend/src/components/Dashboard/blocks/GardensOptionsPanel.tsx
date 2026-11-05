@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -11,10 +12,11 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import ReconnectButton from '../../ReconnectButton';
 import ReorderableList from '../ReorderableList';
 import { useHoldOptionsPanelEscape } from '../optionsPanelEscape';
 import { defaultGardensCount, gardensCap, gardensOptions } from './gardensOptions';
-import type { GardenOrder } from '../../../hooks/useGardenOrder';
+import type { GardenOrder, GardenOrderFailure, GardenOrderState } from '../../../hooks/useGardenOrder';
 import { DASHBOARD_KEY_FIGURES as K, DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import { GARDENS_COUNTS, GARDENS_COUNT_ALL, type GardenSort, type GardensCount } from '../../../types/Dashboard';
@@ -47,6 +49,22 @@ const headingSx = {
 
 /** Aides, notes: 14 px (A-1.1). */
 const noteSx = { fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.45, color: 'text.secondary' } as const;
+
+/**
+ * What the region says of a write of the order that did not go through
+ * (SMA-437, review of the v3, M3 — R3-E1, the words the creation of a garden
+ * and the save of a plan already use): the formula without the custom order,
+ * the session that expired, the right the account lacks — none of them one
+ * « the next change retries » is true of —, or the failure a retry may cure.
+ */
+function orderFailureText(failure: GardenOrderFailure | null, t: TFunction): string {
+  if (failure?.kind === 'refused') {
+    return t('dashboard.blocks.gardens.options.orderRefused', { formula: t(`dashboard.levels.${failure.formula}.name`) });
+  }
+  if (failure?.kind === 'unauthorized') return t('common.sessionExpired');
+  if (failure?.kind === 'forbidden') return t('common.forbidden');
+  return t('dashboard.blocks.gardens.options.orderError');
+}
 
 /**
  * SMA-448, lot F5-a — the gear of the Gardens widget (V3-04 § 4; decided by
@@ -91,15 +109,22 @@ export default function GardensOptionsPanel({ options, sorts, gardens, ready, on
   // What the last write of the ORDER did, said when it lands or fails —
   // never while it waits: a move is announced by the list the instant it is
   // made, and « pending » would overwrite that sentence before it is heard
-  // [P]. Never at the mount either: a panel opened after a write must not
-  // announce the past. A DOM write from the ref, no state.
-  const saidStateRef = useRef(order.state);
+  // [P]. Never the PAST at the mount: a panel opened after a write that
+  // landed must not announce it. A failure the hook still holds IS the
+  // present — `failure` is cleared by the next move alone (`schedule`,
+  // useGardenOrder.ts) — so a panel mounted on 'error' says it (SMA-457,
+  // PR #319, fix round 1, S1 — CodeRabbit Extension, draw 1a5247d8): the
+  // ref is seeded as if nothing had been said yet, the region is born empty
+  // and then changes, hence announced; nothing is drawn twice, the button
+  // beside it being rendered from the same state. A DOM write from the ref,
+  // no state. A failure is said for what it is (`orderFailureText`, M3).
+  const saidStateRef = useRef<GardenOrderState>(order.state === 'error' ? 'idle' : order.state);
   useEffect(() => {
     if (saidStateRef.current === order.state) return;
     saidStateRef.current = order.state;
     if (order.state === 'saved') say(t('dashboard.blocks.gardens.options.orderSaved'));
-    if (order.state === 'error') say(t('dashboard.blocks.gardens.options.orderError'));
-  }, [order.state, say, t]);
+    if (order.state === 'error') say(orderFailureText(order.failure, t));
+  }, [order.state, order.failure, say, t]);
 
   // What a write carries: the STORED document — every key another build
   // keeps there —, its `count` and `sort` only where the user CHOSE them
@@ -315,6 +340,14 @@ export default function GardensOptionsPanel({ options, sorts, gardens, ready, on
           '&:not(:empty)': { backgroundColor: 'surfaceSubtle', borderRadius: '8px', p: '8px 10px' },
         }}
       />
+      {/* The way back a session that expired needs (SMA-437, review of the
+          v3, M3 — R3-E1): the one button, rendered by React BESIDE the region
+          — the region keeps its rule, text alone, written by its ref. */}
+      {order.state === 'error' && order.failure?.kind === 'unauthorized' && (
+        <Box sx={{ alignSelf: 'flex-start' }}>
+          <ReconnectButton />
+        </Box>
+      )}
     </Box>
   );
 }

@@ -6,6 +6,7 @@ import {
   refusalOf,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
+import { isStaleFormulaRefusal } from '../services/requestFailure';
 import {
   DEFAULT_DASHBOARD_LEVEL,
   type DashboardBlock,
@@ -34,9 +35,15 @@ export type SaveState = 'idle' | 'pending' | 'saved' | 'error';
  * reason — the session expired, a right the account lacks, a failure — which
  * `refusal.kind` names (lot F3, L4 — R3-E1); `unread`, a switch that landed
  * but whose layout could not be read back — the page is on its load error
- * (S6); `ignored`, no layout yet or a switch already in flight (S5).
+ * (S6); `ignored`, no layout yet or a switch already in flight (S5); `stale`,
+ * a layout the server refused as stale before the switch — the formula
+ * changed on another device, and the tab is re-reading it (SMA-437, review of
+ * the v3, M11) — or a read that landed while the switch waited its turn
+ * behind the writes (SMA-457, PR #319, fix round 3, G2): the formula chosen
+ * from is not the account's any more. The switch asked for ends there, said
+ * by the page.
  */
-export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'failed' | 'unread' | 'ignored';
+export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'failed' | 'unread' | 'ignored' | 'stale';
 
 interface Layout {
   level: DashboardLevel;
@@ -75,6 +82,11 @@ export function useDashboardPreferences() {
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [reloadEpoch, setReloadEpoch] = useState(0);
+  // SMA-437, review of the v3, M11 — the formula changed on another device,
+  // and this tab found out by a write the server refused as STALE
+  // (`formula.stale`): true from that refusal until the page dismisses the
+  // notice, for the page to say why it just re-read itself.
+  const [formulaChangedElsewhere, setFormulaChangedElsewhere] = useState(false);
 
   // The write the debounce still owes the server. Held in a ref so the teardown
   // paths can flush it: navigating away one keystroke after a drag must not
@@ -102,6 +114,16 @@ export function useDashboardPreferences() {
   // so the layout on screen has to be there first. Kept by the chain itself
   // (see `send`), so whoever awaits the chain reads it settled.
   const unsavedRef = useRef(false);
+  // M11 — a stale refusal met, and the read it triggered not landed yet:
+  // `persist` writes nothing more and `setLevel` ends on it; lowered by the
+  // read that lands. A ref, read after awaits — never from a stale render.
+  const staleRef = useRef(false);
+  // M11, round 2 (E7) — how many reads have landed: the stale refusal of a
+  // write issued BEFORE the last read landed is moot — that read has already
+  // answered it. A write chained behind a refused one leaves under the
+  // formula left; its refusal may land after the re-read, and must not drop
+  // an edit of the fresh page, re-raise the notice or read a second time.
+  const loadGenRef = useRef(0);
   // S5 — a switch of formula in flight, from its first write to the layout it
   // reads back. No change is taken meanwhile: it would be drawn on the layout
   // of the formula being left, then replaced by the one of the formula
@@ -123,6 +145,38 @@ export function useDashboardPreferences() {
     saveStateRef.current = state;
     setSaveState(state);
   }, []);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setLoadError(false);
+    setReloadEpoch((epoch) => epoch + 1);
+  }, []);
+
+  /**
+   * SMA-437, review of the v3, M11 — a write the server refused as STALE: the
+   * layout on screen visited the formula this tab has left (the formula
+   * changed on another device — only `PUT /api/formulas/current` changes it,
+   * R8). It is NOT written again — the next write would meet the same
+   * refusal, forever: the write still owed is dropped, the formula and its
+   * layout are read again from the server (`reload`), the indicator says
+   * nothing is unsaved — the layout left is replaced, not kept — and the page
+   * is told why. Once per refusal: a second stale refusal before the read
+   * lands adds nothing — and a refusal that lands after it is moot, told by
+   * the load generation `flush` captured when the write was issued (round
+   * 2, E7).
+   */
+  const staleRefresh = useCallback(() => {
+    pendingRef.current = null;
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (staleRef.current) return;
+    staleRef.current = true;
+    setFormulaChangedElsewhere(true);
+    say('idle');
+    reload();
+  }, [reload, say]);
 
   const send = useCallback((next: Layout, keepalive: boolean) => {
     // S2 — the tail of the chain settles the account of what the server
@@ -212,11 +266,31 @@ export function useDashboardPreferences() {
         timerRef.current = null;
       }
       if (!pending) return;
-      send(pending, keepalive)
-        .then(() => say('saved'))
-        .catch(() => say('error'));
+      // The two handlers as the two arms of ONE `then`, not a `catch` behind
+      // it (M11): registered on the write right after the chain's own
+      // settlement, they run before whoever awaits the chain resumes — so
+      // `persist` reads `staleRef` settled, as it reads `unsavedRef`.
+      const issuedAt = loadGenRef.current;
+      send(pending, keepalive).then(
+        () => say('saved'),
+        (error: unknown) => {
+          if (isStaleFormulaRefusal(error)) {
+            // E7 — issued before the last read landed: that read has already
+            // answered this refusal. Nothing is dropped, nothing re-read,
+            // nothing said again; the indicator stays as it is — 'pending' if
+            // an edit of the fresh page waits (its own write will say
+            // 'saved'), 'idle' otherwise. `settle` has marked the layout
+            // unsaved: the next `persist` of an edit made on the fresh page
+            // rewrites it once, under the fresh formula — harmless; a
+            // `persist` that WAITED across that read writes nothing and ends
+            // stale (round 3, G2) — the switch it serves was asked from the
+            // formula left.
+            if (issuedAt === loadGenRef.current) staleRefresh();
+          } else say('error');
+        }
+      );
     },
-    [send, say]
+    [send, say, staleRefresh]
   );
 
   const schedule = useCallback(
@@ -237,11 +311,14 @@ export function useDashboardPreferences() {
   /**
    * Applies a layout locally and schedules its write. The ONE side-effect path
    * — and so the one place a change is refused while a switch is in flight
-   * (S5): nothing is drawn that the switch would then take away.
+   * (S5), or a stale re-read (M11): nothing is drawn that the switch or the
+   * read would then take away, and nothing is written under the formula left
+   * — refused again, as stale. The page's panel is inert meanwhile, as during
+   * a switch.
    */
   const commit = useCallback(
     (next: Layout) => {
-      if (switchingRef.current) return;
+      if (switchingRef.current || staleRef.current) return;
       layoutRef.current = next;
       unsavedRef.current = true;
       setLayout(next);
@@ -258,6 +335,8 @@ export function useDashboardPreferences() {
         const loaded = { level: preferences.level, blocks: preferences.blocks };
         layoutRef.current = loaded;
         unsavedRef.current = false;
+        staleRef.current = false;
+        loadGenRef.current += 1;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
         setFormulaChosen(preferences.formulaChosen);
@@ -266,6 +345,8 @@ export function useDashboardPreferences() {
       .catch(() => {
         if (controller.signal.aborted) return;
         layoutRef.current = null;
+        staleRef.current = false;
+        loadGenRef.current += 1;
         setLayout(null);
         setCapabilities(null);
         setFormulaChosen(null);
@@ -290,12 +371,6 @@ export function useDashboardPreferences() {
     };
   }, [flush]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setLoadError(false);
-    setReloadEpoch((epoch) => epoch + 1);
-  }, []);
-
   /** Replaces the blocks (reorder, resize, hide, show) and schedules the save. */
   const setBlocks = useCallback(
     (blocks: DashboardBlock[]) => {
@@ -311,11 +386,21 @@ export function useDashboardPreferences() {
    * screen, and says whether it does: the write the debounce still owes leaves
    * now, every write in flight settles, and a layout that a write FAILED to
    * carry is written again, once. Resolves true when the layout on screen is
-   * the one the server holds.
+   * the one the server holds — and false, too, when a read landed while it
+   * waited (SMA-457, PR #319, fix round 3, G2): the formula on screen is no
+   * longer the one the caller asked from, and nothing more is written.
    */
   const persist = useCallback(async (): Promise<boolean> => {
+    // G2 — the load generation at the start, E7's own clock: a read that
+    // lands while the chain is awaited has answered every write ahead of it,
+    // and ends the switch this persist serves.
+    const issuedAt = loadGenRef.current;
     flush();
     await chainRef.current;
+    // M11 — refused as stale, or re-read while this write waited (round 3,
+    // G2): nothing more is written — the tab is re-reading, or has re-read,
+    // its formula, and the layout on screen is the server's, or none.
+    if (staleRef.current || loadGenRef.current !== issuedAt) return false;
     if (unsavedRef.current && layoutRef.current) {
       pendingRef.current = layoutRef.current;
       flush();
@@ -357,12 +442,21 @@ export function useDashboardPreferences() {
     async (level: DashboardLevel): Promise<SwitchOutcome> => {
       if (!layoutRef.current || switchingRef.current) return 'ignored';
       switchingRef.current = true;
+      // G2 (round 3) — the load generation the switch is asked at: a read
+      // that lands while its writes are out means the formula chosen from is
+      // not the account's any more — the switch ends `stale` on it.
+      const issuedAt = loadGenRef.current;
       setSwitching(true);
       setRefusal(null);
       // Where the switch stands when it fails decides what is true of it.
       let stage: 'writing' | 'switching' | 'reading' = 'writing';
       try {
         if (!(await persist())) {
+          // M11 — a stale refusal, or a read that landed while the writes
+          // were out (round 3, G2): the formula on screen is not the one
+          // chosen from; the switch asked for ends here, said by the page —
+          // nothing is unsaved, the layout left is replaced.
+          if (staleRef.current || loadGenRef.current !== issuedAt) return 'stale';
           say('error');
           return 'unsaved';
         }
@@ -427,6 +521,9 @@ export function useDashboardPreferences() {
   /** The page has shown the refusal where the user chose; closing that place clears it. */
   const dismissRefusal = useCallback(() => setRefusal(null), []);
 
+  /** The page has said that the formula changed elsewhere (M11); closing that notice clears it. */
+  const dismissFormulaChange = useCallback(() => setFormulaChangedElsewhere(false), []);
+
   /**
    * « Réinitialiser la disposition » (SMA-437, lot V3-07, P2 — contract A-17,
    * decided by Alexandre on 28/09): back to the current formula's preset
@@ -469,6 +566,9 @@ export function useDashboardPreferences() {
     /** A switch the server refused, with the reasons it served; null otherwise. */
     refusal,
     dismissRefusal,
+    /** The formula changed on another device and the tab re-read it (M11): the page says so until dismissed. */
+    formulaChangedElsewhere,
+    dismissFormulaChange,
     adjusted: layout && capabilities ? isAdjusted(blocks, capabilities) : false,
     reload,
     setBlocks,
