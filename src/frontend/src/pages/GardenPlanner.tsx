@@ -109,6 +109,7 @@ import {
   plannerReducer,
   type PlannerPlacement,
 } from './gardenPlanner/plannerReducer';
+import { plannerToastSx } from './gardenPlanner/plannerToastSx';
 
 
 // Referentially stable empty catalog for the not-ready renders — a fresh []
@@ -2761,10 +2762,15 @@ export default function GardenPlanner() {
         // and takes their clicks. Still above the dirty bar (appBar), dimmed
         // by the backdrop; back to its own tier the moment the question
         // closes — « Rester » finds the toast and its door again.
-        sx={{
-          ...(isDirty && { bottom: `${dirtyBarHeight + 32}px` }),
-          ...(leaveUnsavedOpen && { zIndex: (theme: Theme) => theme.zIndex.modal - 1 }),
-        }}
+        // SMA-477: `plannerToastSx` writes the lift again under MUI's `sm` rule.
+        sx={(theme) =>
+          plannerToastSx({
+            dirtyBarHeight,
+            isDirty,
+            underVeil: leaveUnsavedOpen,
+            theme,
+          })
+        }
         TransitionProps={{ onExited: () => setDisplayedToast(null) }}
       >
         {displayedToast ? (

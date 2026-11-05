@@ -54,6 +54,12 @@ import { contrast, resolveColor } from '../contrast';
  * night, in French and in English — in the Weather group's hook too, once
  * the drawer's Chromes have closed.
  *
+ * SMA-477: THE PLANNER'S TOAST OVER ITS UNSAVED-CHANGES BAR — a plan
+ * modified, its save refused: the toast above the bar, centred over it, at
+ * the `bottom` the page asks for, at 1 024 and 1 280 px; above it at a
+ * phone's 360 px. What MUI's own `@media (min-width:600px)` rule undid from
+ * 600 px up, and jsdom — which applies no such rule — could not see.
+ *
  * Chrome as the scenes' suite finds it: without it the suite is SKIPPED on a
  * workstation and FAILS on CI.
  */
@@ -472,34 +478,100 @@ async function runRefusalView(view: PageView): Promise<{ limit: DialogMeasure; u
 
 const ADD_ROW_TOP = "button[aria-label='Ajouter une ligne en haut']";
 
+/**
+ * Under 1 200 px the sidebar — where the shape mode is switched — is a
+ * bottom sheet behind its trigger: opened first, when there is one.
+ */
+async function shapeMode(session: PageSession) {
+  await session.evaluate(`(() => { const trigger = document.querySelector("button[aria-controls='planner-sheet']"); if (trigger) trigger.click(); return true; })()`);
+  await session.waitFor('document.querySelector("[data-shape-toggle] input")', 'the shape toggle');
+  await session.evaluate('window.__page.click("[data-shape-toggle] input")');
+}
+
+/** A plan modified — a row added at the top — then saved, the save refused for the plan's size or by a session that expired: the toast, awaited. */
+async function saveModifiedPlan(session: PageSession, outcome: 'refused' | 'unauthorized') {
+  await session.navigate(`page=planner&save=${outcome}&theme=light&lang=fr`);
+  await shapeMode(session);
+  await session.waitFor(`document.querySelector("${ADD_ROW_TOP}")`, 'the shape mode');
+  await session.evaluate(`window.__page.click("${ADD_ROW_TOP}")`);
+  await session.waitFor('!document.querySelector("[data-planner-save]").disabled', 'the save button live');
+  await session.evaluate('window.__page.click("[data-planner-save]")');
+  await session.waitFor('document.querySelector("[data-planner-toast]")', 'the toast');
+  await settle(session);
+}
+
+// ── The planner's toast over its unsaved-changes bar (SMA-477) ──────────────
+
+/**
+ * SMA-477 — the planner's toast and its unsaved-changes bar, both fixed at
+ * the bottom of the window, read on the real page once a refused save has
+ * left them there together: the plan is still modified, the error stays. The
+ * toast is the Snackbar's ROOT — the box the page lifts; MUI's Grow scales the
+ * alert inside it while it appears, never the root.
+ */
+interface ToastOverBarMeasure {
+  toast: LocationBox;
+  bar: LocationBox;
+  /** The height the page measures of its bar (`offsetHeight`) — what it lifts the toast by, plus 32 px. */
+  barOffsetHeight: number;
+  /** The `bottom` the engine computed for the toast's root. */
+  bottom: string;
+}
+
+/** The toast and the bar, by view: 1 024 and 1 280 px from the planner's own session, a phone's true 360 px from the « Réglages » one. */
+const toastOverBarCases = new Map<string, ToastOverBarMeasure>();
+/** The phone's view: the first of `PLANNER_LOCATION_VIEWS`. */
+const TOAST_PHONE_VIEW = '360x780';
+
+/** The toast has finished appearing: Grow has handed its alert back, `transform: none`. */
+const TOAST_ENTERED = 'getComputedStyle(document.querySelector("[data-planner-toast]")).transform === "none"';
+
+/** The toast's root and the bar, read in the engine. */
+const MEASURE_TOAST_OVER_BAR = `(() => {
+  const alert = document.querySelector('[data-planner-toast]');
+  const root = alert && alert.closest('.MuiSnackbar-root');
+  const bar = document.querySelector('[data-testid="dirty-bar"]');
+  if (!root || !bar) throw new Error('No toast or no unsaved-changes bar on the planner.');
+  const tenth = (value) => Math.round(value * 10) / 10;
+  const box = (element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: tenth(rect.x), y: tenth(rect.y), w: tenth(rect.width), h: tenth(rect.height) };
+  };
+  return { toast: box(root), bar: box(bar), barOffsetHeight: bar.offsetHeight, bottom: getComputedStyle(root).bottom };
+})()`;
+
+/**
+ * Once a refused save has left the bar up and the toast open — played first
+ * when the session has not (`play`) —: the toast entered, then both read. A
+ * failure is recorded on its own; what the session measured before is kept.
+ */
+async function readToastOverBar(session: PageSession, viewId: string, play = false) {
+  try {
+    if (play) await saveModifiedPlan(session, 'refused');
+    await session.waitFor(TOAST_ENTERED, 'the toast entered');
+    toastOverBarCases.set(viewId, await session.evaluate<ToastOverBarMeasure>(MEASURE_TOAST_OVER_BAR));
+  } catch (error) {
+    failures.set(`planner-toast-${viewId}`, error);
+  }
+}
+
 /** The planner at the Novice's limit, then its save refused for the plan's size, then by a session that expired. */
 async function runPlannerView(view: PageView): Promise<{ limit: PlannerLimitMeasure; refused: DialogMeasure; unauthorized: DialogMeasure }> {
   const session = await openPage(CHROME!, outDir, { label: `planner-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
   try {
-    // Under 1 200 px the sidebar — where the shape mode is switched — is a
-    // bottom sheet behind its trigger: opened first, when there is one.
-    const shapeMode = async () => {
-      await session.evaluate(`(() => { const trigger = document.querySelector("button[aria-controls='planner-sheet']"); if (trigger) trigger.click(); return true; })()`);
-      await session.waitFor('document.querySelector("[data-shape-toggle] input")', 'the shape toggle');
-      await session.evaluate('window.__page.click("[data-shape-toggle] input")');
-    };
     await session.navigate('page=planner&theme=light&lang=fr');
-    await shapeMode();
+    await shapeMode(session);
     await session.waitFor('document.querySelector("[data-planner-limit]")', 'the limit note');
     await settle(session);
     const limit = await session.evaluate<PlannerLimitMeasure>('window.__page.measurePlannerLimit()');
     const save = async (outcome: 'refused' | 'unauthorized') => {
-      await session.navigate(`page=planner&save=${outcome}&theme=light&lang=fr`);
-      await shapeMode();
-      await session.waitFor(`document.querySelector("${ADD_ROW_TOP}")`, 'the shape mode');
-      await session.evaluate(`window.__page.click("${ADD_ROW_TOP}")`);
-      await session.waitFor('!document.querySelector("[data-planner-save]").disabled', 'the save button live');
-      await session.evaluate('window.__page.click("[data-planner-save]")');
-      await session.waitFor('document.querySelector("[data-planner-toast]")', 'the toast');
-      await settle(session);
+      await saveModifiedPlan(session, outcome);
       return session.evaluate<DialogMeasure>('window.__page.measureDialog("[data-planner-toast]")');
     };
-    return { limit, refused: await save('refused'), unauthorized: await save('unauthorized') };
+    const refused = await save('refused');
+    // SMA-477 — the refused save has left the plan modified: the bar is up, the toast open over it.
+    await readToastOverBar(session, view.id);
+    return { limit, refused, unauthorized: await save('unauthorized') };
   } finally {
     await session.close();
   }
@@ -706,6 +778,9 @@ async function runPlannerLocationView(
     } catch (error) {
       failures.set(`planner-setup-${view.id}`, error);
     }
+    // SMA-477 — at a phone's true width, where the bar stands two lines tall:
+    // the refused save played in this Chrome, the toast and the bar read.
+    if (view.id === TOAST_PHONE_VIEW) await readToastOverBar(session, view.id, true);
     if (view.width === 1280) {
       // The probes (SMA-446): a check never shown a defect proves nothing.
       const probes = [
@@ -1806,6 +1881,49 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
       expect(defects(unauthorized), id).toEqual(clean);
       expect(unauthorized.text, id).toMatch(/Votre session a expiré/);
       expect(names(unauthorized), id).toContain('Se reconnecter');
+    });
+  });
+
+  // SMA-477 — THE PLANNER'S TOAST OVER ITS UNSAVED-CHANGES BAR, on the real
+  // page. Since R5 the toast is lifted above the bar by the bar's measured
+  // height + 32 px, and from 600 px it was not: MUI's Snackbar re-sets its
+  // root's `bottom` under `@media (min-width:600px)`, a rule emotion writes
+  // AFTER the class's plain declarations, so the lift held on a phone only
+  // and the toast lay 24 px from the bottom, over the bar. jsdom applies no
+  // `@media` rule that carries a feature: the unit suite could not see it,
+  // and cannot see its fix. Read here in the engine, in the state the
+  // refusals' scenario already reaches — a plan modified, its save refused:
+  // the bar up, the error staying — at 1 024 and 1 280 px, and at a phone's
+  // true 360 px in the « Réglages » session of that width.
+  describe('the planner’s toast over its unsaved-changes bar, on the real page (SMA-477)', () => {
+    const toastOf = (id: string): ToastOverBarMeasure => {
+      const measured = toastOverBarCases.get(id);
+      if (!measured) throw new Error(`No measurement of the toast over the bar at ${id}: ${String(failures.get(`planner-toast-${id}`) ?? 'not run')}`);
+      return measured;
+    };
+    /** What a failure says: the two boxes, and the `bottom` the engine computed. */
+    const said = (id: string, { toast, bar, barOffsetHeight, bottom }: ToastOverBarMeasure) =>
+      `${id}: toast ${JSON.stringify(toast)}, bar ${JSON.stringify(bar)} (offsetHeight ${barOffsetHeight}), computed bottom ${bottom}`;
+    const DESKTOP = PLANNER_VIEWS.map((view) => view.id);
+
+    it.each([TOAST_PHONE_VIEW, ...DESKTOP])('%s: the toast of a refused save ends above the bar — no overlap', (id) => {
+      const measured = toastOf(id);
+      // Two boxes that are drawn: an empty one would pass the comparison for nothing.
+      expect(Math.min(measured.toast.h, measured.bar.h), said(id, measured)).toBeGreaterThan(0);
+      expect(measured.toast.y + measured.toast.h, said(id, measured)).toBeLessThanOrEqual(measured.bar.y);
+    });
+
+    it.each(DESKTOP)('%s: the toast stays centred over the bar — MUI’s own `left: 50%` and transform, untouched', (id) => {
+      const measured = toastOf(id);
+      // Against the bar's middle, never the window's: a desktop keeps a 10 px
+      // gutter for its scrollbar, and a fixed box is laid in what is left.
+      const offCentre = measured.toast.x + measured.toast.w / 2 - (measured.bar.x + measured.bar.w / 2);
+      expect(Math.abs(offCentre), said(id, measured)).toBeLessThanOrEqual(1);
+    });
+
+    it.each(DESKTOP)('%s: the engine computes the lift the page asks for — the bar’s measured height + 32 px', (id) => {
+      const measured = toastOf(id);
+      expect(measured.bottom, said(id, measured)).toBe(`${measured.barOffsetHeight + 32}px`);
     });
   });
 
