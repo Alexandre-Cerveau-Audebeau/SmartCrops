@@ -699,7 +699,10 @@ public class AuthController(
         if (string.IsNullOrEmpty(claimedEmail) || string.IsNullOrEmpty(user.Email)
             || !string.Equals(claimedEmail, user.Email, StringComparison.OrdinalIgnoreCase))
         {
-            logger.LogWarning("google merge refused: email mismatch");
+            logger.LogWarning(
+                "google merge refused: email mismatch (target '{Target}', provider '{Provider}')",
+                MaskEmail(user.Email ?? string.Empty),
+                MaskEmail(claimedEmail ?? string.Empty));
             return false;
         }
 
@@ -711,7 +714,7 @@ public class AuthController(
         // for any future caller.
         if (!IsGoogleEmailUsable(info))
         {
-            logger.LogWarning("google merge refused: email_verified absent or false");
+            logger.LogWarning("google merge refused: email_verified absent or false for '{Target}'", MaskEmail(user.Email));
             return false;
         }
 
