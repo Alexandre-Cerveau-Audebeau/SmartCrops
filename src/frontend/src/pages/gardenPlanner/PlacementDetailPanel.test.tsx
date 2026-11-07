@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import i18n from '../../i18n/i18n';
 import type { CellData } from '../../types/GardenLayout';
@@ -304,6 +304,44 @@ function renderIdentity(
     </MemoryRouter>
   );
 }
+
+// SMA-296: `plant` is null on every pending render, the page derives it from
+// an empty list until the catalogue is ready. A plant missing from a READY
+// catalogue is the other null, and that one can still be removed.
+describe('PlacementDetailPanel actions gated on the catalogue (SMA-296)', () => {
+  const hint = 'Select another plant in the sidebar to replace this one.';
+
+  // The file starts on the no-choice default, French: this describe states its
+  // language, so it reads the same run alone.
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+  it('while the catalogue is pending, Remove is disabled and the replace hint hidden, like the name', () => {
+    const onRemove = vi.fn();
+    renderIdentity({ plant: null, catalogReady: false, onRemove });
+
+    const remove = screen.getByRole('button', { name: 'Remove from plan' });
+    expect(remove).toBeDisabled();
+    fireEvent.click(remove);
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(screen.queryByText(hint)).toBeNull();
+  });
+
+  it.each([
+    ['a known plant', identityPlant],
+    ['a plant the catalogue does not hold', null],
+  ])('once the catalogue is ready, %s can be removed and the hint is back', (_, plant) => {
+    const onRemove = vi.fn();
+    renderIdentity({ plant, catalogReady: true, onRemove });
+
+    const remove = screen.getByRole('button', { name: 'Remove from plan' });
+    expect(remove).toBeEnabled();
+    fireEvent.click(remove);
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(hint)).toBeInTheDocument();
+  });
+});
 
 describe('PlacementDetailPanel identity header (SMA-309)', () => {
   it('renders the section title, the name, the scientific name and the footprint badge', () => {
