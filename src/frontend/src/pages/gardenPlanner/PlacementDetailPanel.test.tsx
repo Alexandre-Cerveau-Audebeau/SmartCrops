@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import i18n from '../../i18n/i18n';
 import type { CellData } from '../../types/GardenLayout';
@@ -310,6 +310,12 @@ function renderIdentity(
 // catalogue is the other null, and that one can still be removed.
 describe('PlacementDetailPanel actions gated on the catalogue (SMA-296)', () => {
   const hint = 'Select another plant in the sidebar to replace this one.';
+
+  // The file starts on the no-choice default, French: this describe states its
+  // language, so it reads the same run alone.
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
 
   it('while the catalogue is pending, Remove is disabled and the replace hint hidden, like the name', () => {
     const onRemove = vi.fn();
