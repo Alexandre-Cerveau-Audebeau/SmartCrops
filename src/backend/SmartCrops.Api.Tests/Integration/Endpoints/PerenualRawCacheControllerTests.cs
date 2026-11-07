@@ -1,10 +1,8 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 
@@ -508,21 +506,6 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         Assert.Equal(1, await db.PerenualRawCache.CountAsync(c => c.Endpoint == "species-list"));
-    }
-
-    // SMA-33 admin gate helpers (mirror PerenualPestCatalogControllerTests).
-    private void AuthAsAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
-    }
-
-    private void AuthAsNonAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
     }
 
     private record CacheResp(string Phase, int Processed, int Cached, int HtmlSkipped, int Failures, string? NextCursor, int[]? FailedIds = null);

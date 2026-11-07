@@ -1,9 +1,7 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -23,12 +21,6 @@ public class GbifVernacularBackfillTests : IntegrationTestBase
     // delayMs=0 so the tests don't pay the courteous pacing delay.
     private const string Url = "/api/admin/translations/gbif-vernacular-backfill";
     private const int OrnamentalTypeId = 4; // seeded by PlantTypeConfiguration, survives Respawn
-
-    private void AuthAsAdmin()
-    {
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken($"u-{Guid.NewGuid():N}", Roles.Admin));
-    }
 
     private static string Page(params string[] entries)
         => $"{{\"offset\":0,\"limit\":100,\"endOfRecords\":true,\"results\":[{string.Join(",", entries)}]}}";
