@@ -200,11 +200,11 @@ public class AuthController(
     }
 
     /// <summary>
-    /// SMA-31: mails the account-confirmation link. Registration is NOT gated on the
-    /// result — the account already exists and the caller is about to be signed in, so
-    /// an SMTP outage must never cost the user their account. Any delivery failure is
-    /// logged server-side and swallowed; the endpoint still returns 201. Re-sending a
-    /// link after a failed delivery is SMA-320's problem, not this method's.
+    /// SMA-31: mails the account-confirmation link, for Register and ResendConfirmation
+    /// alike. Neither is gated on delivery: the account already exists, so an SMTP
+    /// outage must never cost the user their account. Any delivery failure is logged
+    /// server-side and swallowed, and the caller answers as it would have: the 201 of
+    /// Register, the generic 200 of ResendConfirmation.
     /// </summary>
     private async Task SendConfirmationEmailAsync(ApplicationUser user, string email, CancellationToken ct)
     {
