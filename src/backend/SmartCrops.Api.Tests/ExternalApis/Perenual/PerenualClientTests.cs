@@ -399,6 +399,36 @@ public class PerenualClientTests
         Assert.Null(fetch.LiteralJson);
     }
 
+    [Fact]
+    public async Task GetCareGuideLiteralAsync_OnTimeout_ReturnsTransientFailure()
+    {
+        // Parity with the sibling methods: a host-side HttpClient timeout surfaces
+        // as TaskCanceledException without caller-token cancellation, and stays a
+        // TRANSIENT miss, re-fetched on a later pass.
+        var handler = new ThrowingHandler(new TaskCanceledException("request timed out"));
+        var client = NewClient(handler);
+
+        var fetch = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TransientFailure, fetch.Outcome);
+        Assert.Null(fetch.LiteralJson);
+    }
+
+    [Fact]
+    public async Task GetCareGuideLiteralAsync_OnPollyTimeoutRejected_ReturnsTransientFailure()
+    {
+        // The resilience handler's total timeout: TimeoutRejectedException, which
+        // the catch above does not take. TRANSIENT as well, never an unhandled
+        // exception out of the enrichment.
+        var handler = new ThrowingHandler(new TimeoutRejectedException("polly total timeout"));
+        var client = NewClient(handler);
+
+        var fetch = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TransientFailure, fetch.Outcome);
+        Assert.Null(fetch.LiteralJson);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.Gone)]
