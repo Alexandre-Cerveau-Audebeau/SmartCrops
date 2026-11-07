@@ -412,14 +412,18 @@ const settle = async () => {
 };
 
 /**
- * Escape, then the proof that the move is over: the drag overlay gone. dnd-kit
- * clears it from a promise once the drag has ended (`AnimationManager`), so a
- * test ending on the key press left that state update to land outside `act`
- * (SMA-452 § 3).
+ * Escape, and the proof that the move is over: the drag overlay there before
+ * the key, gone after it. dnd-kit clears it from a promise once the drag has
+ * ended (`AnimationManager`), so a test ending on the key press left that state
+ * update to land outside `act` (SMA-452 § 3). Pressed inside an async `act`, it
+ * lands there, and the absence is read at once: no wait, and no bound.
  */
 const cancelMove = async (handle: HTMLElement) => {
-  fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
-  await waitFor(() => expect(document.querySelector('[data-drag-overlay]')).toBeNull());
+  expect(document.querySelector('[data-drag-overlay]')).not.toBeNull();
+  await act(async () => {
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+  expect(document.querySelector('[data-drag-overlay]')).toBeNull();
 };
 
 /**
