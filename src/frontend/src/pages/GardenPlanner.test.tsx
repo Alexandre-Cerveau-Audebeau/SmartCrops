@@ -1644,13 +1644,15 @@ describe('GardenPlanner placement panel (SMA-309)', () => {
 
   it('the REAL pointer sequence blurs before the click: Save right after typing still commits (R3)', async () => {
     vi.mocked(saveLayout).mockResolvedValue(undefined);
-    const grid = await selectPlacement();
+    await selectPlacement();
     // Pre-dirty through another edit (the override idiom): with a note as
     // the ONLY change, Save stays disabled until the field loses focus —
     // typing alone commits nothing by design (declared R3 consequence).
     fireEvent.click(screen.getByRole('button', { name: /Adjust exposure/ }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
-    expect(grid).toBeInTheDocument();
+    // The draft is modified: a no-op override would fail here, by its name,
+    // and not as a Save that never fires further down.
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
 
     const user = userEvent.setup();
     await user.click(screen.getByLabelText('Notes'));
@@ -1850,9 +1852,10 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
     );
     const toast = await screen.findByText('Failed to save layout.');
     expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
-    // jsdom: the stubbed ResizeObserver leaves the measured height at 0, so
-    // the offset degrades to the 32px gap — still the sx the bar's presence
-    // switches on, and pinned to OUR constant rather than a coordinate.
+    // jsdom: nothing is laid out, the measured height stays 0, so the offset
+    // degrades to the 32px gap — still the sx the bar's presence switches on,
+    // and pinned to OUR constant rather than a coordinate. The next test gives
+    // the bar a height.
     expect(toast.closest('.MuiSnackbar-root')).toHaveStyle({ bottom: '32px' });
     // Dismiss the error, discard via the bar: the next toast has NO bar under
     // it and sits at the mechanism's own default again.
@@ -1877,6 +1880,50 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
     });
   });
 
+  it('the toast and the page make room for the bar\'s MEASURED height, and follow it (R5)', async () => {
+    // jsdom lays nothing out: the bar gets its height by hand, on that one
+    // element, and the observer of that element is called the way a browser
+    // calls it. This pins the wiring from the measure to the toast's lift and
+    // to the page's bottom padding, which nothing else reads: the Chrome suite
+    // measures the toast on the real page, not the padding.
+    const observed = new Map<Element, ResizeObserverCallback>();
+    class RecordingResizeObserver implements ResizeObserver {
+      callback: ResizeObserverCallback;
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+      observe(target: Element): void {
+        observed.set(target, this.callback);
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', RecordingResizeObserver);
+    vi.mocked(saveLayout).mockRejectedValue(new Error('boom'));
+    await renderDirty();
+    const bar = screen.getByTestId('dirty-bar');
+    const barHeightBecomes = (height: number) => {
+      Object.defineProperty(bar, 'offsetHeight', {
+        configurable: true,
+        value: height,
+      });
+      act(() => observed.get(bar)!([], {} as ResizeObserver));
+    };
+
+    barHeightBecomes(56);
+    fireEvent.click(within(bar).getByRole('button', { name: 'Save' }));
+    const toast = await screen.findByText('Failed to save layout.');
+    const snackbar = toast.closest('.MuiSnackbar-root');
+    const page = bar.parentElement;
+    expect(snackbar).toHaveStyle({ bottom: '88px' });
+    expect(page).toHaveStyle({ paddingBottom: '88px' });
+
+    // The bar wraps (a longer language, a narrower width): both follow.
+    barHeightBecomes(72);
+    expect(snackbar).toHaveStyle({ bottom: '104px' });
+    expect(page).toHaveStyle({ paddingBottom: '104px' });
+  });
+
   it('an error toast survives the Escape key and closes only through its X (R6)', async () => {
     vi.mocked(saveLayout).mockRejectedValue(new Error('boom'));
     await renderDirty();
@@ -1886,35 +1933,40 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
       })
     );
     const toast = await screen.findByText('Failed to save layout.');
-    // Dispatched on DOCUMENT, deliberately (declared adaptation): MUI's
-    // escape listener is document-level (useSnackbar registers on document)
-    // and the event bubbles on to the planner's own WINDOW handler — one
-    // keypress, BOTH consumers, exactly the coexistence the guard records.
-    // A window-targeted event would never reach the document listener and
-    // the test would pass without the fix.
-    fireEvent.keyDown(document, { key: 'Escape' });
-    // An IMMEDIATE presence assert would be vacuous: the R3 exit-survival
-    // keeps even a DISMISSED toast mounted through the Grow exit. The real
-    // claim is that the toast never leaves — the disappearance wait must
-    // TIME OUT (proven red against the clickaway-only guard).
-    await expect(
-      waitFor(
-        () =>
-          expect(screen.queryByText('Failed to save layout.')).toBeNull(),
-        { timeout: 1000 }
-      )
-    ).rejects.toThrow();
-    expect(screen.getByText('Failed to save layout.')).toBeInTheDocument();
-    // Its own X remains the ONLY dismissal.
-    fireEvent.click(
-      within(toast.closest('.MuiSnackbar-root') as HTMLElement).getByRole(
-        'button',
-        { name: 'Close' }
-      )
-    );
-    await waitFor(() =>
-      expect(screen.queryByText('Failed to save layout.')).toBeNull()
-    );
+    // The fake clock starts here, after the last wait on the DOM: Testing
+    // Library's waits do not advance it.
+    vi.useFakeTimers();
+    try {
+      // Dispatched on DOCUMENT, deliberately (declared adaptation): MUI's
+      // escape listener is document-level (useSnackbar registers on document)
+      // and the event bubbles on to the planner's own WINDOW handler — one
+      // keypress, BOTH consumers, exactly the coexistence the guard records.
+      // A window-targeted event would never reach the document listener and
+      // the test would pass without the fix.
+      fireEvent.keyDown(document, { key: 'Escape' });
+      // An IMMEDIATE presence assert would be vacuous: the R3 exit-survival
+      // keeps even a DISMISSED toast mounted through the Grow exit. The clock
+      // runs past that exit first (the X below shows a dismissed toast is gone
+      // by then), and the toast is still there (proven red against the
+      // clickaway-only guard).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(screen.getByText('Failed to save layout.')).toBeInTheDocument();
+      // Its own X remains the ONLY dismissal.
+      fireEvent.click(
+        within(toast.closest('.MuiSnackbar-root') as HTMLElement).getByRole(
+          'button',
+          { name: 'Close' }
+        )
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(screen.queryByText('Failed to save layout.')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('an error toast persists past the auto-hide window and closes only on dismissal (R3)', async () => {
