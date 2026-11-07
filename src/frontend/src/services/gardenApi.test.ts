@@ -111,4 +111,13 @@ describe('gardenApi (SMA-280 migration)', () => {
     expect(url).toBe('/api/gardens/a%2Fb%20c');
   });
 
+  it('URL-encodes the garden id on the delete route too', async () => {
+    const spy = mockFetch({ ok: true, status: 204 });
+
+    await deleteGarden('a/b c');
+
+    const [url, init] = spy.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('/api/gardens/a%2Fb%20c');
+    expect(init.method).toBe('DELETE');
+  });
 });

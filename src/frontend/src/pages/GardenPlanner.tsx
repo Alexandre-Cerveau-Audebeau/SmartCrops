@@ -28,7 +28,10 @@ import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import SaveIcon from '@mui/icons-material/Save';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { CompassRose } from '../components/Garden/CompassRose';
-import GardenGrid from '../components/Garden/GardenGrid';
+import GardenGrid, {
+  type CellPaintEndHandler,
+  type CellPaintHandler,
+} from '../components/Garden/GardenGrid';
 import PlantSidebar, {
   type PlantSidebarTab,
 } from '../components/Garden/PlantSidebar';
@@ -60,7 +63,7 @@ import { saveLayout } from '../services/gardenLayoutApi';
 import { problemOf, requestFailureKind } from '../services/requestFailure';
 import { isWholeNumber } from '../services/wireChecks';
 import { fetchPlants } from '../services/plantApi';
-import { footprintBadgeSx, GAP_PX } from '../theme/plannerTokens';
+import { CELL_PX, footprintBadgeSx, GAP_PX } from '../theme/plannerTokens';
 import { usePlannerTokens } from '../theme/usePlannerTokens';
 import type { Garden, GardenConfig } from '../types/Garden';
 import type { Plant } from '../types/Plant';
@@ -109,7 +112,10 @@ import {
   plannerReducer,
   type PlannerPlacement,
 } from './gardenPlanner/plannerReducer';
-import { plannerToastSx } from './gardenPlanner/plannerToastSx';
+import {
+  DIRTY_BAR_CLEARANCE_PX,
+  plannerToastSx,
+} from './gardenPlanner/plannerToastSx';
 
 
 // Referentially stable empty catalog for the not-ready renders — a fresh []
@@ -478,7 +484,7 @@ export default function GardenPlanner() {
   // The mobile breakpoint drives the §8 compass (56/40 container, 42/30 SVG)
   // AND the §4 base cell size: 58 px desktop / 30 px mobile at zoom 100% (R3).
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const cellSizePx = Math.round((isMobile ? 30 : 58) * zoom);
+  const cellSizePx = Math.round((isMobile ? CELL_PX.xs : CELL_PX.sm) * zoom);
   // DnD (lot 2): the §4 gap at the same breakpoint — the pointer→cell math
   // inverts the exact track formula the overlays use.
   const dndGapPx = isMobile ? GAP_PX.xs : GAP_PX.sm;
@@ -866,8 +872,8 @@ export default function GardenPlanner() {
   // The KEYBOARD path (GridCell's detail-0 click) paints start-then-end
   // with no pointer at all — an undefined event passes every guard.
   const paintPointerIdRef = useRef<number | null>(null);
-  const handleCellDragStart = useCallback(
-    (row: number, col: number, e?: { pointerId: number }) => {
+  const handleCellDragStart = useCallback<CellPaintHandler>(
+    (row, col, e) => {
       if (e !== undefined) {
         // A live stroke ignores every other pointer's START — the polarity
         // stays locked to the owner's opening cell.
@@ -878,8 +884,8 @@ export default function GardenPlanner() {
     },
     []
   );
-  const handleCellDragEnter = useCallback(
-    (row: number, col: number, e?: { pointerId: number }) => {
+  const handleCellDragEnter = useCallback<CellPaintHandler>(
+    (row, col, e) => {
       if (
         e !== undefined &&
         paintPointerIdRef.current !== null &&
@@ -891,7 +897,7 @@ export default function GardenPlanner() {
     },
     []
   );
-  const handleCellDragEnd = useCallback((e?: { pointerId: number }) => {
+  const handleCellDragEnd = useCallback<CellPaintEndHandler>((e) => {
     // Only the OWNER's release (or cancel) ends the stroke; the keyboard
     // path carries no event and always may.
     if (
@@ -2411,7 +2417,7 @@ export default function GardenPlanner() {
       sx={{
         px: '24px',
         py: 4,
-        ...(isDirty && { pb: `${dirtyBarHeight + 32}px` }),
+        ...(isDirty && { pb: `${dirtyBarHeight + DIRTY_BAR_CLEARANCE_PX}px` }),
       }}
     >
       {/* Config dialog — first setup (a garden with no layout yet) */}
