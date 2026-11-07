@@ -1526,7 +1526,7 @@ describe('Gardens table — the actions column is frozen to the right (V8)', () 
     for (const name of ['Edit Casa Lolo', 'Delete Casa Lolo']) {
       const button = widget.getByRole('button', { name });
       expect(button).not.toBeDisabled();
-      button.focus();
+      act(() => button.focus());
       expect(document.activeElement).toBe(button);
     }
   });
