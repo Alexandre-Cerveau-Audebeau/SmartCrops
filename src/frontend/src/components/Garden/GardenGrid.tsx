@@ -29,6 +29,16 @@ export interface PlacementOverlay {
   plantName?: string;
 }
 
+/** The start and enter paint callbacks: see `onCellDragStart` on Props. */
+export type CellPaintHandler = (
+  row: number,
+  col: number,
+  e?: { pointerId: number }
+) => void;
+
+/** The end paint callback: see `onCellDragStart` on Props. */
+export type CellPaintEndHandler = (e?: { pointerId: number }) => void;
+
 interface Props {
   grid: CellData[][];
   shapeEditMode: boolean;
@@ -66,17 +76,9 @@ interface Props {
    * pointer at all. Structural `{ pointerId }` — the page reads nothing
    * else, and both React and native pointer events satisfy it.
    */
-  onCellDragStart?: (
-    row: number,
-    col: number,
-    e?: { pointerId: number }
-  ) => void;
-  onCellDragEnter?: (
-    row: number,
-    col: number,
-    e?: { pointerId: number }
-  ) => void;
-  onCellDragEnd?: (e?: { pointerId: number }) => void;
+  onCellDragStart?: CellPaintHandler;
+  onCellDragEnter?: CellPaintHandler;
+  onCellDragEnd?: CellPaintEndHandler;
   cellSizePx?: number;
   /**
    * DnD (lot 2): raw pointerdown on a NON-paint cell — the page's drag
@@ -345,17 +347,9 @@ const GridCell = memo(function GridCell({
   cellSizePx: number;
   tk: PlannerTokens;
   onCellClick?: (row: number, col: number, anchorEl?: HTMLElement) => void;
-  onCellDragStart?: (
-    row: number,
-    col: number,
-    e?: { pointerId: number }
-  ) => void;
-  onCellDragEnter?: (
-    row: number,
-    col: number,
-    e?: { pointerId: number }
-  ) => void;
-  onCellDragEnd?: (e?: { pointerId: number }) => void;
+  onCellDragStart?: CellPaintHandler;
+  onCellDragEnter?: CellPaintHandler;
+  onCellDragEnd?: CellPaintEndHandler;
   onCellPointerDown?: (row: number, col: number, e: React.PointerEvent) => void;
 }) {
   const { t } = useTranslation();

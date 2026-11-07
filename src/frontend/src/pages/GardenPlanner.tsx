@@ -28,7 +28,10 @@ import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import SaveIcon from '@mui/icons-material/Save';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { CompassRose } from '../components/Garden/CompassRose';
-import GardenGrid from '../components/Garden/GardenGrid';
+import GardenGrid, {
+  type CellPaintEndHandler,
+  type CellPaintHandler,
+} from '../components/Garden/GardenGrid';
 import PlantSidebar, {
   type PlantSidebarTab,
 } from '../components/Garden/PlantSidebar';
@@ -869,8 +872,8 @@ export default function GardenPlanner() {
   // The KEYBOARD path (GridCell's detail-0 click) paints start-then-end
   // with no pointer at all — an undefined event passes every guard.
   const paintPointerIdRef = useRef<number | null>(null);
-  const handleCellDragStart = useCallback(
-    (row: number, col: number, e?: { pointerId: number }) => {
+  const handleCellDragStart = useCallback<CellPaintHandler>(
+    (row, col, e) => {
       if (e !== undefined) {
         // A live stroke ignores every other pointer's START — the polarity
         // stays locked to the owner's opening cell.
@@ -881,8 +884,8 @@ export default function GardenPlanner() {
     },
     []
   );
-  const handleCellDragEnter = useCallback(
-    (row: number, col: number, e?: { pointerId: number }) => {
+  const handleCellDragEnter = useCallback<CellPaintHandler>(
+    (row, col, e) => {
       if (
         e !== undefined &&
         paintPointerIdRef.current !== null &&
@@ -894,7 +897,7 @@ export default function GardenPlanner() {
     },
     []
   );
-  const handleCellDragEnd = useCallback((e?: { pointerId: number }) => {
+  const handleCellDragEnd = useCallback<CellPaintEndHandler>((e) => {
     // Only the OWNER's release (or cancel) ends the stroke; the keyboard
     // path carries no event and always may.
     if (
