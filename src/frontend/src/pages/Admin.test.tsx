@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -148,11 +148,13 @@ afterEach(() => {
 });
 
 describe('Admin page (SMA-414)', () => {
-  it('shows skeletons (busy) with the static labels while loading', () => {
+  it('shows skeletons (busy) with the static labels while loading', async () => {
     vi.mocked(fetchAdminStats).mockReturnValue(
       new Promise<AdminDashboardStats>(() => {})
     );
-    const { container } = renderAdmin();
+    // The session answer is settled and lands inside act; the counters stay
+    // held, so the page still loads (SMA-452 § 3).
+    const { container } = await act(async () => renderAdmin());
 
     expect(
       screen.getByRole('heading', { level: 1, name: 'Administration' })

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
@@ -27,14 +27,16 @@ function renderPanel(over: Partial<PanelProps> = {}) {
 }
 
 describe('WeatherOptionsPanel', () => {
-  it('names the current default place and opens the dialog from « Localisation… »', () => {
+  it('names the current default place and opens the dialog from « Localisation… »', async () => {
     const onLocate = renderPanel({ current: 'Ecully', located: true });
 
     expect(screen.getByText('Ville par défaut de vos jardins')).toBeInTheDocument();
     expect(screen.getByText('Lieu actuel : Ecully')).toBeInTheDocument();
 
     const door = screen.getByRole('button', { name: 'Localisation…' });
-    door.focus();
+    // MUI's focus handlers set state, and its focus ripple pulses a microtask
+    // later: the gesture runs inside an async act (SMA-452 § 3).
+    await act(async () => door.focus());
     expect(document.activeElement).toBe(door);
     fireEvent.click(door);
 
