@@ -29,15 +29,18 @@ export interface PlacementOverlay {
   plantName?: string;
 }
 
-/** The start and enter paint callbacks: see `onCellDragStart` on Props. */
+/** What a paint callback carries of its pointer: see `onCellDragStart` on Props. */
+export type PaintPointer = { pointerId: number };
+
+/** The start and enter paint callbacks. */
 export type CellPaintHandler = (
   row: number,
   col: number,
-  e?: { pointerId: number }
+  e?: PaintPointer
 ) => void;
 
-/** The end paint callback: see `onCellDragStart` on Props. */
-export type CellPaintEndHandler = (e?: { pointerId: number }) => void;
+/** The end paint callback. */
+export type CellPaintEndHandler = (e?: PaintPointer) => void;
 
 interface Props {
   grid: CellData[][];
