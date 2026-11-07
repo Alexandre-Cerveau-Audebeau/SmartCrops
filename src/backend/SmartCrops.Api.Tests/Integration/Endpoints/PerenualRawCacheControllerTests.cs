@@ -379,13 +379,15 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
     {
         // The upstream is still failing when the pass reaches id 50, under another
         // status than the forward sweep's, so LastHttpStatus has to MOVE: a repeated
-        // 500 would hide a bump that forgot it. The row takes the attempt, stays
-        // pending for a later pass, and no cache row appears (no-loss).
+        // status would hide a bump that forgot it. The row takes the attempt, stays
+        // pending for a later pass, and no cache row appears (no-loss). 4xx on
+        // purpose, not a 5xx: the standard resilience handler retries a 5xx, and its
+        // backoff is paid in real seconds.
         Fixture.PerenualHttpStub.SetList(1, ListPage(1, 50));
         AuthAsAdmin();
         await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
 
-        Fixture.PerenualHttpStub.SetDetails(50, "{}", HttpStatusCode.InternalServerError); // transient → enqueued
+        Fixture.PerenualHttpStub.SetDetails(50, "{}", HttpStatusCode.BadRequest); // transient → enqueued
         await Client.PostAsync($"{Url}?phase=details&delayMs=0", null);
 
         Fixture.PerenualHttpStub.SetDetails(50, "{}", HttpStatusCode.Forbidden); // quota: still transient
@@ -414,12 +416,13 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         // phase=careguide enqueues id 11, the upstream recovers, and the drain
         // captures the guide and resolves the row. The guide itself is read back: an
         // unconfigured resource answers 404, terminal, so « resolved » alone would
-        // also hold for a drain that fetched the wrong endpoint.
+        // also hold for a drain that fetched the wrong endpoint. A 403 to enqueue it:
+        // transient, and not retried by the resilience handler, unlike a 5xx.
         Fixture.PerenualHttpStub.SetList(1, ListPage(1, 11));
         AuthAsAdmin();
         await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
 
-        Fixture.PerenualHttpStub.SetCareGuide(11, "{}", HttpStatusCode.InternalServerError); // transient → enqueued
+        Fixture.PerenualHttpStub.SetCareGuide(11, "{}", HttpStatusCode.Forbidden); // transient → enqueued
         await Client.PostAsync($"{Url}?phase=careguide&delayMs=0", null);
 
         using (var scope = CreateScope())
