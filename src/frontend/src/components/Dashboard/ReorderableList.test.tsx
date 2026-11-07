@@ -84,12 +84,14 @@ describe('ReorderableList — ▲ ▼ at the keyboard', () => {
     expect(screen.getByRole('button', { name: 'Descendre «\u00a0Occupation\u00a0»' })).toBeInTheDocument();
   });
 
-  it('▲ moves the row up one place, SAYS its new place — and the focus stays on ▲', () => {
+  it('▲ moves the row up one place, SAYS its new place — and the focus stays on ▲', async () => {
     localStorage.setItem('smartcrops-language', 'fr');
     const onMove = vi.fn();
     render(<Harness onMove={onMove} />);
     const up = screen.getByRole('button', { name: 'Monter «\u00a0Variétés\u00a0»' });
-    up.focus();
+    // MUI's focus handlers set state, and its focus ripple pulses a microtask
+    // later: the gesture runs inside an async act (SMA-452 § 3).
+    await act(async () => up.focus());
     fireEvent.click(up);
 
     expect(onMove).toHaveBeenCalledWith(2, 1);
