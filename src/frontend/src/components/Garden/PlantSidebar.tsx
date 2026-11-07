@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -14,8 +14,10 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
+import { visuallyHidden } from '@mui/utils';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
+import { useLiveRegion } from '../../hooks/useLiveRegion';
 import { spacingToFootprintCells } from '../../pages/gardenPlanner/placementGeometry';
 import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
 import { FootprintBadge } from './FootprintBadge';
@@ -311,6 +313,24 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
     });
   }, [plants, searchQuery, language]);
 
+  // SMA-294: the results' three states reach a screen reader through ONE
+  // region beside the list. Around the list it would read ~536 rows out; on
+  // the message it would be inserted already filled, which is read unreliably
+  // (useLiveRegion). The failure is the alert's alone, and the other tabs have
+  // no results to speak of: the region says nothing there.
+  const resultsSentence =
+    activeTab !== 'plants' || catalogFailed
+      ? ''
+      : !catalogReady
+        ? t('planner.catalogLoading')
+        : filtered.length === 0
+          ? t('planner.sidebar.noResults')
+          : t('library.filters.resultCount', { count: filtered.length });
+  const { announce, regionProps } = useLiveRegion<HTMLElement>({ visible: false });
+  useEffect(() => {
+    announce(resultsSentence);
+  }, [announce, resultsSentence]);
+
   return (
     // R3 (item G): the mockup sidebar CARD — card tokens, radius 12, shadow.
     // R4: 320px (OWNER DEVIATION vs the mockup's 288 — readability at full
@@ -335,6 +355,9 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
           : { width: { xs: '100%', lg: 320 }, maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` }, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: { xs: 'static', lg: 'sticky' }, top: { lg: STICKY_OFFSET }, alignSelf: { lg: 'flex-start' } }
       }
     >
+      {/* Out of the flow (`position: absolute`), and at the root: a branch would
+          unmount it with the failure. No child: its text is `announce`'s, above. */}
+      <Typography {...regionProps} sx={visuallyHidden} />
       {/* R5 (owner item): the shape-edit toggle adopts the SHARED iPhone-style
           switch (identical to Exposition); mockup row padding 13×16 aligns the
           control with the sidebar content, label 14.5/600 tTitle. */}
