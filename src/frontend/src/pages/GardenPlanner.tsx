@@ -63,7 +63,7 @@ import { saveLayout } from '../services/gardenLayoutApi';
 import { problemOf, requestFailureKind } from '../services/requestFailure';
 import { isWholeNumber } from '../services/wireChecks';
 import { fetchPlants } from '../services/plantApi';
-import { footprintBadgeSx, GAP_PX } from '../theme/plannerTokens';
+import { CELL_PX, footprintBadgeSx, GAP_PX } from '../theme/plannerTokens';
 import { usePlannerTokens } from '../theme/usePlannerTokens';
 import type { Garden, GardenConfig } from '../types/Garden';
 import type { Plant } from '../types/Plant';
@@ -484,7 +484,7 @@ export default function GardenPlanner() {
   // The mobile breakpoint drives the §8 compass (56/40 container, 42/30 SVG)
   // AND the §4 base cell size: 58 px desktop / 30 px mobile at zoom 100% (R3).
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const cellSizePx = Math.round((isMobile ? 30 : 58) * zoom);
+  const cellSizePx = Math.round((isMobile ? CELL_PX.xs : CELL_PX.sm) * zoom);
   // DnD (lot 2): the §4 gap at the same breakpoint — the pointer→cell math
   // inverts the exact track formula the overlays use.
   const dndGapPx = isMobile ? GAP_PX.xs : GAP_PX.sm;

@@ -37,6 +37,7 @@ import GardenPlanner from './GardenPlanner';
 import { deleteGarden, fetchGarden, updateGarden } from '../services/gardenApi';
 import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
+import { CELL_PX, GAP_PX } from '../theme/plannerTokens';
 import { serializeCellsJson } from '../types/GardenLayout';
 import {
   GARDEN_TEMPLATES,
@@ -2331,13 +2332,14 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   });
 
   // MOBILE coordinates (R4, GitHub Minor 2955d067): the touch tests run at
-  // the breakpoint they claim to cover — cell 30px + GAP_PX.xs 2px → 32px
-  // track (the lot-2 originals ran the 61px desktop track, proving the
-  // mechanism on geometry a finger never meets). Grid rect at (0,0) in
-  // jsdom, cell (r,c) hit at (c*32+5, r*32+5).
+  // the breakpoint they claim to cover — the mobile track, read from the
+  // numbers the page sizes its grid with (the lot-2 originals ran the 61px
+  // desktop track, proving the mechanism on geometry a finger never meets).
+  // Grid rect at (0,0) in jsdom, each cell hit 5px inside its track.
+  const mobileTrack = CELL_PX.xs + GAP_PX.xs;
   const at = (row: number, col: number) => ({
-    clientX: col * 32 + 5,
-    clientY: row * 32 + 5,
+    clientX: col * mobileTrack + 5,
+    clientY: row * mobileTrack + 5,
   });
 
   async function renderPaintable() {
