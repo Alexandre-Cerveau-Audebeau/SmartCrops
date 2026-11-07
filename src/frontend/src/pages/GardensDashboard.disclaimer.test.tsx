@@ -105,8 +105,8 @@ function serve(weather: DashboardWeatherData) {
  * Rendered inside an async `act` (SMA-452 § 3): this helper is itself async,
  * so the caller resumes a few microtasks after `render` returns, and the
  * responses that are already resolved land in that gap — before any `findBy`
- * has lifted the act environment, eight state updates outside `act` per test.
- * Here they land inside it. A response a test HOLDS stays held: `holdWeather`
+ * has lifted the act environment, up to eight state updates outside `act` per
+ * test. Here they land inside it. A response a test HOLDS stays held: `holdWeather`
  * lands it, and a pending promise gives `act` nothing to wait for.
  */
 async function renderPage(language: Language = 'fr', mode: 'light' | 'dark' = 'light') {
