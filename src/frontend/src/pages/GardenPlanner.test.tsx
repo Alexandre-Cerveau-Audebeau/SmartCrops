@@ -2439,6 +2439,25 @@ describe('SMA-18 mobile touch (lot 2)', () => {
     expect(cells[2]).toHaveStyle({ backgroundColor: '#F1F7EE' });
   });
 
+  it('a second touch on an intact cell far from the stroke paints nothing there and leaves the polarity alone (SMA-347)', async () => {
+    const grid = await renderPaintableMobile();
+    const cells = within(grid).getAllByRole('gridcell');
+    // Finger 1 opens a DEACTIVATING stroke on (0,0).
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    // The thumb rests on (3,3): active, untouched, away from the stroke. The
+    // test above lands it on the stroke's own cell, whose state matches the
+    // stroke's direction; this cell's state is the opposite of it.
+    fireEvent.pointerDown(cells[15]!, { ...at(3, 3), pointerId: 2, isPrimary: false, pointerType: 'touch' });
+    expect(cells[15]).toHaveStyle({ backgroundColor: '#F1F7EE' }); // no START here
+    fireEvent.pointerUp(document, { ...at(3, 3), pointerId: 2, isPrimary: false, pointerType: 'touch' });
+    // The owner's next cell still deactivates: the polarity stayed its own.
+    fireEvent.pointerMove(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    fireEvent.pointerUp(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[15]).toHaveStyle({ backgroundColor: '#F1F7EE' });
+  });
+
   it('the grid root clamps touch-action in a paint mode and not in Selection (FIX B)', async () => {
     // Deliberately the ONE desktop-breakpoint render left here (R4): this
     // pins the touch-action CSS contract on the grid root, which does not
