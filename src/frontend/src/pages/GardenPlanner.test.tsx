@@ -481,6 +481,49 @@ describe('GardenPlanner placement initials', () => {
     );
   });
 
+  it('replacing is inert too while the catalog is unavailable — an occupied cell keeps its plant (SMA-294)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const resolvers: Array<(plants: Plant[]) => void> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    // Catalog ready (EN) -> arm MAIZE, not the basil on (0,0): a replace of a
+    // plant by itself would change nothing, and prove nothing.
+    resolvers[0]!([basil, maize]);
+    await waitFor(() =>
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+    );
+    const plantRow = screen
+      .getAllByRole('button')
+      .find((el) => within(el).queryAllByText('Zea mays').length > 0);
+    expect(plantRow).toBeTruthy();
+    fireEvent.click(plantRow!);
+
+    // Locale switch -> catalog pending again; the armed raw id survives.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(resolvers.length).toBe(2));
+
+    // Click the OCCUPIED cell in place mode: with the catalog unavailable the
+    // click must be a NO-OP (no REPLACE_PLACEMENT dispatched).
+    fireEvent.click(screen.getAllByRole('gridcell')[0]!);
+
+    // Catalog recovers (FR) -> (0,0) still carries the basil. A 'Z' would
+    // prove the gated click leaked.
+    resolvers[1]!([{ ...basil, commonName: 'framboisier' } as Plant, maize]);
+    await waitFor(() =>
+      expect(plantArea(grid).getAllByText('F')).toHaveLength(1)
+    );
+    expect(plantArea(grid).queryByText('Z')).toBeNull();
+  });
+
   it('persists config through updateGarden when "Réglages" is saved (SMA-17)', async () => {
     vi.mocked(fetchGarden).mockResolvedValue(garden);
     vi.mocked(fetchLayout).mockResolvedValue(layout);
