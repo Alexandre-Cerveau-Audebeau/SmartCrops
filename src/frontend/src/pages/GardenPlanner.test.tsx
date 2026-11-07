@@ -2130,7 +2130,16 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
     await screen.findByRole('grid');
   }
 
+  // « Stays open » cannot be read on the dialog: it lingers through its exit
+  // slide, so it is still there right after a click that closed it. The
+  // trigger is mounted exactly while the sheet is closed, at once. Found by
+  // its attribute: under a modal MUI hides the page from role queries.
+  const sheetTrigger = () =>
+    document.querySelector("button[aria-controls='planner-sheet']");
+
   async function openCatalogueSheet(user: ReturnType<typeof userEvent.setup>) {
+    // Its positive read: the absences below mean nothing if it finds nothing.
+    expect(sheetTrigger()).not.toBeNull();
     await user.click(
       screen.getByRole('button', { name: 'Plants & infrastructure' })
     );
@@ -2138,13 +2147,6 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
       name: 'Plants & infrastructure',
     });
   }
-
-  // « Stays open » cannot be read on the dialog: it lingers through its exit
-  // slide, so it is still there right after a click that closed it. The
-  // trigger is mounted exactly while the sheet is closed, at once. Found by
-  // its attribute: under a modal MUI hides the page from role queries.
-  const sheetTrigger = () =>
-    document.querySelector("button[aria-controls='planner-sheet']");
 
   /** A row of the sheet, past the armed chip's X, which says the same name. */
   const sheetRow = (dialog: HTMLElement, name: RegExp) =>
@@ -2308,8 +2310,9 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
     expect(screen.getAllByRole('gridcell')[0]).toHaveStyle({ width: '58px' });
   });
 
-  it('closes the sheet when the layout returns to desktop (GitHub cf65425f)', async () => {
-    const mq = mockMatchMedia(PHONE);
+  // From a tablet too: only there does the walk cross lg without crossing sm.
+  it.each([PHONE, TABLET])('closes the sheet when the layout returns to desktop from %i px (GitHub cf65425f)', async (start) => {
+    const mq = mockMatchMedia(start);
     await renderLoadedPlanner();
 
     const user = userEvent.setup();
@@ -2325,7 +2328,7 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
 
     // Narrowing again must not reopen the sheet on its own: closed, with
     // the trigger back on screen.
-    act(() => mq.set(PHONE));
+    act(() => mq.set(start));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(
       await screen.findByRole('button', { name: 'Plants & infrastructure' })
