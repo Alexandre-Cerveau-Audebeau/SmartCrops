@@ -109,7 +109,10 @@ import {
   plannerReducer,
   type PlannerPlacement,
 } from './gardenPlanner/plannerReducer';
-import { plannerToastSx } from './gardenPlanner/plannerToastSx';
+import {
+  DIRTY_BAR_CLEARANCE_PX,
+  plannerToastSx,
+} from './gardenPlanner/plannerToastSx';
 
 
 // Referentially stable empty catalog for the not-ready renders — a fresh []
@@ -2411,7 +2414,7 @@ export default function GardenPlanner() {
       sx={{
         px: '24px',
         py: 4,
-        ...(isDirty && { pb: `${dirtyBarHeight + 32}px` }),
+        ...(isDirty && { pb: `${dirtyBarHeight + DIRTY_BAR_CLEARANCE_PX}px` }),
       }}
     >
       {/* Config dialog — first setup (a garden with no layout yet) */}
