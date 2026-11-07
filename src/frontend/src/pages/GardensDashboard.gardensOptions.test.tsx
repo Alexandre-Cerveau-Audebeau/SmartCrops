@@ -23,7 +23,8 @@ vi.mock('../services/gardenSettingsApi', () => ({
   saveGardenOrder: vi.fn(),
 }));
 
-vi.mock('../services/dashboardApi', () => ({
+vi.mock('../services/dashboardApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/dashboardApi')>()),
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),

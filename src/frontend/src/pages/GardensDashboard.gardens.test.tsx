@@ -36,7 +36,8 @@ vi.mock('../services/gardenApi', () => ({
   deleteGarden: vi.fn(),
 }));
 
-vi.mock('../services/dashboardApi', () => ({
+vi.mock('../services/dashboardApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/dashboardApi')>()),
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
@@ -267,9 +268,13 @@ describe('Gardens widget cards (SMA-6 / SMA-155, moved by SMA-336)', () => {
     expect(await screen.findByText('Jardin frais')).toBeInTheDocument();
 
     // ...then the STALE first response resolves last: it must be discarded,
-    // never overwriting the newer cards.
-    deferred[0]!(dashboardWith([gardenWith(0, { id: 'g1', name: 'Vieux jardin' })]));
-    await waitFor(() => expect(screen.queryByText('Vieux jardin')).toBeNull());
+    // never overwriting the newer cards. Landed inside `act`, so the two reads
+    // come after its continuation has run: a `waitFor` on the absence passes at
+    // once, before the response has had any chance to do harm.
+    await act(async () => {
+      deferred[0]!(dashboardWith([gardenWith(0, { id: 'g1', name: 'Vieux jardin' })]));
+    });
+    expect(screen.queryByText('Vieux jardin')).toBeNull();
     expect(screen.getByText('Jardin frais')).toBeInTheDocument();
   });
 });
@@ -1525,7 +1530,7 @@ describe('Gardens table — the actions column is frozen to the right (V8)', () 
     for (const name of ['Edit Casa Lolo', 'Delete Casa Lolo']) {
       const button = widget.getByRole('button', { name });
       expect(button).not.toBeDisabled();
-      button.focus();
+      act(() => button.focus());
       expect(document.activeElement).toBe(button);
     }
   });

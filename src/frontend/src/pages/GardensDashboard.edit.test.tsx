@@ -31,7 +31,8 @@ vi.mock('../services/gardenApi', () => ({
   deleteGarden: vi.fn(),
 }));
 
-vi.mock('../services/dashboardApi', () => ({
+vi.mock('../services/dashboardApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/dashboardApi')>()),
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
@@ -408,6 +409,21 @@ const settle = async () => {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 60));
   });
+};
+
+/**
+ * Escape, and the proof that the move is over: the drag overlay there before
+ * the key, gone after it. dnd-kit clears it from a promise once the drag has
+ * ended (`AnimationManager`), so a test ending on the key press left that state
+ * update to land outside `act` (SMA-452 § 3). Pressed inside an async `act`, it
+ * lands there, and the absence is read at once: no wait, and no bound.
+ */
+const cancelMove = async (handle: HTMLElement) => {
+  expect(document.querySelector('[data-drag-overlay]')).not.toBeNull();
+  await act(async () => {
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+  expect(document.querySelector('[data-drag-overlay]')).toBeNull();
 };
 
 /**
@@ -1172,7 +1188,7 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
     expect(getComputedStyle(sortable).animation).toBe('');
     expect(getComputedStyle(inner).animation).toContain('0.5s ease-in-out infinite');
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await cancelMove(handle);
   });
 
   it('suppresses the wobble under prefers-reduced-motion', async () => {
@@ -1237,7 +1253,7 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
       getComputedStyle(slot.firstElementChild as HTMLElement).opacity
     ).toBe('0');
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await cancelMove(handle);
   });
 
 
@@ -1358,7 +1374,7 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
     expect(neighbour).toContain('translate3d');
     expect(neighbour).not.toMatch(/scale/i);
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await cancelMove(handle);
   });
 
   it('the dragged VISUAL is the DragOverlay, and it never deforms', async () => {
@@ -1396,7 +1412,7 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
     );
     expect(factors).toEqual([1, 1]);
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await cancelMove(handle);
   });
 
   it('no widget is drawn on top of the drop preview', async () => {
@@ -1423,7 +1439,7 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
       });
     }
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await cancelMove(handle);
   });
 
   it('and no widget carries a scale factor while it reflows', async () => {
@@ -1443,7 +1459,7 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
       }).toEqual({ key, style: expect.not.stringMatching(/scale/i) });
     }
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await cancelMove(handle);
   });
 });
 
@@ -1508,7 +1524,7 @@ describe('GardensDashboard — one column on a phone sorts by the MEASURED heigh
     // The rest of the column does not move.
     expect(translationOf(sortableNode('tips'))).toEqual({ x: 0, y: 0 });
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await cancelMove(handle);
   });
 
   it('two steps down: both neighbours yield by the same amount and the preview lands under the second', async () => {
@@ -1555,6 +1571,6 @@ describe('GardensDashboard — one column on a phone sorts by the MEASURED heigh
     await settle();
 
     expect(translationOf(sortableNode('gardens'))).toEqual({ x: -(CELL + GUTTER), y: 0 });
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await cancelMove(handle);
   });
 });
