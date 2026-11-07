@@ -492,7 +492,10 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Empty(await users.GetLoginsAsync(fresh));
         // A refusal never rotates the stamp, which would sign every session of
         // the account out as a side effect; a merge of this unconfirmed account does.
-        Assert.Equal(expectMerge, stampBefore != fresh.SecurityStamp);
+        // Read from the database: `fresh` is this scope's tracked instance.
+        var persisted = await FindUserAsync(email);
+        Assert.NotNull(persisted);
+        Assert.Equal(expectMerge, stampBefore != persisted!.SecurityStamp);
     }
 
     [Fact]
@@ -544,8 +547,9 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Empty(await users.GetLoginsAsync(fresh));
     }
 
-    // A refusal has to say which account, or it cannot be operated (is one account
-    // probed in a loop?): the addresses go through MaskEmail, never in clear.
+    // The primitive's refusals say which account, through MaskEmail, never in clear.
+    // Defence in depth, like the checks they report: the callback refuses an unverified
+    // email first, in a log of its own, and finds the user by that very claim.
     private async Task<(string Message, LogLevel Level)> RefusalLogAsync(string email, ExternalLoginInfo info)
     {
         using var scope = CreateScope();
@@ -588,6 +592,22 @@ public class AuthControllerTests : IntegrationTestBase
         var (message, _) = await RefusalLogAsync(email, info);
 
         Assert.Equal("google merge refused: email mismatch (target 'r***@example.com', provider '***')", message);
+    }
+
+    [Fact]
+    public async Task GoogleMerge_TargetWithNoEmail_StaysARefusal_AndSaysSo()
+    {
+        // The other half of that branch: the target has no address. The branch
+        // leaves before any store access, so an unsaved account will do.
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        using var capture = new CapturingLoggerProvider();
+        var info = GoogleInfo("claimed@elsewhere.example", "true", NewProviderKey("gkey-log-notarget"));
+
+        Assert.False(await AuthController.EnsureSafeGoogleMergeAsync(users, new ApplicationUser(), info, capture.CreateLogger("merge")));
+
+        var entry = Assert.Single(capture.Entries);
+        Assert.Equal("google merge refused: email mismatch (target '***', provider 'c***@elsewhere.example')", entry.Message);
     }
 
     [Fact]
