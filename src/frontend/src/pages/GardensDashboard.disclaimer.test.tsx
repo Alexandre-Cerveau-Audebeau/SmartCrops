@@ -101,23 +101,32 @@ function serve(weather: DashboardWeatherData) {
  * router — with i18next switched to `language` BEFORE the render, so the
  * catalogue text asserted is the one the page rendered. Returns the theme,
  * for the contrast tests.
+ *
+ * Rendered inside an async `act` (SMA-452 § 3): this helper is itself async,
+ * so the caller resumes a few microtasks after `render` returns, and the
+ * responses that are already resolved land in that gap — before any `findBy`
+ * has lifted the act environment, eight state updates outside `act` per test.
+ * Here they land inside it. A response a test HOLDS stays held: `holdWeather`
+ * lands it, and a pending promise gives `act` nothing to wait for.
  */
 async function renderPage(language: Language = 'fr', mode: 'light' | 'dark' = 'light') {
   // The language through the context the page reads AND through i18next
   // itself — the two sources the page consults, aligned before the render.
   await i18next.changeLanguage(language);
   const theme = createAppTheme(mode);
-  render(
-    <ThemeProvider theme={theme}>
-      <LanguageContext.Provider value={{ language, setLanguage: () => {} }}>
-        <UnitSystemProvider>
-          <MemoryRouter>
-            <GardensDashboard />
-          </MemoryRouter>
-        </UnitSystemProvider>
-      </LanguageContext.Provider>
-    </ThemeProvider>
-  );
+  await act(async () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <LanguageContext.Provider value={{ language, setLanguage: () => {} }}>
+          <UnitSystemProvider>
+            <MemoryRouter>
+              <GardensDashboard />
+            </MemoryRouter>
+          </UnitSystemProvider>
+        </LanguageContext.Provider>
+      </ThemeProvider>
+    );
+  });
   return { theme };
 }
 
