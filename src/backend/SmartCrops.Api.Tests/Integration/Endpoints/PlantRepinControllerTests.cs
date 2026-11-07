@@ -1,9 +1,7 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Infrastructure.Data;
@@ -455,20 +453,6 @@ public class PlantRepinControllerTests : IntegrationTestBase
 
         await db.SaveChangesAsync();
         return id;
-    }
-
-    private void AuthAsAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
-    }
-
-    private void AuthAsNonAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
     }
 
     private record RepinResponseDto(

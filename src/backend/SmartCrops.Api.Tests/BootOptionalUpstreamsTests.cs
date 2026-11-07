@@ -18,15 +18,17 @@ namespace SmartCrops.Api.Tests;
 public class BootOptionalUpstreamsTests
 {
     [Fact]
-    public async Task BootSucceeds_WhenTrefleAndPerenualSectionsAreAbsent()
+    public async Task BootSucceeds_WhenTrefleAndPerenualCredentialsAreBlankOrAbsent()
     {
-        // Deliberately no WithTrefle()/WithPerenual(): the sections are absent,
-        // exactly like the Production environment file. Everything else is the
-        // standard otherwise-valid config the boot-guard family uses. The two
-        // blanks: an inherited Trefle__Token / Perenual__ApiKey environment
-        // variable on the runner would otherwise silently turn this into a
-        // CREDENTIALED boot; the blanks pin the uncredentialed scenario
-        // (mirrors the boot-guard family's anti-ambient blanks).
+        // Deliberately no WithTrefle()/WithPerenual(): no credential, exactly
+        // like the Production environment file. Everything else is the standard
+        // otherwise-valid config the boot-guard family uses. The two blanks: an
+        // inherited Trefle__Token / Perenual__ApiKey environment variable on the
+        // runner would otherwise silently turn this into a CREDENTIALED boot;
+        // the blanks pin the uncredentialed scenario (mirrors the boot-guard
+        // family's anti-ambient blanks). Blank and absent are one boot: an absent
+        // key leaves the option at its string.Empty default, a blank key binds
+        // "", and with no [Required] on either, nothing tells the two apart.
         using WebApplicationFactory<Program> factory = new TestWebAppBuilder()
             .WithEnvironment("Testing")
             .WithJwtAuth()

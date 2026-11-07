@@ -1,10 +1,8 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 
@@ -376,6 +374,84 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         }
     }
 
+    [Fact]
+    public async Task Revisit_StillTransient_BumpsAttemptAndStatus_AndLeavesTheRowPending()
+    {
+        // The upstream is still failing when the pass reaches id 50, under another
+        // status than the forward sweep's, so LastHttpStatus has to MOVE: a repeated
+        // status would hide a bump that forgot it. The row takes the attempt, stays
+        // pending for a later pass, and no cache row appears (no-loss). 4xx on
+        // purpose, not a 5xx: the standard resilience handler retries a 5xx, and its
+        // backoff is paid in real seconds.
+        Fixture.PerenualHttpStub.SetList(1, ListPage(1, 50));
+        AuthAsAdmin();
+        await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
+
+        Fixture.PerenualHttpStub.SetDetails(50, "{}", HttpStatusCode.BadRequest); // transient → enqueued
+        await Client.PostAsync($"{Url}?phase=details&delayMs=0", null);
+
+        Fixture.PerenualHttpStub.SetDetails(50, "{}", HttpStatusCode.Forbidden); // quota: still transient
+        var response = await Client.PostAsync($"{Url}?phase=revisit-details&delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<RevisitResp>();
+        Assert.Equal(1, body!.Drained);
+        Assert.Equal(0, body.Resolved);
+        Assert.Equal(1, body.StillPending);
+        Assert.Equal(new[] { 50 }, body.FailedIds);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var queued = await db.PerenualRevisitQueue.SingleAsync(q => q.Endpoint == "species-details" && q.ResourceId == "50");
+        Assert.Null(queued.ResolvedAt);
+        Assert.Equal(2, queued.Attempts); // 1 at the enqueue, 1 for this pass
+        Assert.Equal(403, queued.LastHttpStatus);
+        Assert.Equal("TransientFailure (HTTP 403)", queued.LastError);
+        Assert.False(await db.PerenualRawCache.AnyAsync(c => c.Endpoint == "species-details" && c.ResourceId == "50"));
+    }
+
+    [Fact]
+    public async Task RevisitCareGuide_PendingId_ResolvesOnSuccess_CachesTheGuide_AndSetsResolvedAt()
+    {
+        // The mirror of revisit-details on the care-guide endpoint: a transient
+        // phase=careguide enqueues id 11, the upstream recovers, and the drain
+        // captures the guide and resolves the row. The guide itself is read back: an
+        // unconfigured resource answers 404, terminal, so « resolved » alone would
+        // also hold for a drain that fetched the wrong endpoint. A 403 to enqueue it:
+        // transient, and not retried by the resilience handler, unlike a 5xx.
+        Fixture.PerenualHttpStub.SetList(1, ListPage(1, 11));
+        AuthAsAdmin();
+        await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
+
+        Fixture.PerenualHttpStub.SetCareGuide(11, "{}", HttpStatusCode.Forbidden); // transient → enqueued
+        await Client.PostAsync($"{Url}?phase=careguide&delayMs=0", null);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            Assert.Null((await db.PerenualRevisitQueue.SingleAsync(q => q.Endpoint == "care-guide" && q.ResourceId == "11")).ResolvedAt);
+        }
+
+        Fixture.PerenualHttpStub.SetCareGuide(11, "{\"data\":[{\"species_id\":11,\"section\":[{\"type\":\"watering\"}]}]}");
+        var response = await Client.PostAsync($"{Url}?phase=revisit-careguide&delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<RevisitResp>();
+        Assert.Equal("revisit-careguide", body!.Phase);
+        Assert.Equal(1, body.Drained);
+        Assert.Equal(1, body.Resolved);
+        Assert.Equal(0, body.StillPending);
+        Assert.Null(body.FailedIds);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var row = await db.PerenualRawCache.SingleAsync(c => c.Endpoint == "care-guide" && c.ResourceId == "11");
+            Assert.Equal(200, row.HttpStatus);
+            using var doc = JsonDocument.Parse(row.RawJson!);
+            Assert.Equal(11, doc.RootElement.GetProperty("data")[0].GetProperty("species_id").GetInt32());
+            Assert.NotNull((await db.PerenualRevisitQueue.SingleAsync(q => q.Endpoint == "care-guide" && q.ResourceId == "11")).ResolvedAt);
+        }
+    }
+
     // ── phase=careguide ───────────────────────────────────────────────────────
 
     [Fact]
@@ -433,21 +509,6 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         Assert.Equal(1, await db.PerenualRawCache.CountAsync(c => c.Endpoint == "species-list"));
-    }
-
-    // SMA-33 admin gate helpers (mirror PerenualPestCatalogControllerTests).
-    private void AuthAsAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
-    }
-
-    private void AuthAsNonAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
     }
 
     private record CacheResp(string Phase, int Processed, int Cached, int HtmlSkipped, int Failures, string? NextCursor, int[]? FailedIds = null);

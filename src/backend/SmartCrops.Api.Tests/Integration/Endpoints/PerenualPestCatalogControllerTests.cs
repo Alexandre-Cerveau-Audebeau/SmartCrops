@@ -1,9 +1,7 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
 
@@ -174,22 +172,6 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
         // Last page wins — the second occurrence updates the same row, no duplicate.
         var row = await db.PerenualPestCatalog.SingleAsync(c => c.PerenualPestId == 7);
         Assert.Equal("Aphids (updated)", row.CommonName);
-    }
-
-    // SMA-33: admin-gated endpoint — AuthAsAdmin carries the Admin role,
-    // AuthAsNonAdmin is a plain authenticated user (for the 403 gate).
-    private void AuthAsAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
-    }
-
-    private void AuthAsNonAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
     }
 
     private record HarvestResp(int PagesFetched, int ItemsUpserted, int Failures);
