@@ -477,9 +477,11 @@ public class AuthControllerTests : IntegrationTestBase
         var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var user = await users.FindByEmailAsync(email);
         Assert.NotNull(user);
+        // Read before the call: the merge rotates the stamp on this tracked instance.
+        var stampBefore = user!.SecurityStamp;
 
         var merged = await AuthController.EnsureSafeGoogleMergeAsync(
-            users, user!, GoogleInfo(email, verifiedRaw, NewProviderKey("gkey-claim")), NullLogger.Instance);
+            users, user, GoogleInfo(email, verifiedRaw, NewProviderKey("gkey-claim")), NullLogger.Instance);
 
         Assert.Equal(expectMerge, merged);
         var fresh = await users.FindByEmailAsync(email);
@@ -487,6 +489,9 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal(expectMerge, fresh!.EmailConfirmed);
         Assert.Equal(expectMerge, !await users.HasPasswordAsync(fresh));
         Assert.Empty(await users.GetLoginsAsync(fresh));
+        // A refusal never rotates the stamp, which would sign every session of
+        // the account out as a side effect; a merge of this unconfirmed account does.
+        Assert.Equal(expectMerge, stampBefore != fresh.SecurityStamp);
     }
 
     [Fact]
