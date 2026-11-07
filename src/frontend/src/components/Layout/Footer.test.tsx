@@ -68,7 +68,7 @@ describe('Footer v2 (SMA-151)', () => {
     ).toHaveTextContent('EN');
   });
 
-  it('the language trigger says it is open (SMA-401)', async () => {
+  it('the language trigger carries aria-expanded while open (SMA-401)', async () => {
     const user = userEvent.setup();
     renderFooterWithLanguage();
 

@@ -411,7 +411,7 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
     ).toBe('12');
   });
 
-  it('the language trigger says it is open, in the bar and in the drawer (SMA-401)', async () => {
+  it('the language trigger carries aria-expanded while open, in the bar and in the drawer (SMA-401)', async () => {
     const user = userEvent.setup();
 
     const desktop = renderNavbar();

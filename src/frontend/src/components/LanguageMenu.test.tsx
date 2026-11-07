@@ -81,7 +81,7 @@ describe('LanguageMenu (SMA-208 / SMA-56)', () => {
     }
   );
 
-  it('says it is open and names the list it opens, the profile menu pattern (SMA-401)', async () => {
+  it('carries aria-expanded and aria-controls while open, the profile menu pattern (SMA-401)', async () => {
     const user = userEvent.setup();
     renderMenu();
 
