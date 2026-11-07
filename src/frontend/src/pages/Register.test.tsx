@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
@@ -80,7 +80,11 @@ describe('Register — says WHICH rule failed (SMA-350)', () => {
     fireEvent.change(screen.getByLabelText(/^Confirmer le mot de passe/), {
       target: { value: 'weakpassword' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Créer un compte' }));
+    // The rejection is already settled: it lands inside act, not in the hop
+    // back to the caller of this async helper (SMA-452 § 3).
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Créer un compte' }));
+    });
   }
 
   it('lists the missing criteria when the 400 carries password rule codes', async () => {
