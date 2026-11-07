@@ -36,6 +36,22 @@ function renderFooter(auth: AuthContextValue = makeAuth()) {
   );
 }
 
+// SMA-393: LanguageMenu reads LanguageContext (no-provider default is now
+// French), so mount the provider and let the stored EN choice resolve.
+function renderFooterWithLanguage() {
+  return render(
+    <ColorModeProvider>
+      <AuthContext.Provider value={makeAuth()}>
+        <LanguageProvider>
+          <MemoryRouter>
+            <Footer />
+          </MemoryRouter>
+        </LanguageProvider>
+      </AuthContext.Provider>
+    </ColorModeProvider>
+  );
+}
+
 describe('Footer v2 (SMA-151)', () => {
   beforeEach(async () => {
     // SMA-393: English is stored the way a returning visitor stores it.
@@ -44,24 +60,23 @@ describe('Footer v2 (SMA-151)', () => {
   });
 
   it('carries the language selector beside the theme switch (SMA-56)', () => {
-    // SMA-393: LanguageMenu reads LanguageContext (no-provider default is now
-    // French), so mount the provider and let the stored EN choice resolve.
-    render(
-      <ColorModeProvider>
-        <AuthContext.Provider value={makeAuth()}>
-          <LanguageProvider>
-            <MemoryRouter>
-              <Footer />
-            </MemoryRouter>
-          </LanguageProvider>
-        </AuthContext.Provider>
-      </ColorModeProvider>
-    );
+    renderFooterWithLanguage();
     // Mounted AS-IS at the end of the copyright row; the white-on-green
     // trigger fits the dark footer natively.
     expect(
-      screen.getByRole('button', { name: 'Change language' })
+      screen.getByRole('button', { name: 'EN — change language' })
     ).toHaveTextContent('EN');
+  });
+
+  it('the language trigger says it is open (SMA-401)', async () => {
+    const user = userEvent.setup();
+    renderFooterWithLanguage();
+
+    const trigger = screen.getByRole('button', { name: 'EN — change language' });
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+    await user.click(trigger);
+    expect(await screen.findByRole('menu')).toHaveAttribute('aria-labelledby', trigger.id);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('points every functional link to its route (signed out)', () => {

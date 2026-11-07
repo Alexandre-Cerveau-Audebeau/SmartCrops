@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Button from '@mui/material/Button';
 import Menu from '@mui/material/Menu';
@@ -37,16 +37,28 @@ export default function LanguageMenu({ size = 'medium' }: LanguageMenuProps) {
   const { t } = useTranslation();
   const { language, setLanguage } = useLanguage();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+  // The page holds two of these, the bar or the drawer and the footer: the
+  // profile menu's static ids would repeat here (SMA-401).
+  const id = useId();
+  const buttonId = `${id}-button`;
+  const menuId = `${id}-menu`;
   const active = LANGS.find((l) => language.startsWith(l.code)) ?? LANGS[0];
   const ActiveFlag = active.Flag;
   const small = size === 'small';
 
   return (
     <>
+      {/* The MUI menu pattern, the profile menu's: the button names the list it
+          opens while it is open, and its name carries the code it shows, for a
+          voice command to reach it (WCAG 2.5.3). */}
       <Button
+        id={buttonId}
         onClick={(e) => setAnchorEl(e.currentTarget)}
-        aria-haspopup="menu"
-        aria-label={t('nav.changeLanguage', 'Change language')}
+        aria-haspopup="true"
+        aria-controls={open ? menuId : undefined}
+        aria-expanded={open ? 'true' : undefined}
+        aria-label={t('nav.changeLanguage', { code: active.short })}
         startIcon={<ActiveFlag h={small ? 12 : 14} />}
         endIcon={<Sym name="expand_more" size={18} color="inherit" />}
         sx={{
@@ -63,13 +75,14 @@ export default function LanguageMenu({ size = 'medium' }: LanguageMenuProps) {
       </Button>
       <Menu
         anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
+        open={open}
         onClose={() => setAnchorEl(null)}
         disableScrollLock
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         slotProps={{
           paper: { sx: { mt: 1, minWidth: 184, borderRadius: '12px' } },
+          list: { id: menuId, 'aria-labelledby': buttonId },
         }}
       >
         {LANGS.map(({ code, label, Flag }) => (

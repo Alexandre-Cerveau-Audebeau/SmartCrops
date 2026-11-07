@@ -318,7 +318,7 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
     ).toBeTruthy();
     // The dropdown replaced the legacy FR/EN toggle for good.
     expect(
-      screen.getByRole('button', { name: 'Change language' })
+      screen.getByRole('button', { name: 'EN — change language' })
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /FR \/ EN/ })).toBeNull();
   });
@@ -337,7 +337,7 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
   it('desktop cluster: auth is the rightmost element and the login slot reserves its width across languages', () => {
     renderNavbar();
 
-    const language = screen.getByRole('button', { name: 'Change language' });
+    const language = screen.getByRole('button', { name: 'EN — change language' });
     const login = screen.getByRole('link', { name: 'Login' });
     const cluster = language.parentElement!;
     // SMA-352 R2: original order restored — auth last, LanguageMenu before it.
@@ -391,7 +391,7 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
     // Desktop first: default size — original 14px font, 14-high flag.
     const desktop = renderNavbar();
     const desktopTrigger = screen.getByRole('button', {
-      name: 'Change language',
+      name: 'EN — change language',
     });
     expect(desktopTrigger).toHaveStyle({ fontSize: '14px' });
     expect(
@@ -403,7 +403,7 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
     renderNavbar(makeAuth(), { mobile: true });
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
     const drawerTrigger = screen.getByRole('button', {
-      name: 'Change language',
+      name: 'EN — change language',
     });
     expect(drawerTrigger).toHaveStyle({ fontSize: '12px' });
     expect(
@@ -411,12 +411,32 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
     ).toBe('12');
   });
 
+  it('the language trigger says it is open, in the bar and in the drawer (SMA-401)', async () => {
+    const user = userEvent.setup();
+
+    const desktop = renderNavbar();
+    const bar = screen.getByRole('button', { name: 'EN — change language' });
+    expect(bar).not.toHaveAttribute('aria-expanded');
+    await user.click(bar);
+    expect(await screen.findByRole('menu')).toHaveAttribute('aria-labelledby', bar.id);
+    expect(bar).toHaveAttribute('aria-expanded', 'true');
+    desktop.unmount();
+
+    renderNavbar(makeAuth(), { mobile: true });
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    const drawer = screen.getByRole('button', { name: 'EN — change language' });
+    expect(drawer).not.toHaveAttribute('aria-expanded');
+    await user.click(drawer);
+    expect(await screen.findByRole('menu')).toHaveAttribute('aria-labelledby', drawer.id);
+    expect(drawer).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('drawer language dropdown switches the app language', async () => {
     const user = userEvent.setup();
     renderNavbar(makeAuth(), { mobile: true });
 
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
-    await user.click(screen.getByRole('button', { name: 'Change language' }));
+    await user.click(screen.getByRole('button', { name: 'EN — change language' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Français' }));
 
     await waitFor(() => expect(i18next.language).toBe('fr'));
