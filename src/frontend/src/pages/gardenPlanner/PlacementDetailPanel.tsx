@@ -44,7 +44,8 @@ interface PlacementDetailPanelProps {
   language: string;
   // SMA-288: while the active-language catalog is pending, a missing plant is
   // indistinguishable from a not-yet-loaded one — the name slot stays empty
-  // instead of flashing the unknown-plant fallback.
+  // instead of flashing the unknown-plant fallback. SMA-296: Remove and the
+  // replace hint wait for it too.
   catalogReady: boolean;
   /** Cell-size wire value — sizes the meters line and the source line. */
   cellSize: string;
@@ -697,20 +698,29 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
         )}
       </Box>
 
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ display: 'block', mt: 1.5, fontStyle: 'italic' }}
-      >
-        {t('planner.placement.replaceHint')}
-      </Typography>
+      {/* SMA-296: until the catalogue is ready the sidebar has nothing to
+          replace with and the removal dialog no plant to name. */}
+      {catalogReady && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: 1.5, fontStyle: 'italic' }}
+        >
+          {t('planner.placement.replaceHint')}
+        </Typography>
+      )}
       <Box sx={{ display: 'flex', gap: '8px', mt: 1.5 }}>
         {/* Move (mockup Etats): re-arms the placement's own plant — Place
             mode + the lot-2 drag take over from there. */}
         <Button size="small" variant="outlined" onClick={onMove}>
           {t('planner.place.move')}
         </Button>
-        <Button color="error" size="small" onClick={onRemove}>
+        <Button
+          color="error"
+          size="small"
+          disabled={!catalogReady}
+          onClick={onRemove}
+        >
           {t('planner.placement.remove')}
         </Button>
       </Box>
