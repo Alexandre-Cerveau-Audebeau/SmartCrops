@@ -2015,41 +2015,57 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
 
 // ── SMA-18 lot 1 — the sidebar as a bottom sheet below lg ─────────────────
 // jsdom has no matchMedia; MUI's useMediaQuery drives BOTH planner splits
-// (sm sizes, lg rail-vs-sheet). The PlantLibrary.test pattern: one blanket
-// mock — true = every down() query matches (a phone), absent = none match
-// (desktop, this suite's default, which is why the older describes need no
-// mock to keep their inline rail).
-// R3: the mock is listener-aware and returns a setter — flipping `matches`
+// (sm sizes, lg rail-vs-sheet). The mock takes a viewport WIDTH and answers
+// each query by its own bounds, as a browser does, so the two splits can part:
+// PHONE is below both, TABLET below lg only, DESKTOP above both. No mock at
+// all reads as desktop, this suite's default, which is why the older describes
+// need none to keep their inline rail.
+// R3: the mock is listener-aware and returns a setter — moving the width
 // notifies MUI's useMediaQuery subscriptions, so a test can walk the
 // viewport across the breakpoint mid-run the way a resized window or a
-// rotating tablet does. Callers that never flip just ignore the return.
-function mockMatchMedia(initial: boolean) {
-  let matches = initial;
-  const listeners = new Set<(e: { matches: boolean }) => void>();
+// rotating tablet does. Callers that never move it just ignore the return.
+const PHONE = 390;
+const TABLET = 1024;
+const DESKTOP = 1280;
+
+type MediaListener = (e: { matches: boolean }) => void;
+
+function mockMatchMedia(initialWidth: number) {
+  let width = initialWidth;
+  const matchesAt = (query: string) => {
+    const min = /min-width:\s*([\d.]+)px/.exec(query);
+    const max = /max-width:\s*([\d.]+)px/.exec(query);
+    return (
+      Boolean(min || max) &&
+      (!min || width >= Number(min[1])) &&
+      (!max || width <= Number(max[1]))
+    );
+  };
+  const listeners = new Map<MediaListener, string>();
   window.matchMedia = ((query: string) => ({
     get matches() {
-      return matches;
+      return matchesAt(query);
     },
     media: query,
     onchange: null,
-    addListener: (fn: (e: { matches: boolean }) => void) => {
-      listeners.add(fn);
+    addListener: (fn: MediaListener) => {
+      listeners.set(fn, query);
     },
-    removeListener: (fn: (e: { matches: boolean }) => void) => {
+    removeListener: (fn: MediaListener) => {
       listeners.delete(fn);
     },
-    addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
-      listeners.add(fn);
+    addEventListener: (_: string, fn: MediaListener) => {
+      listeners.set(fn, query);
     },
-    removeEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
+    removeEventListener: (_: string, fn: MediaListener) => {
       listeners.delete(fn);
     },
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia;
   return {
-    set(next: boolean) {
-      matches = next;
-      listeners.forEach((fn) => fn({ matches: next }));
+    set(next: number) {
+      width = next;
+      listeners.forEach((query, fn) => fn({ matches: matchesAt(query) }));
     },
   };
 }
@@ -2070,8 +2086,30 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
     await screen.findByRole('grid');
   }
 
+  async function openCatalogueSheet(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    return await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+  }
+
+  // « Stays open » cannot be read on the dialog: it lingers through its exit
+  // slide, so it is still there right after a click that closed it. The
+  // trigger is mounted exactly while the sheet is closed, at once. Found by
+  // its attribute: under a modal MUI hides the page from role queries.
+  const sheetTrigger = () =>
+    document.querySelector("button[aria-controls='planner-sheet']");
+
+  /** A row of the sheet, past the armed chip's X, which says the same name. */
+  const sheetRow = (dialog: HTMLElement, name: RegExp) =>
+    within(dialog)
+      .getAllByRole('button', { name })
+      .find((button) => button.hasAttribute('aria-pressed'))!;
+
   it('below lg the rail is gone; the trigger opens a labelled dialog sheet and close closes it', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     await renderLoadedPlanner();
 
     // The catalogue no longer sits in the page flow above the grid.
@@ -2102,7 +2140,7 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
   });
 
   it('arming a plant from inside the sheet closes it and arms it', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     await renderLoadedPlanner();
 
     const user = userEvent.setup();
@@ -2125,7 +2163,7 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
   });
 
   it('arming a soil from inside the sheet closes it too', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     await renderLoadedPlanner();
 
     const user = userEvent.setup();
@@ -2143,8 +2181,91 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('arming an infrastructure from inside the sheet closes it too', async () => {
+    mockMatchMedia(PHONE);
+    await renderLoadedPlanner();
+
+    const user = userEvent.setup();
+    const dialog = await openCatalogueSheet(user);
+    await user.click(
+      within(dialog).getByRole('tab', { name: 'Infrastructure' })
+    );
+    await user.click(sheetRow(dialog, /Trellis/));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(
+      screen.getByRole('button', { name: 'Infrastructures' })
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it.each([
+    { what: 'a plant', tab: 'Plants', row: /Basilicum fixture/ },
+    { what: 'an infrastructure', tab: 'Infrastructure', row: /Trellis/ },
+    { what: 'a soil', tab: 'Soils', row: /Potting mix/ },
+  ])('disarming $what leaves the sheet open: the user is still choosing', async ({ tab, row }) => {
+    mockMatchMedia(PHONE);
+    await renderLoadedPlanner();
+
+    const user = userEvent.setup();
+    const first = await openCatalogueSheet(user);
+    await user.click(within(first).getByRole('tab', { name: tab }));
+    await user.click(sheetRow(first, row));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // Arming closed it: disarming takes reopening, on the tab left open.
+    const dialog = await openCatalogueSheet(user);
+    expect(sheetRow(dialog, row)).toHaveAttribute('aria-pressed', 'true');
+    await user.click(sheetRow(dialog, row));
+
+    expect(sheetRow(dialog, row)).toHaveAttribute('aria-pressed', 'false');
+    expect(sheetTrigger()).toBeNull();
+  });
+
+  it('the global fill leaves the sheet open, and fills the plan', async () => {
+    mockMatchMedia(PHONE);
+    await renderLoadedPlanner();
+
+    const user = userEvent.setup();
+    const first = await openCatalogueSheet(user);
+    await user.click(within(first).getByRole('tab', { name: 'Soils' }));
+    await user.click(sheetRow(first, /Potting mix/));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // The fill needs an armed soil, and arming closed the sheet.
+    const dialog = await openCatalogueSheet(user);
+    expect(document.querySelectorAll('[data-soil-pastille]')).toHaveLength(0);
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: 'Fill the garden with this soil',
+      })
+    );
+
+    // The fill did run: the 2×2 plan carries its four pastilles.
+    expect(
+      document.querySelectorAll('[data-soil-pastille="potting"]')
+    ).toHaveLength(4);
+    expect(sheetTrigger()).toBeNull();
+  });
+
+  it('at a tablet width the two splits part: the sheet layout, with the toolbar and the cells of a desktop', async () => {
+    mockMatchMedia(TABLET);
+    await renderLoadedPlanner();
+
+    // Below lg: no rail, the trigger stands in for it…
+    expect(
+      screen.queryByRole('textbox', { name: 'Search plants...' })
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    ).toBeInTheDocument();
+    // …but above sm: no in-grid row, and the desktop cell.
+    expect(screen.queryByTestId('grid-zoom-row')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
+    expect(screen.getAllByRole('gridcell')[0]).toHaveStyle({ width: '58px' });
+  });
+
   it('closes the sheet when the layout returns to desktop (GitHub cf65425f)', async () => {
-    const mq = mockMatchMedia(true);
+    const mq = mockMatchMedia(PHONE);
     await renderLoadedPlanner();
 
     const user = userEvent.setup();
@@ -2155,12 +2276,12 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
 
     // The viewport widens past lg (window resized, tablet rotated): the
     // Drawer unmounts — and its STATE must reset with it.
-    act(() => mq.set(false));
+    act(() => mq.set(DESKTOP));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
     // Narrowing again must not reopen the sheet on its own: closed, with
     // the trigger back on screen.
-    act(() => mq.set(true));
+    act(() => mq.set(PHONE));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(
       await screen.findByRole('button', { name: 'Plants & infrastructure' })
@@ -2180,7 +2301,7 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
   });
 
   it('every mode button keeps an explicit accessible name while its label is display-gated (mobile)', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     await renderLoadedPlanner();
 
     // The aria-label is unconditional — the same four names resolve on a
@@ -2237,7 +2358,7 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   // flow (open, toggle, close). Cells must be (re)queried by the caller
   // AFTER this returns: entering a paint mode swaps the cell elements.
   async function renderPaintableMobile() {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     const grid = await renderPaintable();
     fireEvent.click(
       screen.getByRole('button', { name: 'Plants & infrastructure' })
@@ -2333,7 +2454,7 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   });
 
   it('selecting a placement opens the panel sheet and closes the catalogue sheet (FIX C)', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     const placedCell = await renderWithPlacement();
 
     const user = userEvent.setup();
@@ -2370,7 +2491,7 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   });
 
   it('opening the catalogue sheet clears the selection and closes the panel sheet (FIX C)', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     const placedCell = await renderWithPlacement();
     const trigger = screen.getByRole('button', {
       name: 'Plants & infrastructure',
@@ -2389,7 +2510,7 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   });
 
   it('Escape clears the selection and the panel sheet closes with it (FIX C)', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     const placedCell = await renderWithPlacement();
 
     fireEvent.click(placedCell);
@@ -2404,7 +2525,7 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   });
 
   it('Escape on the sheet ALSO leaves Place mode, like the desktop key (R3, Extension fa53c9b5)', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     const placedCell = await renderWithPlacement();
 
     // Armless Place mode (move-only entry, lot 3 R2 ruling) — the case the
@@ -2438,7 +2559,7 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   });
 
   it('the catalogue sheet remembers its tab across close and reopen (FIX D, SMA-345)', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     vi.mocked(fetchGarden).mockResolvedValue(garden);
     vi.mocked(fetchLayout).mockResolvedValue(layout);
     vi.mocked(fetchPlants).mockResolvedValue([basil]);
@@ -2506,7 +2627,7 @@ describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
   }
 
   it('below sm the row renders in the dictated order and each name resolves to exactly ONE control', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     await renderMobile();
 
     const row = screen.getByTestId('grid-zoom-row');
@@ -2529,7 +2650,7 @@ describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
   });
 
   it('the in-grid magnifiers drive the shared zoom state and disable at the real bounds (50% / 200%)', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     await renderMobile();
     const row = screen.getByTestId('grid-zoom-row');
     const zoomOut = within(row).getByRole('button', { name: 'Zoom out' });
@@ -2552,7 +2673,7 @@ describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
   });
 
   it('the two clusters read the SAME zoom state: set from the row, read from the toolbar after widening', async () => {
-    const mq = mockMatchMedia(true);
+    const mq = mockMatchMedia(PHONE);
     await renderMobile();
 
     fireEvent.click(
@@ -2566,7 +2687,7 @@ describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
 
     // Widen past sm: the in-grid row unmounts, the toolbar cluster mounts —
     // and shows the SAME 120%, because there is only one zoom state.
-    act(() => mq.set(false));
+    act(() => mq.set(DESKTOP));
     await waitFor(() =>
       expect(screen.queryByTestId('grid-zoom-row')).toBeNull()
     );
@@ -2577,7 +2698,7 @@ describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
   });
 
   it('undo works from the in-grid row (override → undone, disabled state tracks history)', async () => {
-    mockMatchMedia(true);
+    mockMatchMedia(PHONE);
     const grid = await renderMobile();
     const row = screen.getByTestId('grid-zoom-row');
     const undo = within(row).getByRole('button', { name: 'Undo last action' });
