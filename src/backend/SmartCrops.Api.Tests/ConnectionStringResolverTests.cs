@@ -53,6 +53,33 @@ public class ConnectionStringResolverTests
         Assert.Equal($"Database:Port value '{portRaw}' is out of range (1-65535).", ex.Message);
     }
 
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("54x")]
+    public void NonNumericPort_Throws_NamingTheRawValue(string portRaw)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => ConnectionStringResolver.Resolve(Config(
+                ("Database:Host", "dbhost"),
+                ("Database:Port", portRaw),
+                ("Database:User", "u"),
+                ("Database:Password", "p"))));
+
+        Assert.Equal($"Database:Port value '{portRaw}' is not a valid integer.", ex.Message);
+    }
+
+    [Fact]
+    public void AbsentPort_DefaultsTo5432()
+    {
+        var parsed = new NpgsqlConnectionStringBuilder(
+            ConnectionStringResolver.Resolve(Config(
+                ("Database:Host", "dbhost"),
+                ("Database:User", "u"),
+                ("Database:Password", "p"))));
+
+        Assert.Equal(5432, parsed.Port);
+    }
+
     [Fact]
     public void HostWithoutUser_Throws_NamingTheUserKey()
     {
