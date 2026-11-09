@@ -22,6 +22,7 @@ vi.mock('../services/dashboardApi', async (importOriginal) => ({
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
+  changeFormula: vi.fn(),
 }));
 
 vi.mock('../services/weatherApi', () => ({

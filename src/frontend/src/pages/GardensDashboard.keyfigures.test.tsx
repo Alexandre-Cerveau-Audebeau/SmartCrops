@@ -21,6 +21,7 @@ vi.mock('../services/dashboardApi', async (importOriginal) => ({
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
+  changeFormula: vi.fn(),
 }));
 
 // Never a real provider call: the weather service is mocked whole.
