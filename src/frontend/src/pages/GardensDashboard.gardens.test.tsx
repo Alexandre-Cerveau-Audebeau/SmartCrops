@@ -1531,7 +1531,9 @@ describe('Gardens table — the actions column is frozen to the right (V8)', () 
     for (const name of ['Edit Casa Lolo', 'Delete Casa Lolo']) {
       const button = widget.getByRole('button', { name });
       expect(button).not.toBeDisabled();
-      act(() => button.focus());
+      // MUI's focus ripple mounts lazily and pulses a microtask after the
+      // focus: a synchronous act misses it when this test runs alone.
+      await act(async () => button.focus());
       expect(document.activeElement).toBe(button);
     }
   });
