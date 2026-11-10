@@ -33,8 +33,8 @@ export function requestFailureKind(error: unknown): RequestFailureKind {
  * its code here, never by its status). Not a failure a retry may cure: the
  * layout on screen visited the formula it left, and only a re-read of the
  * formula and its layout brings the tab back. Here, beside `problemOf`, and
- * not in `dashboardApi`: the page suites mock that module whole, and a
- * predicate the hook reads from it would be missing from every one of them.
+ * not in `dashboardApi`: in a suite that mocks that module whole, a
+ * predicate the hook reads from it would be missing.
  */
 export function isStaleFormulaRefusal(error: unknown): boolean {
   return problemOf(error)?.code === 'formula.stale';
