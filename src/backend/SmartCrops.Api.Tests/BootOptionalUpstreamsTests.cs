@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Api.Tests.Infrastructure;
 
 namespace SmartCrops.Api.Tests;
@@ -17,8 +19,10 @@ namespace SmartCrops.Api.Tests;
 /// </summary>
 public class BootOptionalUpstreamsTests
 {
-    [Fact]
-    public async Task BootSucceeds_WhenTrefleAndPerenualCredentialsAreBlankOrAbsent()
+    [Theory]
+    [InlineData("")] // blank
+    [InlineData(null)] // absent
+    public async Task BootSucceeds_WhenTrefleAndPerenualCredentialsAreBlankOrAbsent(string? credential)
     {
         // Deliberately no WithTrefle()/WithPerenual(): no credential, exactly
         // like the Production environment file. Everything else is the standard
@@ -29,6 +33,9 @@ public class BootOptionalUpstreamsTests
         // family's anti-ambient blanks). Blank and absent are one boot: an absent
         // key leaves the option at its string.Empty default, a blank key binds
         // "", and with no [Required] on either, nothing tells the two apart.
+        // Both are run. The absent row passes null: in the collection the
+        // factory adds last, a null masks every earlier provider, the inherited
+        // variable included, so the host reads no value for the key.
         using WebApplicationFactory<Program> factory = new TestWebAppBuilder()
             .WithEnvironment("Testing")
             .WithJwtAuth()
@@ -36,8 +43,8 @@ public class BootOptionalUpstreamsTests
             .WithFrontendUrl()
             .WithTypesense()
             .WithSmtp()
-            .WithConfig("Trefle:Token", "")
-            .WithConfig("Perenual:ApiKey", "")
+            .WithConfig("Trefle:Token", credential)
+            .WithConfig("Perenual:ApiKey", credential)
             .WithInMemoryDatabase("BootOptionalUpstreamsTests")
             .Build();
 
@@ -47,10 +54,18 @@ public class BootOptionalUpstreamsTests
 
         response.EnsureSuccessStatusCode();
         Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+
+        // The premise of each row, read back from the host: "" for the blank
+        // row, null for the absent one.
+        IConfiguration configuration = factory.Services.GetRequiredService<IConfiguration>();
+        Assert.Equal(credential, configuration["Trefle:Token"]);
+        Assert.Equal(credential, configuration["Perenual:ApiKey"]);
     }
 
-    [Fact]
-    public async Task BootSucceeds_WhenWeatherApiKeyIsBlankOrAbsent()
+    [Theory]
+    [InlineData("")] // blank
+    [InlineData(null)] // absent
+    public async Task BootSucceeds_WhenWeatherApiKeyIsBlankOrAbsent(string? apiKey)
     {
         // SMA-336 PR 3a/5 applies the SMA-377 doctrine from day one: the
         // weather provider is not a boot dependency. No WithWeatherApi(), and
@@ -58,6 +73,7 @@ public class BootOptionalUpstreamsTests
         // runner, so the scenario pinned is the uncredentialed boot. Blank and
         // absent are one boot here too: the key defaults to string.Empty and
         // carries no [Required], like the two credentials of the test above.
+        // Both are run, the absent row through the same masking null.
         using WebApplicationFactory<Program> factory = new TestWebAppBuilder()
             .WithEnvironment("Testing")
             .WithJwtAuth()
@@ -67,7 +83,7 @@ public class BootOptionalUpstreamsTests
             .WithSmtp()
             .WithConfig("Trefle:Token", "")
             .WithConfig("Perenual:ApiKey", "")
-            .WithConfig("WeatherApi:ApiKey", "")
+            .WithConfig("WeatherApi:ApiKey", apiKey)
             .WithInMemoryDatabase("BootOptionalUpstreamsTests_WeatherApi")
             .Build();
 
@@ -77,5 +93,9 @@ public class BootOptionalUpstreamsTests
 
         response.EnsureSuccessStatusCode();
         Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+
+        // The premise of each row, read back from the host.
+        IConfiguration configuration = factory.Services.GetRequiredService<IConfiguration>();
+        Assert.Equal(apiKey, configuration["WeatherApi:ApiKey"]);
     }
 }
