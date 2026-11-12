@@ -50,12 +50,14 @@ public class BootOptionalUpstreamsTests
     }
 
     [Fact]
-    public async Task BootSucceeds_WhenWeatherApiKeyIsAbsent()
+    public async Task BootSucceeds_WhenWeatherApiKeyIsBlankOrAbsent()
     {
         // SMA-336 PR 3a/5 applies the SMA-377 doctrine from day one: the
         // weather provider is not a boot dependency. No WithWeatherApi(), and
         // an explicit blank against an inherited WeatherApi__ApiKey on the
-        // runner, so the scenario pinned is the uncredentialed boot.
+        // runner, so the scenario pinned is the uncredentialed boot. Blank and
+        // absent are one boot here too: the key defaults to string.Empty and
+        // carries no [Required], like the two credentials of the test above.
         using WebApplicationFactory<Program> factory = new TestWebAppBuilder()
             .WithEnvironment("Testing")
             .WithJwtAuth()

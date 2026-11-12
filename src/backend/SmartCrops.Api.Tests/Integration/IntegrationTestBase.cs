@@ -2,7 +2,6 @@ using System.Net.Http.Headers;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using SmartCrops.Core.Authorization;
-using SmartCrops.Infrastructure.Data;
 
 namespace SmartCrops.Api.Tests.Integration;
 
