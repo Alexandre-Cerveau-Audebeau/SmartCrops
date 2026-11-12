@@ -24,9 +24,13 @@ public static class DependencyInjection
 
         // Resolve the connection string inside the options lambda so it is read after
         // all configuration sources (including test overrides) have been applied.
+        // The container's IConfiguration comes first: in the host it is the very
+        // object passed in (SMA-369 OD1). The argument is the fallback for a caller
+        // that registered none.
         services.AddDbContext<SmartCropsDbContext>((sp, options) =>
         {
-            var connectionString = ConnectionStringResolver.Resolve(sp.GetRequiredService<IConfiguration>());
+            var connectionString = ConnectionStringResolver.Resolve(
+                sp.GetService<IConfiguration>() ?? configuration);
 
             options
                 .UseNpgsql(connectionString)
