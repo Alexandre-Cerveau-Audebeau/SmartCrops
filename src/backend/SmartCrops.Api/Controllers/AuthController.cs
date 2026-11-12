@@ -702,7 +702,7 @@ public class AuthController(
             logger.LogWarning(
                 "google merge refused: email mismatch (target '{Target}', provider '{Provider}')",
                 MaskEmail(user.Email ?? string.Empty),
-                MaskEmail(claimedEmail ?? string.Empty));
+                MaskEmail(LoggableClaim(claimedEmail)));
             return false;
         }
 
@@ -1290,6 +1290,21 @@ public class AuthController(
         var local = at == 1 ? "***" : $"{email[0]}***";
         return $"{local}{email[at..]}";
     }
+
+    /// <summary>
+    /// The provider's email claim is the one value the merge-refusal logs carry
+    /// that no store has validated: the callback resolves the user from it, any
+    /// other caller bounds nothing. It is echoed (masked) only when it reads as
+    /// one address on one line — exactly one <c>@</c>, no control or white-space
+    /// character; anything else logs as the <c>***</c> fallback of
+    /// <see cref="MaskEmail"/>.
+    /// </summary>
+    private static string LoggableClaim(string? claim) =>
+        claim is not null
+        && claim.Count(c => c == '@') == 1
+        && !claim.Any(c => char.IsControl(c) || char.IsWhiteSpace(c))
+            ? claim
+            : string.Empty;
 
     private void SetAuthCookie(string token)
     {

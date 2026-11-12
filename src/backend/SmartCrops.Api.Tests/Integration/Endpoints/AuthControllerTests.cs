@@ -594,6 +594,24 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal("google merge refused: email mismatch (target 'r***@example.com', provider '***')", message);
     }
 
+    [Theory]
+    [InlineData("claimed@elsewhere.example\r\nwarn: forged line")] // a line break after the '@'
+    [InlineData("\nclaimed@elsewhere.example")] // MaskEmail keeps the first character
+    [InlineData("c@someone@elsewhere.example")] // a whole address after the first '@'
+    public async Task GoogleMerge_EmailMismatch_NeverEchoesAClaimThatIsNotOneAddress(string claimed)
+    {
+        // The provider's claim is the one value these logs carry that no store has
+        // validated. One that does not read as one address on one line is not
+        // echoed, even masked: MaskEmail keeps the first character and everything
+        // from the first '@' on.
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        var (message, _) = await RefusalLogAsync(email, GoogleInfo(claimed, "true", NewProviderKey("gkey-log-hostile")));
+
+        Assert.Equal("google merge refused: email mismatch (target 'r***@example.com', provider '***')", message);
+    }
+
     [Fact]
     public async Task GoogleMerge_TargetWithNoEmail_StaysARefusal_AndSaysSo()
     {
