@@ -598,6 +598,8 @@ public class AuthControllerTests : IntegrationTestBase
     [InlineData("claimed@elsewhere.example\r\nwarn: forged line")] // a line break after the '@'
     [InlineData("\nclaimed@elsewhere.example")] // MaskEmail keeps the first character
     [InlineData("c@someone@elsewhere.example")] // a whole address after the first '@'
+    [InlineData("claimed@elsewhere.example\u2028warn:forged")] // a line separator that is no control character
+    [InlineData("claimed@elsewhere.example\u001b[2Kwarn:forged")] // a control character that is no white space
     public async Task GoogleMerge_EmailMismatch_NeverEchoesAClaimThatIsNotOneAddress(string claimed)
     {
         // The provider's claim is the one value these logs carry that no store has
