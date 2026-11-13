@@ -2033,11 +2033,21 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10_000);
       });
+      // A second advance, on purpose: a dismissal the clock fired above only
+      // renders when that act returns, and a dismissed toast then stays
+      // mounted through its exit (the R6 test above). Each read from here on
+      // comes after that exit, or it would be vacuous.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
       expect(screen.getByText('Failed to save layout.')).toBeInTheDocument();
       // A clickaway must not dismiss it either (workflow-caught): without the
       // reason guard, the user's next click anywhere closed the failure
       // unread through MUI's ClickAwayListener.
       fireEvent.click(document.body);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
       expect(screen.getByText('Failed to save layout.')).toBeInTheDocument();
       // Only the explicit dismissal closes it.
       fireEvent.click(
