@@ -990,12 +990,14 @@ describe('GardenPlanner replace recompute (SMA-193 R2)', () => {
 
 // SMA-193 lot 2 — pointer drag-and-drop: 6px threshold, ghost + hint,
 // grid-snapped targets, ADD/MOVE outcomes, Escape/pointercancel teardown.
-// Coordinates: desktop cell 58px + 3px gap → 61px track, grid rect at (0,0)
-// in jsdom, so cell (r,c) is hit at (c*61+5, r*61+5).
+// Coordinates: the desktop track, read from the numbers the page sizes its
+// grid with (cell + gap, 61px today). Grid rect at (0,0) in jsdom, each cell
+// hit 5px inside its track.
 describe('GardenPlanner pointer DnD (SMA-193 lot 2)', () => {
+  const desktopTrack = CELL_PX.sm + GAP_PX.sm;
   const at = (row: number, col: number) => ({
-    clientX: col * 61 + 5,
-    clientY: row * 61 + 5,
+    clientX: col * desktopTrack + 5,
+    clientY: row * desktopTrack + 5,
   });
   const ghost = () => document.querySelector('[data-dnd-ghost]');
 
@@ -1946,6 +1948,10 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
     vi.mocked(saveLayout).mockRejectedValue(new Error('boom'));
     await renderDirty();
     const bar = screen.getByTestId('dirty-bar');
+    // A page that stops observing the bar fails here, by its name.
+    expect(observed.has(bar), 'the page observes the dirty bar').toBe(true);
+    // The clearance counts the bar's own 16 px offset: read on the bar.
+    expect(bar).toHaveStyle({ bottom: '16px' });
     const barHeightBecomes = (height: number) => {
       Object.defineProperty(bar, 'offsetHeight', {
         configurable: true,
