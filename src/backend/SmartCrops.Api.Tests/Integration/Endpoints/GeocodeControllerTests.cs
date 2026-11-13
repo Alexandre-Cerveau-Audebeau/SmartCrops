@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using SmartCrops.Api.Controllers;
@@ -43,7 +42,7 @@ public class GeocodeControllerTests : IntegrationTestBase
     public async Task Search_ReturnsMappedMatches()
     {
         Fixture.WeatherApiHttpStub.SetSearch("Paris", WeatherApiFixtures.Search);
-        AuthAs();
+        AuthAsNonAdmin();
 
         var response = await Client.GetAsync($"{Url}?q=Paris");
 
@@ -71,7 +70,7 @@ public class GeocodeControllerTests : IntegrationTestBase
             "zzzzqqq",
             "{\"error\":{\"code\":1006,\"message\":\"No matching location found.\"}}",
             HttpStatusCode.BadRequest);
-        AuthAs();
+        AuthAsNonAdmin();
 
         var response = await Client.GetAsync($"{Url}?q=zzzzqqq");
 
@@ -85,7 +84,7 @@ public class GeocodeControllerTests : IntegrationTestBase
     public async Task Search_ProviderEmptyArray_Returns200Empty()
     {
         // The other spelling — the stub's default for an unconfigured query.
-        AuthAs();
+        AuthAsNonAdmin();
 
         var response = await Client.GetAsync($"{Url}?q=Nulle-Part");
 
@@ -101,7 +100,7 @@ public class GeocodeControllerTests : IntegrationTestBase
     [InlineData(" a ")]
     public async Task Search_QueryTooShort_Returns400_WithoutCalling(string q)
     {
-        AuthAs();
+        AuthAsNonAdmin();
 
         var response = await Client.GetAsync($"{Url}?q={Uri.EscapeDataString(q)}");
 
@@ -112,7 +111,7 @@ public class GeocodeControllerTests : IntegrationTestBase
     [Fact]
     public async Task Search_MissingQuery_Returns400_WithoutCalling()
     {
-        AuthAs();
+        AuthAsNonAdmin();
 
         var response = await Client.GetAsync(Url);
 
@@ -123,7 +122,7 @@ public class GeocodeControllerTests : IntegrationTestBase
     [Fact]
     public async Task Search_QueryTooLong_Returns400_WithoutCalling()
     {
-        AuthAs();
+        AuthAsNonAdmin();
         var q = new string('a', GeocodeController.MaxQueryLength + 1);
 
         var response = await Client.GetAsync($"{Url}?q={q}");
@@ -135,7 +134,7 @@ public class GeocodeControllerTests : IntegrationTestBase
     [Fact]
     public async Task Search_QueryAtBounds_IsForwarded()
     {
-        AuthAs();
+        AuthAsNonAdmin();
         var longest = new string('b', GeocodeController.MaxQueryLength);
 
         Assert.Equal(HttpStatusCode.OK, (await Client.GetAsync($"{Url}?q=Ly")).StatusCode);
@@ -148,7 +147,7 @@ public class GeocodeControllerTests : IntegrationTestBase
     [Fact]
     public async Task Search_TrimsQuery_BeforeCalling()
     {
-        AuthAs();
+        AuthAsNonAdmin();
 
         var response = await Client.GetAsync($"{Url}?q={Uri.EscapeDataString("  Lyon  ")}");
 
@@ -168,7 +167,7 @@ public class GeocodeControllerTests : IntegrationTestBase
             "Lyon",
             $"{{\"error\":{{\"code\":{code},\"message\":\"{providerWording}\"}}}}",
             providerStatus);
-        AuthAs();
+        AuthAsNonAdmin();
 
         var response = await Client.GetAsync($"{Url}?q=Lyon");
 
@@ -183,16 +182,10 @@ public class GeocodeControllerTests : IntegrationTestBase
     public async Task Search_ProviderServerError_Returns503()
     {
         Fixture.WeatherApiHttpStub.SetSearch("Lyon", "", HttpStatusCode.BadGateway, "text/html");
-        AuthAs();
+        AuthAsNonAdmin();
 
         var response = await Client.GetAsync($"{Url}?q=Lyon");
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-    }
-
-    private void AuthAs()
-    {
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken($"u-{Guid.NewGuid():N}"));
     }
 }

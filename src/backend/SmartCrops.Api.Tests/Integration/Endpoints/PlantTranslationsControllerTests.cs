@@ -1,9 +1,7 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -22,12 +20,6 @@ public class PlantTranslationsControllerTests : IntegrationTestBase
 
     private const string Url = "/api/admin/translations/backfill";
     private const int OrnamentalTypeId = 4; // seeded by PlantTypeConfiguration, survives Respawn
-
-    private void AuthAsAdmin()
-    {
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken($"u-{Guid.NewGuid():N}", Roles.Admin));
-    }
 
     /// <summary>Seed: Plant A (with a curated EN translation already present) + Plant B (none),
     /// each with en/fr common names and a cached species-details body.</summary>

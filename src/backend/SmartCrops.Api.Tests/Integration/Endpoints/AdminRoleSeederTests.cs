@@ -16,13 +16,9 @@ public class AdminRoleSeederTests : IntegrationTestBase
 {
     public AdminRoleSeederTests(PostgresFixture fixture) : base(fixture) { }
 
-    private async Task<(RoleManager<IdentityRole> Roles, UserManager<ApplicationUser> Users)> ManagersAsync(IServiceScope scope)
-    {
-        await Task.CompletedTask;
-        return (
-            scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>(),
-            scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
-    }
+    private static (RoleManager<IdentityRole> Roles, UserManager<ApplicationUser> Users) Managers(IServiceScope scope) => (
+        scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>(),
+        scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
 
     private static async Task<ApplicationUser> CreateUserAsync(UserManager<ApplicationUser> users, string email, bool confirmed)
     {
@@ -36,7 +32,7 @@ public class AdminRoleSeederTests : IntegrationTestBase
     public async Task Seed_CreatesAdminRole_AndGrantsItToConfirmedListedUser()
     {
         using var scope = CreateScope();
-        var (roles, users) = await ManagersAsync(scope);
+        var (roles, users) = Managers(scope);
         var email = $"admin-{Guid.NewGuid():N}@example.com";
         var user = await CreateUserAsync(users, email, confirmed: true);
 
@@ -50,7 +46,7 @@ public class AdminRoleSeederTests : IntegrationTestBase
     public async Task Seed_IsIdempotent_SecondRunDoesNotDuplicateMembership()
     {
         using var scope = CreateScope();
-        var (roles, users) = await ManagersAsync(scope);
+        var (roles, users) = Managers(scope);
         var email = $"admin-{Guid.NewGuid():N}@example.com";
         var user = await CreateUserAsync(users, email, confirmed: true);
 
@@ -73,7 +69,7 @@ public class AdminRoleSeederTests : IntegrationTestBase
         // and a squatter-created listed account stays neutralizable by the
         // SMA-320 R2 Google merge.
         using var scope = CreateScope();
-        var (roles, users) = await ManagersAsync(scope);
+        var (roles, users) = Managers(scope);
         var email = $"unconfirmed-{Guid.NewGuid():N}@example.com";
         var user = await CreateUserAsync(users, email, confirmed: false);
         Assert.False(user.EmailConfirmed); // precondition
@@ -93,7 +89,7 @@ public class AdminRoleSeederTests : IntegrationTestBase
         // granted — and since R1 the seeder confirms NOTHING at all, listed
         // or not; this fact pins the unlisted half.
         using var scope = CreateScope();
-        var (roles, users) = await ManagersAsync(scope);
+        var (roles, users) = Managers(scope);
         var listed = $"listed-{Guid.NewGuid():N}@example.com";
         var unlisted = $"unlisted-{Guid.NewGuid():N}@example.com";
         await CreateUserAsync(users, listed, confirmed: true);
@@ -111,7 +107,7 @@ public class AdminRoleSeederTests : IntegrationTestBase
     public async Task Seed_MissingAccount_DoesNotThrow_AndGrantsNothing()
     {
         using var scope = CreateScope();
-        var (roles, users) = await ManagersAsync(scope);
+        var (roles, users) = Managers(scope);
         var email = $"ghost-{Guid.NewGuid():N}@example.com";
 
         // No account for this email — must be a clean no-op, not a failure.

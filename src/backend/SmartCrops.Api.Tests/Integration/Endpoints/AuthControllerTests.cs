@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartCrops.Api.Controllers;
 using SmartCrops.Api.DTOs;
@@ -477,9 +478,11 @@ public class AuthControllerTests : IntegrationTestBase
         var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var user = await users.FindByEmailAsync(email);
         Assert.NotNull(user);
+        // Read before the call: the merge rotates the stamp on this tracked instance.
+        var stampBefore = user!.SecurityStamp;
 
         var merged = await AuthController.EnsureSafeGoogleMergeAsync(
-            users, user!, GoogleInfo(email, verifiedRaw, NewProviderKey("gkey-claim")), NullLogger.Instance);
+            users, user, GoogleInfo(email, verifiedRaw, NewProviderKey("gkey-claim")), NullLogger.Instance);
 
         Assert.Equal(expectMerge, merged);
         var fresh = await users.FindByEmailAsync(email);
@@ -487,6 +490,12 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal(expectMerge, fresh!.EmailConfirmed);
         Assert.Equal(expectMerge, !await users.HasPasswordAsync(fresh));
         Assert.Empty(await users.GetLoginsAsync(fresh));
+        // A refusal never rotates the stamp, which would sign every session of
+        // the account out as a side effect; a merge of this unconfirmed account does.
+        // Read from the database: `fresh` is this scope's tracked instance.
+        var persisted = await FindUserAsync(email);
+        Assert.NotNull(persisted);
+        Assert.Equal(expectMerge, stampBefore != persisted!.SecurityStamp);
     }
 
     [Fact]
@@ -536,6 +545,101 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.False(fresh!.EmailConfirmed);
         Assert.True(await users.HasPasswordAsync(fresh));
         Assert.Empty(await users.GetLoginsAsync(fresh));
+    }
+
+    // The primitive's refusals say which account, through MaskEmail, never in clear.
+    // Defence in depth, like the checks they report: the callback refuses an unverified
+    // email first, in a log of its own, and finds the user by that very claim.
+    private async Task<(string Message, LogLevel Level)> RefusalLogAsync(string email, ExternalLoginInfo info)
+    {
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+        using var capture = new CapturingLoggerProvider();
+
+        Assert.False(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, info, capture.CreateLogger("merge")));
+
+        var entry = Assert.Single(capture.Entries);
+        return (entry.Message, entry.Level);
+    }
+
+    [Fact]
+    public async Task GoogleMerge_EmailMismatch_LogsBothAddressesMasked()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        // Another first letter and another domain: the target and the provider
+        // swapped would not read the same.
+        var claimed = $"claimed-{Guid.NewGuid():N}@elsewhere.example";
+
+        var (message, level) = await RefusalLogAsync(email, GoogleInfo(claimed, "true", NewProviderKey("gkey-log-mismatch")));
+
+        Assert.Equal(LogLevel.Warning, level);
+        Assert.Equal("google merge refused: email mismatch (target 'r***@example.com', provider 'c***@elsewhere.example')", message);
+    }
+
+    [Fact]
+    public async Task GoogleMerge_NoEmailClaim_StaysARefusal_AndSaysSo()
+    {
+        // The mismatch branch also takes an identity with no email claim at all:
+        // masking must not turn that refusal into an exception.
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(Array.Empty<Claim>(), "Google"));
+        var info = new ExternalLoginInfo(principal, "Google", NewProviderKey("gkey-log-noclaim"), "Google");
+
+        var (message, _) = await RefusalLogAsync(email, info);
+
+        Assert.Equal("google merge refused: email mismatch (target 'r***@example.com', provider '***')", message);
+    }
+
+    [Theory]
+    [InlineData("claimed@elsewhere.example\r\nwarn: forged line")] // a line break after the '@'
+    [InlineData("\nclaimed@elsewhere.example")] // MaskEmail keeps the first character
+    [InlineData("c@someone@elsewhere.example")] // a whole address after the first '@'
+    [InlineData("claimed@elsewhere.example\u2028warn:forged")] // a line separator that is no control character
+    [InlineData("claimed@elsewhere.example\u001b[2Kwarn:forged")] // a control character that is no white space
+    public async Task GoogleMerge_EmailMismatch_NeverEchoesAClaimThatIsNotOneAddress(string claimed)
+    {
+        // The provider's claim is the one value these logs carry that no store has
+        // validated. One that does not read as one address on one line is not
+        // echoed, even masked: MaskEmail keeps the first character and everything
+        // from the first '@' on.
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        var (message, _) = await RefusalLogAsync(email, GoogleInfo(claimed, "true", NewProviderKey("gkey-log-hostile")));
+
+        Assert.Equal("google merge refused: email mismatch (target 'r***@example.com', provider '***')", message);
+    }
+
+    [Fact]
+    public async Task GoogleMerge_TargetWithNoEmail_StaysARefusal_AndSaysSo()
+    {
+        // The other half of that branch: the target has no address. The branch
+        // leaves before any store access, so an unsaved account will do.
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        using var capture = new CapturingLoggerProvider();
+        var info = GoogleInfo("claimed@elsewhere.example", "true", NewProviderKey("gkey-log-notarget"));
+
+        Assert.False(await AuthController.EnsureSafeGoogleMergeAsync(users, new ApplicationUser(), info, capture.CreateLogger("merge")));
+
+        var entry = Assert.Single(capture.Entries);
+        Assert.Equal("google merge refused: email mismatch (target '***', provider 'c***@elsewhere.example')", entry.Message);
+    }
+
+    [Fact]
+    public async Task GoogleMerge_UnverifiedEmail_LogsTheTargetMasked()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        var (message, level) = await RefusalLogAsync(email, GoogleInfo(email, "false", NewProviderKey("gkey-log-unverified")));
+
+        Assert.Equal(LogLevel.Warning, level);
+        Assert.Equal("google merge refused: email_verified absent or false for 'r***@example.com'", message);
     }
 
     [Fact]

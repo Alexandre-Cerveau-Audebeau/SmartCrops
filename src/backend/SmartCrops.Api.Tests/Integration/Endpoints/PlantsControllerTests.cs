@@ -1,10 +1,8 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Api.DTOs;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -257,11 +255,4 @@ public class PlantsControllerTests : IntegrationTestBase
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         Assert.False(await db.Plants.AnyAsync(p => p.Id == id));
     }
-
-    private void AuthAsAdmin() => SetBearer(Roles.Admin);
-    private void AuthAsNonAdmin() => SetBearer();
-
-    private void SetBearer(params string[] roles) =>
-        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer", Fixture.GenerateToken($"u-{Guid.NewGuid():N}", roles));
 }

@@ -1,6 +1,7 @@
+using System.Net.Http.Headers;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
-using SmartCrops.Infrastructure.Data;
+using SmartCrops.Core.Authorization;
 
 namespace SmartCrops.Api.Tests.Integration;
 
@@ -63,4 +64,19 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     /// </code>
     /// </summary>
     protected IServiceScope CreateScope() => Fixture.Factory.Services.CreateScope();
+
+    /// <summary>
+    /// Signs <see cref="Client"/> in as a fresh user holding <paramref name="roles"/>:
+    /// a new subject on every call, and no security stamp, so the pipeline skips
+    /// its stamp check (see <see cref="PostgresFixture.GenerateToken"/>).
+    /// </summary>
+    protected void SetBearer(params string[] roles) =>
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", Fixture.GenerateToken($"u-{Guid.NewGuid():N}", roles));
+
+    /// <summary>Signs <see cref="Client"/> in as an administrator.</summary>
+    protected void AuthAsAdmin() => SetBearer(Roles.Admin);
+
+    /// <summary>Signs <see cref="Client"/> in as a user with no role.</summary>
+    protected void AuthAsNonAdmin() => SetBearer();
 }
