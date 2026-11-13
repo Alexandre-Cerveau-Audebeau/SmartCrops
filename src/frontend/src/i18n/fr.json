@@ -11,7 +11,7 @@
     "homeAriaLabel": "Accueil SmartCrops",
     "openMenu": "Ouvrir le menu",
     "closeMenu": "Fermer le menu",
-    "changeLanguage": "Changer de langue",
+    "changeLanguage": "{{code}} — changer de langue",
     "language": "Langue",
     "units": "Unités",
     "admin": "Administration"

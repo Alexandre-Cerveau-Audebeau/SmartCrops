@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LIVE_REGION_CLEAR_MS } from '../../hooks/useLiveRegion';
 import i18n from '../../i18n/i18n';
 import type { Plant } from '../../types/Plant';
 import type { InfrastructureType } from '../../utils/infrastructure';
@@ -26,6 +27,7 @@ type SidebarOverrides = {
   searchQuery?: string;
   plants?: Plant[];
   catalogReady?: boolean;
+  catalogFailed?: boolean;
   selectedPlantId?: string | null;
   onPlantSelect?: (plantId: string | null) => void;
   cellSize?: string;
@@ -55,7 +57,7 @@ function StatefulSidebar(overrides: SidebarOverrides) {
       language="fr"
       shapeEditMode={false}
       onShapeEditToggle={vi.fn()}
-      catalogFailed={false}
+      catalogFailed={overrides.catalogFailed ?? false}
       onCatalogRetry={vi.fn()}
       catalogReady={overrides.catalogReady ?? true}
       activeTab={tab}
@@ -106,14 +108,19 @@ describe('PlantSidebar (SMA-194)', () => {
 
   it('shows the neutral loading state while the catalog is pending — never "no plants found" (SMA-288 R3)', () => {
     renderSidebar({ plants: [], catalogReady: false });
-    expect(screen.getByText('Loading plants…')).toBeInTheDocument();
+    // The live region says the same sentence (SMA-294): this reads the screen's.
+    expect(
+      screen.getByText('Loading plants…', { ignore: '[role="status"]' })
+    ).toBeInTheDocument();
     expect(screen.queryByText('No plants found')).toBeNull();
     expect(screen.queryByText('Lierre')).toBeNull();
   });
 
   it('reserves the no-results message for a READY catalog (SMA-288 R3)', () => {
     renderSidebar({ plants: [], catalogReady: true });
-    expect(screen.getByText('No plants found')).toBeInTheDocument();
+    expect(
+      screen.getByText('No plants found', { ignore: '[role="status"]' })
+    ).toBeInTheDocument();
     expect(screen.queryByText('Loading plants…')).toBeNull();
   });
 
@@ -222,5 +229,132 @@ describe('PlantSidebar (SMA-194)', () => {
     fireEvent.click(trellisRow());
     expect(onInfraSelect).toHaveBeenLastCalledWith(null);
     expect(onInfraSelect).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('PlantSidebar results announcement (SMA-294 item 2)', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+  afterEach(() => {
+    // Unmount FIRST (SMA-452 § 13), on the clock the test ran on; only then is
+    // the real clock back.
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  /** The sidebar's ONE status region: a second one is the stacking SMA-294 forbids. */
+  function region() {
+    const regions = document.querySelectorAll('[aria-live], [role="status"]');
+    expect(regions).toHaveLength(1);
+    const found = regions[0] as HTMLElement;
+    expect(found).toHaveAttribute('role', 'status');
+    expect(found).toHaveAttribute('aria-live', 'polite');
+    return found;
+  }
+
+  it('is born empty and written afterwards: a region inserted with its text is read unreliably', () => {
+    const observer = new MutationObserver(() => {});
+    observer.observe(document.body, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    renderSidebar({ plants: [], catalogReady: false });
+    const records = observer.takeRecords();
+    observer.disconnect();
+
+    // React inserts a new subtree whole: a region rendered WITH its text never
+    // shows a record of its own.
+    const node = region();
+    const written = records.filter((record) => record.target === node);
+    expect(written).toHaveLength(1);
+    expect(written[0].addedNodes[0].textContent).toBe('Loading plants…');
+  });
+
+  it('says the load, the count and the empty result, in one region that stays', () => {
+    const { rerender } = render(sidebar({ plants: [], catalogReady: false }));
+    const node = region();
+    expect(node.textContent).toBe('Loading plants…');
+
+    rerender(sidebar());
+    expect(region()).toBe(node);
+    expect(node.textContent).toBe('2 plants');
+
+    rerender(sidebar({ searchQuery: 'lierre' }));
+    expect(region()).toBe(node);
+    expect(node.textContent).toBe('1 plant');
+
+    rerender(sidebar({ searchQuery: 'nothing like it' }));
+    expect(region()).toBe(node);
+    expect(node.textContent).toBe('No plants found');
+  });
+
+  it('stands beside the list, not around it: no row is read out with it', () => {
+    renderSidebar();
+    const node = region();
+    expect(node.childElementCount).toBe(0);
+
+    const row = screen.getByText('Lierre').closest('[aria-pressed]')!;
+    expect(row).toBeInTheDocument();
+    expect(node).not.toContainElement(row as HTMLElement);
+    expect(row.closest('[aria-live], [role="status"]')).toBeNull();
+  });
+
+  it('leaves the failure to the alert: nothing beside it, the same region back on the retry', () => {
+    const { rerender } = render(sidebar({ plants: [], catalogReady: false }));
+    const node = region();
+    expect(node.textContent).toBe('Loading plants…');
+
+    rerender(sidebar({ plants: [], catalogReady: false, catalogFailed: true }));
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't load the plant catalog.");
+    expect(region()).toBe(node);
+    expect(node.textContent).toBe('');
+    expect(node).not.toContainElement(alert);
+
+    rerender(sidebar({ plants: [], catalogReady: false }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(region()).toBe(node);
+    expect(node.textContent).toBe('Loading plants…');
+  });
+
+  it('has no results to speak of on the other tabs, and says them again on the way back', () => {
+    renderSidebar();
+    const node = region();
+    expect(node.textContent).toBe('2 plants');
+
+    for (const name of ['Soils', 'Infrastructure']) {
+      const tab = screen.getByRole('tab', { name });
+      fireEvent.click(tab);
+      expect(tab).toHaveAttribute('aria-selected', 'true');
+      expect(region()).toBe(node);
+      expect(node.textContent).toBe('');
+    }
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Plants' }));
+    expect(region()).toBe(node);
+    expect(node.textContent).toBe('2 plants');
+  });
+
+  it('empties a sentence no one sees after its delay, and says the next one', () => {
+    const { rerender } = render(sidebar({ plants: [], catalogReady: false }));
+    vi.useFakeTimers();
+    rerender(sidebar());
+    const node = region();
+    expect(node.textContent).toBe('2 plants');
+
+    act(() => {
+      vi.advanceTimersByTime(LIVE_REGION_CLEAR_MS - 1);
+    });
+    expect(node.textContent).toBe('2 plants');
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(node.textContent).toBe('');
+
+    rerender(sidebar({ searchQuery: 'lierre' }));
+    expect(node.textContent).toBe('1 plant');
   });
 });
