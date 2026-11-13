@@ -226,6 +226,13 @@ type DeleteGardenTarget = { name: string; summary: DeleteGardenSummary };
 // fallback only keeps the prop total.
 const NO_DELETE_TARGET_SUMMARY: DeleteGardenSummary = { kind: 'unknown' };
 
+/**
+ * The garden planner page: loads a garden and its layout (`useGardenLayout`)
+ * and the plant catalogue, keeps the draft in `plannerReducer` state, and
+ * renders the grid with its controls, the catalogue and the placement panel
+ * (rails from lg up, bottom sheets below), the unsaved-changes bar and the
+ * toast.
+ */
 export default function GardenPlanner() {
   const { t } = useTranslation();
   const { language } = useLanguage();
