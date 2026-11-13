@@ -2649,6 +2649,21 @@ describe('SMA-18 mobile touch (lot 2)', () => {
     );
   });
 
+  // FIX C at the tablet step. Only there do the lane and the panel's sheet,
+  // both keyed on lg, part from what is keyed on sm: on a phone and on a
+  // desktop the two splits go together, and a swap of one for the other
+  // stays green.
+  it('at a tablet width a selection opens the panel sheet, and no lane holds a second panel (FIX C)', async () => {
+    mockMatchMedia(TABLET);
+    const placedCell = await renderWithPlacement();
+
+    fireEvent.click(placedCell);
+    await screen.findByRole('dialog', { name: 'Selected placement' });
+    // One title, the sheet's: a lane would say it a second time. Read by its
+    // text: under the modal MUI hides the page from role queries.
+    expect(screen.getAllByText('Selected placement')).toHaveLength(1);
+  });
+
   it('the catalogue sheet remembers its tab across close and reopen (FIX D, SMA-345)', async () => {
     mockMatchMedia(PHONE);
     vi.mocked(fetchGarden).mockResolvedValue(garden);
