@@ -84,11 +84,26 @@ describe('GridControls undo (SMA-17 5.3-D R2)', () => {
   // must not mount here at all (its home is the in-grid row).
   it('does not mount the toolbar undo/zoom cluster on mobile', () => {
     renderControls({ isMobile: true });
+    // The toolbar IS there: an empty render would pass the absences below.
+    expect(screen.getByRole('switch', { name: 'Exposure' })).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Undo last action' })
     ).toBeNull();
     expect(screen.queryByRole('button', { name: 'Zoom in' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Zoom out' })).toBeNull();
+    expect(screen.queryByText('100%')).toBeNull();
+  });
+
+  // The readout has no role, its text is its only hold: read here, so the
+  // absence above cannot go vacuous on a change of format.
+  it('mounts the whole cluster on desktop, the zoom readout included', () => {
+    renderControls({ isMobile: false });
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument();
+    expect(screen.getByText('100%')).toBeInTheDocument();
   });
 });
 

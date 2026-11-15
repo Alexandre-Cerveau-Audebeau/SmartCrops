@@ -493,6 +493,11 @@ export function getPlannerTokens(mode: PlannerThemeMode): PlannerTokens {
  * components, react-refresh). */
 export const GAP_PX = { xs: 2, sm: 3 } as const;
 
+/** §4 grid metrics: the cell edge in px at zoom 100 % per breakpoint, GAP_PX's
+ * twin — the page sizes the grid from it, and the mobile touch tests derive
+ * their track from the same numbers. */
+export const CELL_PX = { xs: 30, sm: 58 } as const;
+
 /** §4 axes: the row-number rail's width in px — layout plumbing, not a doc
  * token (18 px fits two digits at fs 10.5). Moved here from GardenGrid with
  * SMA-18 lot 3 for the same react-refresh reason as GAP_PX: the plan export's
