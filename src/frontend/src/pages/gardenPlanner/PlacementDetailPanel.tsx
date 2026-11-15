@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Avatar from '@mui/material/Avatar';
@@ -47,6 +47,13 @@ interface PlacementDetailPanelProps {
   // instead of flashing the unknown-plant fallback. SMA-296: Remove and the
   // replace hint wait for it too.
   catalogReady: boolean;
+  // SMA-296, decision B: once the catalogue has FAILED (never while it is
+  // ready: the page derives the two), the panel says why Remove is off and
+  // offers the retry. The sidebar's alert is not always there to do it: it
+  // lives on the Plants tab, and below lg the panel's sheet closes the
+  // catalogue's.
+  catalogFailed: boolean;
+  onCatalogRetry: () => void;
   /** Cell-size wire value — sizes the meters line and the source line. */
   cellSize: string;
   /** Grid dimensions — the steppers' hard upper bounds. */
@@ -131,6 +138,8 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   soil,
   language,
   catalogReady,
+  catalogFailed,
+  onCatalogRetry,
   cellSize,
   gridRows,
   gridCols,
@@ -205,6 +214,18 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   // it can never disturb the selection that renders this panel (the cell-click
   // path clears the selection before opening — see GardenPlanner).
   const [overrideAnchor, setOverrideAnchor] = useState<HTMLElement | null>(null);
+
+  // Decision B (SMA-296). The note is plain text, with no live role: the
+  // sidebar's alert is the one voice of a failure, so it is never said twice;
+  // Remove and Retry point at the note instead (aria-describedby). Retry
+  // unmounts with the failure it clears: the focus goes to Move first, the
+  // action that stays, or it would fall back to the page.
+  const catalogNoteId = useId();
+  const moveRef = useRef<HTMLButtonElement>(null);
+  const handleCatalogRetry = () => {
+    moveRef.current?.focus();
+    onCatalogRetry();
+  };
 
   const fit = checkFit(draft.rows, draft.cols);
   let warn: string | null = null;
@@ -709,16 +730,40 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
           {t('planner.placement.replaceHint')}
         </Typography>
       )}
+      {/* Decision B: after a failure this slot says why, and offers the way
+          back: the sidebar's pair, without its role="alert". */}
+      {catalogFailed && (
+        <Box sx={{ mt: 1.5 }}>
+          <Typography
+            id={catalogNoteId}
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block' }}
+          >
+            {t('planner.catalogError')}
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            aria-describedby={catalogNoteId}
+            onClick={handleCatalogRetry}
+            sx={{ mt: 1 }}
+          >
+            {t('planner.retry')}
+          </Button>
+        </Box>
+      )}
       <Box sx={{ display: 'flex', gap: '8px', mt: 1.5 }}>
         {/* Move (mockup Etats): re-arms the placement's own plant — Place
             mode + the lot-2 drag take over from there. */}
-        <Button size="small" variant="outlined" onClick={onMove}>
+        <Button ref={moveRef} size="small" variant="outlined" onClick={onMove}>
           {t('planner.place.move')}
         </Button>
         <Button
           color="error"
           size="small"
           disabled={!catalogReady}
+          aria-describedby={catalogFailed ? catalogNoteId : undefined}
           onClick={onRemove}
         >
           {t('planner.placement.remove')}

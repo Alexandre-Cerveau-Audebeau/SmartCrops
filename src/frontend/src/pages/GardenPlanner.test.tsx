@@ -318,6 +318,52 @@ describe('GardenPlanner placement initials', () => {
     expect(screen.queryByText("Couldn't load the plant catalog.")).toBeNull();
   });
 
+  it('after a catalogue failure the placement panel says so too, and its own Retry reloads (SMA-296, decision B)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    deferred[0]!.reject(new Error('network down'));
+    await screen.findByText("Couldn't load the plant catalog.");
+
+    // Selecting needs no catalogue: the placement sits at (0,0).
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    await screen.findByText('Selected placement');
+
+    // On a desktop the Plants tab is up too: the note and Retry are on
+    // screen twice, in the sidebar's alert and in the panel.
+    expect(
+      screen.getAllByText("Couldn't load the plant catalog.")
+    ).toHaveLength(2);
+    const retries = screen.getAllByRole('button', { name: 'Retry' });
+    expect(retries).toHaveLength(2);
+    const remove = screen.getByRole('button', { name: 'Remove from plan' });
+    expect(remove).toBeDisabled();
+
+    // The PANEL's Retry, the one outside the alert: the sidebar's would
+    // reload whatever the panel was handed.
+    const panelRetry = retries.find(
+      (button) => button.closest('[role="alert"]') === null
+    )!;
+    fireEvent.click(panelRetry);
+    await waitFor(() => expect(deferred.length).toBe(2));
+    deferred[1]!.resolve([basil]);
+    await waitFor(() => expect(remove).toBeEnabled());
+    expect(screen.queryByText("Couldn't load the plant catalog.")).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
   it('a stale-language catalog error is inert after a locale switch (SMA-288)', async () => {
     vi.mocked(fetchGarden).mockResolvedValue(garden);
     vi.mocked(fetchLayout).mockResolvedValue(layout);
@@ -2668,6 +2714,40 @@ describe('SMA-18 mobile touch (lot 2)', () => {
     // One title, the sheet's: a lane would say it a second time. Read by its
     // text: under the modal MUI hides the page from role queries.
     expect(screen.getAllByText('Selected placement')).toHaveLength(1);
+  });
+
+  // Decision B below lg: the panel's sheet has closed the catalogue's, so the
+  // sidebar's alert is not in the page. The panel is the only place that says
+  // the failure, and the only way back.
+  it('below lg, after a catalogue failure, the panel sheet holds the one note and the one Retry (SMA-296, decision B)', async () => {
+    mockMatchMedia(TABLET);
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockRejectedValueOnce(new Error('network down'));
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    const sheet = await screen.findByRole('dialog', {
+      name: 'Selected placement',
+    });
+    await within(sheet).findByText("Couldn't load the plant catalog.");
+    // Read by their text: under the modal MUI hides the page from role
+    // queries, and a second pair there would go unseen.
+    expect(
+      screen.getAllByText("Couldn't load the plant catalog.")
+    ).toHaveLength(1);
+    expect(screen.getAllByText('Retry')).toHaveLength(1);
+    const remove = within(sheet).getByRole('button', {
+      name: 'Remove from plan',
+    });
+    expect(remove).toBeDisabled();
+
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(remove).toBeEnabled());
+    expect(fetchPlants).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Couldn't load the plant catalog.")).toBeNull();
   });
 
   it('the catalogue sheet remembers its tab across close and reopen (FIX D, SMA-345)', async () => {
