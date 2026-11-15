@@ -437,7 +437,7 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
     await user.click(screen.getByRole('button', { name: 'EN — change language' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Français' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Français' }));
 
     await waitFor(() => expect(i18next.language).toBe('fr'));
     expect(localStorage.getItem('smartcrops-language')).toBe('fr');

@@ -88,6 +88,10 @@ export default function LanguageMenu({ size = 'medium' }: LanguageMenuProps) {
         {LANGS.map(({ code, label, Flag }) => (
           <MenuItem
             key={code}
+            // One choice among the rows: a radio item says which one is
+            // current, where `selected` only paints it (SMA-479).
+            role="menuitemradio"
+            aria-checked={code === active.code}
             selected={code === active.code}
             onClick={() => {
               setLanguage(code);

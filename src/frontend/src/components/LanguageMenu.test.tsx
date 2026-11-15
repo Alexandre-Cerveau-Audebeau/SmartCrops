@@ -31,8 +31,8 @@ describe('LanguageMenu (SMA-208 / SMA-56)', () => {
 
     await user.click(trigger);
     const menu = await screen.findByRole('menu');
-    const english = within(menu).getByRole('menuitem', { name: 'English' });
-    const french = within(menu).getByRole('menuitem', { name: 'Français' });
+    const english = within(menu).getByRole('menuitemradio', { name: 'English' });
+    const french = within(menu).getByRole('menuitemradio', { name: 'Français' });
     // SMA-56 a11y contract: the language NAME is the row's text — the inline
     // SVG flag rides beside it, aria-hidden.
     expect(english.querySelector('svg')).not.toBeNull();
@@ -46,7 +46,7 @@ describe('LanguageMenu (SMA-208 / SMA-56)', () => {
     renderMenu();
 
     await user.click(screen.getByRole('button', { name: 'EN — change language' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Français' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Français' }));
 
     await waitFor(() => expect(i18next.language).toBe('fr'));
     // The context is the source of truth: it persisted the choice…
@@ -78,6 +78,31 @@ describe('LanguageMenu (SMA-208 / SMA-56)', () => {
         .join('');
       expect(shown).toBe(code);
       expect(trigger).toHaveAccessibleName(expect.stringContaining(shown));
+    }
+  );
+
+  it.each([
+    ['en', 'EN — change language', 'English', 'Français'],
+    ['fr', 'FR — changer de langue', 'Français', 'English'],
+  ])(
+    'in %s the rows are radio items, and the current language is the one checked (SMA-479)',
+    async (stored, name, current, other) => {
+      localStorage.setItem('smartcrops-language', stored);
+      const user = userEvent.setup();
+      renderMenu();
+
+      await user.click(await screen.findByRole('button', { name }));
+      const menu = await screen.findByRole('menu');
+      // Two radio items and nothing else: a plain item cannot say which
+      // language is current.
+      expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(2);
+      expect(within(menu).queryByRole('menuitem')).toBeNull();
+      expect(
+        within(menu).getByRole('menuitemradio', { name: current })
+      ).toBeChecked();
+      expect(
+        within(menu).getByRole('menuitemradio', { name: other })
+      ).not.toBeChecked();
     }
   );
 
@@ -192,10 +217,10 @@ describe('LanguageMenu (SMA-208 / SMA-56)', () => {
     await user.click(trigger);
     const menu = await screen.findByRole('menu');
     expect(
-      within(menu).getByRole('menuitem', { name: 'Français' }).className
+      within(menu).getByRole('menuitemradio', { name: 'Français' }).className
     ).toMatch(/Mui-selected/);
     expect(
-      within(menu).getByRole('menuitem', { name: 'English' }).className
+      within(menu).getByRole('menuitemradio', { name: 'English' }).className
     ).not.toMatch(/Mui-selected/);
   });
 });
