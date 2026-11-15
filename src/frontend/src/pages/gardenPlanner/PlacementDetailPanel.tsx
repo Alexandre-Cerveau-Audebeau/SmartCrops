@@ -578,6 +578,10 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
             variant="outlined"
             startIcon={<TuneIcon sx={{ fontSize: 16 }} />}
             onClick={(e) => setOverrideAnchor(e.currentTarget)}
+            // The popover holds a menu: the trigger says so, and whether it
+            // is open, in the form of the app's other menu buttons (SMA-333).
+            aria-haspopup="true"
+            aria-expanded={overrideAnchor !== null ? 'true' : undefined}
             sx={{
               fontSize: 12,
               textTransform: 'none',

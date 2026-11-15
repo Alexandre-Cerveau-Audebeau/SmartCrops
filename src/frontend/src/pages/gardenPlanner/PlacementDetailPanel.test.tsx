@@ -650,6 +650,24 @@ describe('PlacementDetailPanel exposure override (SMA-309)', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Shade' }));
     expect(onSetExposureOverride).toHaveBeenCalledWith('shade');
   });
+
+  it('the trigger says it opens a menu, and whether it is open (SMA-333)', () => {
+    renderIdentity({ onSetExposureOverride: vi.fn(), exposureOverride: null });
+    // Kept from before the click: an open popover hides the page from role
+    // queries.
+    const trigger = screen.getByRole('button', { name: /Adjust exposure/ });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'true');
+    // Closed, the state is absent, not 'false': the form of the app's other
+    // menu buttons.
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Shade' }));
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+  });
 });
 
 // SMA-309 R2: the details link must carry the SAME origin the
