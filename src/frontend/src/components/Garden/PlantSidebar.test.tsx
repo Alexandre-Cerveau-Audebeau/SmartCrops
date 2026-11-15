@@ -28,6 +28,7 @@ type SidebarOverrides = {
   plants?: Plant[];
   catalogReady?: boolean;
   catalogFailed?: boolean;
+  onCatalogRetry?: () => void;
   selectedPlantId?: string | null;
   onPlantSelect?: (plantId: string | null) => void;
   cellSize?: string;
@@ -58,7 +59,7 @@ function StatefulSidebar(overrides: SidebarOverrides) {
       shapeEditMode={false}
       onShapeEditToggle={vi.fn()}
       catalogFailed={overrides.catalogFailed ?? false}
-      onCatalogRetry={vi.fn()}
+      onCatalogRetry={overrides.onCatalogRetry ?? vi.fn()}
       catalogReady={overrides.catalogReady ?? true}
       activeTab={tab}
       onActiveTabChange={setTab}
@@ -229,6 +230,36 @@ describe('PlantSidebar (SMA-194)', () => {
     fireEvent.click(trellisRow());
     expect(onInfraSelect).toHaveBeenLastCalledWith(null);
     expect(onInfraSelect).toHaveBeenCalledTimes(2);
+  });
+
+  it('Retry hands its focus to the Plants tab: the alert goes with the failure it clears (SMA-479)', async () => {
+    const onCatalogRetry = vi.fn();
+    const failed = {
+      plants: [],
+      catalogReady: false,
+      catalogFailed: true,
+      onCatalogRetry,
+    };
+    const { rerender } = render(sidebar(failed));
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    // Awaited: a MUI button mounts its focus ripple a microtask after the
+    // focus lands, and that update belongs inside the act.
+    await act(async () => {
+      retry.focus();
+    });
+    expect(retry).toHaveFocus();
+
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    expect(onCatalogRetry).toHaveBeenCalledTimes(1);
+    const plantsTab = screen.getByRole('tab', { name: 'Plants' });
+    expect(plantsTab).toHaveFocus();
+
+    // The page's answer: the failure is cleared, and the alert unmounts.
+    rerender(sidebar({ ...failed, catalogFailed: false }));
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(plantsTab).toHaveFocus();
   });
 });
 

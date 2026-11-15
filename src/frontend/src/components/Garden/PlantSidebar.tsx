@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -331,6 +331,16 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
     announce(resultsSentence);
   }, [announce, resultsSentence]);
 
+  // SMA-479: Retry lives in the failure's branch and unmounts with it. Its
+  // focus goes to the Plants tab first (mounted in every state, and the
+  // selected one whenever the alert shows), or it would fall back to the
+  // page. The ref's type is MUI's: it types a Tab as a div.
+  const plantsTabRef = useRef<HTMLDivElement>(null);
+  const handleCatalogRetry = () => {
+    plantsTabRef.current?.focus();
+    onCatalogRetry();
+  };
+
   return (
     // R3 (item G): the mockup sidebar CARD — card tokens, radius 12, shadow.
     // R4: 320px (OWNER DEVIATION vs the mockup's 288 — readability at full
@@ -395,7 +405,7 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
           '& .MuiTabs-indicator': { backgroundColor: tk.prim, height: 2 },
         }}
       >
-        <Tab label={t('planner.tabs.plants')} value="plants" />
+        <Tab ref={plantsTabRef} label={t('planner.tabs.plants')} value="plants" />
         {/* Enabled with SMA-14 — the disabled promise is over. */}
         <Tab label={t('planner.tabs.soils')} value="soils" />
         <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" />
@@ -666,7 +676,7 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
             {t('planner.catalogError')}
           </Typography>
-          <Button size="small" variant="outlined" onClick={onCatalogRetry}>
+          <Button size="small" variant="outlined" onClick={handleCatalogRetry}>
             {t('planner.retry')}
           </Button>
         </Box>
