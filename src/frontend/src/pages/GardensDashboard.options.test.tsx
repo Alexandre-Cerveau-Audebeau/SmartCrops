@@ -19,10 +19,12 @@ vi.mock('../services/gardenApi', () => ({
   deleteGarden: vi.fn(),
 }));
 
-vi.mock('../services/dashboardApi', () => ({
+vi.mock('../services/dashboardApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/dashboardApi')>()),
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
+  changeFormula: vi.fn(),
 }));
 
 // SMA-336 PR 3b/5 — the Weather widget reads its own aggregate and the

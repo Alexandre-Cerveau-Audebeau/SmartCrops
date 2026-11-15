@@ -1,9 +1,7 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Models;
@@ -953,24 +951,6 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         db.Plants.Add(plant);
         await db.SaveChangesAsync();
         return plant.Id;
-    }
-
-    // SMA-33: admin-gated controller — AuthAsAdmin carries the Admin role,
-    // AuthAsNonAdmin is a plain authenticated user (for the 403 gate). The JWT
-    // validation pipeline short-circuits the security-stamp check when no
-    // security_stamp claim is present (see PostgresFixture).
-    private void AuthAsAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
-    }
-
-    private void AuthAsNonAdmin()
-    {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
     }
 
     private record MatchedResponseDto(

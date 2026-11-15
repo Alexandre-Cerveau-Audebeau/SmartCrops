@@ -20,9 +20,9 @@ import { isBoolean, isString, isWholeNumber, matches } from './wireChecks';
  * SMA-448, lot F3 — the checks of what a formula serves, shared by the
  * layout's read (`dashboardApi`) and the catalogue's (`formulasApi`): the
  * capabilities of a formula, and the reasons one is too small. A module of
- * their own, with no fetch and no side effect, so a suite that mocks
- * `dashboardApi` whole (the dashboard's suites do) never finds the
- * catalogue's module reaching into the mock for them.
+ * their own, with no fetch and no side effect, so neither service imports
+ * the other for them — and a suite that mocks one of the two never finds
+ * the other reaching into its mock.
  */
 
 /** A size list the grid can step through: non-empty, every entry a known size. */

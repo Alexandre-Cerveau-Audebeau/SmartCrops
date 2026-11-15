@@ -58,6 +58,13 @@ const said = () => document.querySelector('[data-said]') as HTMLElement;
 const rows = () => within(screen.getByRole('list', { name: 'Vos quatre chiffres' })).getAllByRole('listitem');
 const order = () => rows().map((row) => row.textContent?.match(/Cases libres|Occupation|Variétés|À faire aujourd’hui/)?.[0]);
 
+/**
+ * A focus, as the keyboard gives it. MUI's focus handlers set state, and its
+ * lazily mounted focus ripple pulses a microtask later: the gesture runs inside
+ * an async act, whatever ran before it (SMA-452 § 3).
+ */
+const focusButton = (button: HTMLElement) => act(async () => button.focus());
+
 // jsdom implements no `scrollIntoView`; dnd-kit's keyboard sensor calls it
 // when a row is picked up (the `Contact.test.tsx` idiom).
 const originalScrollIntoView = Element.prototype.scrollIntoView;
@@ -84,12 +91,12 @@ describe('ReorderableList — ▲ ▼ at the keyboard', () => {
     expect(screen.getByRole('button', { name: 'Descendre «\u00a0Occupation\u00a0»' })).toBeInTheDocument();
   });
 
-  it('▲ moves the row up one place, SAYS its new place — and the focus stays on ▲', () => {
+  it('▲ moves the row up one place, SAYS its new place — and the focus stays on ▲', async () => {
     localStorage.setItem('smartcrops-language', 'fr');
     const onMove = vi.fn();
     render(<Harness onMove={onMove} />);
     const up = screen.getByRole('button', { name: 'Monter «\u00a0Variétés\u00a0»' });
-    up.focus();
+    await focusButton(up);
     fireEvent.click(up);
 
     expect(onMove).toHaveBeenCalledWith(2, 1);
@@ -112,21 +119,21 @@ describe('ReorderableList — ▲ ▼ at the keyboard', () => {
   // as Chrome — and React's commit gives it back to the element focused before
   // it. These tests pin that end state; the harness reads it in Chrome, bare
   // and in a Popover (`test/layout/focusProbe.tsx`).
-  it('▼ moves the row down one place — and the focus stays on ▼', () => {
+  it('▼ moves the row down one place — and the focus stays on ▼', async () => {
     localStorage.setItem('smartcrops-language', 'fr');
     render(<Harness />);
     const down = screen.getByRole('button', { name: 'Descendre «\u00a0Cases libres\u00a0»' });
-    down.focus();
+    await focusButton(down);
     fireEvent.click(down);
     expect(order()).toEqual(['Occupation', 'Cases libres', 'Variétés', 'À faire aujourd’hui']);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Descendre «\u00a0Cases libres\u00a0»' }));
   });
 
-  it('keeps the focus on ▼ when the row reaches the bottom — the button turns aria-disabled under it', () => {
+  it('keeps the focus on ▼ when the row reaches the bottom — the button turns aria-disabled under it', async () => {
     localStorage.setItem('smartcrops-language', 'fr');
     render(<Harness />);
     const down = screen.getByRole('button', { name: 'Descendre «\u00a0Variétés\u00a0»' });
-    down.focus();
+    await focusButton(down);
     fireEvent.click(down);
     const again = screen.getByRole('button', { name: 'Descendre «\u00a0Variétés\u00a0»' });
     expect(order()).toEqual(['Cases libres', 'Occupation', 'À faire aujourd’hui', 'Variétés']);
@@ -148,11 +155,11 @@ describe('ReorderableList — ▲ ▼ at the keyboard', () => {
     expect(onMove).not.toHaveBeenCalled();
   });
 
-  it('keeps the focus on ▲ when the row reaches the top — the button turns aria-disabled under it', () => {
+  it('keeps the focus on ▲ when the row reaches the top — the button turns aria-disabled under it', async () => {
     localStorage.setItem('smartcrops-language', 'fr');
     render(<Harness />);
     const up = screen.getByRole('button', { name: 'Monter «\u00a0Occupation\u00a0»' });
-    up.focus();
+    await focusButton(up);
     fireEvent.click(up);
     const again = screen.getByRole('button', { name: 'Monter «\u00a0Occupation\u00a0»' });
     expect(document.activeElement).toBe(again);
@@ -222,7 +229,7 @@ describe('ReorderableList — the handle, at the keyboard', () => {
     const onDraggingChange = vi.fn();
     render(<Harness onMove={onMove} onDraggingChange={onDraggingChange} />);
     const handle = screen.getByRole('button', { name: 'Déplacer «\u00a0Occupation\u00a0»' });
-    handle.focus();
+    await focusButton(handle);
 
     await act(async () => {
       fireEvent.keyDown(handle, { code: 'Space', key: ' ' });

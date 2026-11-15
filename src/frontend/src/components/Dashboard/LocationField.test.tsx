@@ -64,6 +64,16 @@ const flush = () =>
     await Promise.resolve();
   });
 
+/**
+ * The default answer, an empty list, is settled at once: a test that sent a
+ * search lets it land before it ends, or it lands outside act (SMA-452 § 3).
+ * What the field then says is the proof that it landed.
+ */
+async function answerLands(query: string) {
+  await flush();
+  expect(screen.getByText(`No place found for “${query}”`)).toBeInTheDocument();
+}
+
 /** A search the test releases by hand, with the signal it was given. */
 function deferredSearch() {
   const calls: Array<{
@@ -105,7 +115,7 @@ describe('LocationField — when it asks the server', () => {
     expect(LOCATION_QUERY_MIN_LENGTH).toBe(3);
   });
 
-  it('asks once, 400 ms after the last keystroke, not before', () => {
+  it('asks once, 400 ms after the last keystroke, not before', async () => {
     const input = renderField();
 
     type(input, 'Lyo');
@@ -116,9 +126,10 @@ describe('LocationField — when it asks the server', () => {
     expect(searchLocations).toHaveBeenCalledTimes(1);
     expect(vi.mocked(searchLocations).mock.calls[0]![0]).toBe('Lyo');
     expect(vi.mocked(searchLocations).mock.calls[0]![1]).toBeInstanceOf(AbortSignal);
+    await answerLands('Lyo');
   });
 
-  it('coalesces keystrokes inside the window into ONE request for the last text', () => {
+  it('coalesces keystrokes inside the window into ONE request for the last text', async () => {
     const input = renderField();
 
     type(input, 'Lyo');
@@ -130,6 +141,7 @@ describe('LocationField — when it asks the server', () => {
     advance(200);
     expect(searchLocations).toHaveBeenCalledTimes(1);
     expect(vi.mocked(searchLocations).mock.calls[0]![0]).toBe('Lyon');
+    await answerLands('Lyon');
   });
 
   it('aborts the request in flight when the next keystroke starts another', () => {
@@ -149,7 +161,7 @@ describe('LocationField — when it asks the server', () => {
     expect(vi.mocked(searchLocations).mock.calls[1]![0]).toBe('Lyon');
   });
 
-  it('trims the text, and drops back below the threshold without asking', () => {
+  it('trims the text, and drops back below the threshold without asking', async () => {
     const input = renderField();
 
     type(input, '  Ly ');
@@ -159,6 +171,7 @@ describe('LocationField — when it asks the server', () => {
     type(input, ' Lyon ');
     advance(LOCATION_SEARCH_DEBOUNCE_MS);
     expect(vi.mocked(searchLocations).mock.calls[0]![0]).toBe('Lyon');
+    await answerLands('Lyon');
   });
 });
 
@@ -263,7 +276,7 @@ describe('LocationField — what it shows', () => {
     );
   });
 
-  it('carries the example and the help in English too, and sends the typed text AS IS — no country added in secret (V22)', () => {
+  it('carries the example and the help in English too, and sends the typed text AS IS — no country added in secret (V22)', async () => {
     const input = renderField();
 
     expect(input.placeholder).toBe('Écully, France');
@@ -275,5 +288,6 @@ describe('LocationField — what it shows', () => {
     advance(LOCATION_SEARCH_DEBOUNCE_MS);
 
     expect(vi.mocked(searchLocations).mock.calls[0]![0]).toBe('Écully');
+    await answerLands('Écully');
   });
 });

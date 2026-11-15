@@ -1,7 +1,5 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Interfaces;
 using Typesense;
 
@@ -33,9 +31,7 @@ public class SearchIndexControllerTests : IntegrationTestBase
     [Fact]
     public async Task Reindex_AuthenticatedNonAdmin_Returns403()
     {
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+        AuthAsNonAdmin();
 
         var response = await Client.PostAsync(ReindexUrl, null);
 
@@ -51,9 +47,7 @@ public class SearchIndexControllerTests : IntegrationTestBase
             DocumentsIndexed: 536,
             DurationMs: 42,
             Failures: ["someId (Some plant): bad document"]);
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(ReindexUrl, null);
 
@@ -76,9 +70,7 @@ public class SearchIndexControllerTests : IntegrationTestBase
         // situation, not an internal server error.
         Fixture.SearchIndexingStub.NextException =
             new TypesenseApiServiceUnavailableException("engine down");
-        var userId = $"u-{Guid.NewGuid():N}";
-        Client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(ReindexUrl, null);
 

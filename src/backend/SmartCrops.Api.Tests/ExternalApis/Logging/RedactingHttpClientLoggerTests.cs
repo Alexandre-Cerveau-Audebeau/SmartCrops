@@ -54,6 +54,48 @@ public class RedactingHttpClientLoggerTests
         Assert.DoesNotContain(TrefleToken, result);
     }
 
+    [Theory]
+    [InlineData(
+        "https://perenual.com/api/v2/species-list?key=secret1&other=value&key=secret2",
+        "https://perenual.com/api/v2/species-list?key=REDACTED&other=value&key=REDACTED")]
+    [InlineData(
+        "https://trefle.io/api/v1/species/123?token=secret1&other=value&token=secret2",
+        "https://trefle.io/api/v1/species/123?token=REDACTED&other=value&token=REDACTED")]
+    [InlineData(
+        "https://api.weatherapi.com/v1/search.json?q=first&days=1&q=second",
+        "https://api.weatherapi.com/v1/search.json?q=REDACTED&days=1&q=REDACTED")]
+    public void RedactUri_RepeatedParameter_RedactsEveryOccurrence(string raw, string expected)
+    {
+        // The whole URI, not a Contains: « key=REDACTED » is also true of a URI
+        // masked at its first occurrence only.
+        Assert.Equal(expected, RedactingHttpClientLogger.RedactUri(new Uri(raw)));
+    }
+
+    [Theory]
+    [InlineData("https://perenual.com/x?KEY=secret", "https://perenual.com/x?KEY=REDACTED")]
+    [InlineData("https://perenual.com/x?Key=secret", "https://perenual.com/x?Key=REDACTED")]
+    [InlineData("https://trefle.io/x?TOKEN=secret", "https://trefle.io/x?TOKEN=REDACTED")]
+    [InlineData("https://trefle.io/x?Token=secret", "https://trefle.io/x?Token=REDACTED")]
+    [InlineData("https://api.weatherapi.com/v1/search.json?Q=lyon", "https://api.weatherapi.com/v1/search.json?Q=REDACTED")]
+    public void RedactUri_ParameterNameInAnotherCase_IsRedacted_KeepingTheNameAsWritten(string raw, string expected)
+    {
+        Assert.Equal(expected, RedactingHttpClientLogger.RedactUri(new Uri(raw)));
+    }
+
+    [Theory]
+    // The form the clients send, through Uri.EscapeDataString: the regex reads
+    // the value encoded, and masks it whole, up to the next real separator.
+    [InlineData("https://perenual.com/x?key=ab%2Bcd%3D%3D", "https://perenual.com/x?key=REDACTED")]
+    [InlineData("https://perenual.com/x?key=ab%26cd&q=rose", "https://perenual.com/x?key=REDACTED&q=rose")]
+    [InlineData("https://trefle.io/x?token=ab%2Bcd%3D%3D", "https://trefle.io/x?token=REDACTED")]
+    // A letter of the name escaped: System.Uri gives it back before the regex reads the URI.
+    [InlineData("https://perenual.com/x?k%65y=secret", "https://perenual.com/x?key=REDACTED")]
+    [InlineData("https://trefle.io/x?t%6Fken=secret", "https://trefle.io/x?token=REDACTED")]
+    public void RedactUri_EncodedValueOrName_IsRedacted(string raw, string expected)
+    {
+        Assert.Equal(expected, RedactingHttpClientLogger.RedactUri(new Uri(raw)));
+    }
+
     [Fact]
     public void RedactUri_WeatherApiForecast_RedactsKeyAndCoordinates_KeepsTheRest()
     {

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import App from './App';
 
@@ -15,18 +15,29 @@ vi.mock('./services/authApi', () => ({
   logout: vi.fn().mockResolvedValue(undefined),
 }));
 
+/**
+ * The page asks for the session and the plants as it mounts, and both simulated
+ * answers are already settled: rendered inside an async act, they land before
+ * the test goes on, not after it ends (SMA-452 § 3).
+ */
+async function renderApp() {
+  await act(async () => {
+    render(<App />);
+  });
+}
+
 describe('App', () => {
   beforeEach(() => {
     // Each test states its visitor: no key = first visit (SMA-393).
     localStorage.removeItem('smartcrops-language');
   });
 
-  it('renders without crashing', () => {
-    render(<App />);
+  it('renders without crashing', async () => {
+    await renderApp();
   });
 
-  it('renders the navbar brand name', () => {
-    render(<App />);
+  it('renders the navbar brand name', async () => {
+    await renderApp();
     expect(screen.getAllByText('SmartCrops').length).toBeGreaterThanOrEqual(1);
   });
 

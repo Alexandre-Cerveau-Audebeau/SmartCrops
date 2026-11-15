@@ -1226,6 +1226,9 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     await chooseOnScreen(choice, 'Choose Expert');
 
     await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+    // The switch closes the screen: its exit ends here, not during the wait
+    // below (SMA-452 § 3).
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull());
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(
       vi.mocked(saveDashboardPreferences).mock.calls.filter(([saved]) => saved.level === 'expert')

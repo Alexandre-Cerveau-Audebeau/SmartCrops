@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
@@ -6,24 +6,30 @@ import RemovePlacementDialog from './RemovePlacementDialog';
 
 // Anchor (row 2, col 5) → "F3" in the spreadsheet grammar shared with the
 // panel's footprint line (cellRef: letter column, 1-based row).
-function renderDialog(
+//
+// Rendered inside an async act (SMA-452 § 3): Cancel's autoFocus starts MUI's
+// focus ripple, which mounts lazily and pulses a microtask later, after a test
+// that ends at once.
+async function renderDialog(
   overrides: Partial<Parameters<typeof RemovePlacementDialog>[0]> = {}
 ) {
   const onCancel = vi.fn();
   const onConfirm = vi.fn();
-  render(
-    <RemovePlacementDialog
-      open
-      plantName="Courgette"
-      startRow={2}
-      startCol={5}
-      spanRows={1}
-      spanCols={1}
-      onCancel={onCancel}
-      onConfirm={onConfirm}
-      {...overrides}
-    />
-  );
+  await act(async () => {
+    render(
+      <RemovePlacementDialog
+        open
+        plantName="Courgette"
+        startRow={2}
+        startCol={5}
+        spanRows={1}
+        spanCols={1}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+        {...overrides}
+      />
+    );
+  });
   return { onCancel, onConfirm };
 }
 
@@ -39,8 +45,8 @@ afterEach(() => {
 });
 
 describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
-  it('names the placement — plant, footprint and the single cell of a 1×1 — and describes itself', () => {
-    renderDialog();
+  it('names the placement — plant, footprint and the single cell of a 1×1 — and describes itself', async () => {
+    await renderDialog();
 
     const dialog = screen.getByRole('dialog', { name: 'Remove this placement?' });
     expect(
@@ -52,8 +58,8 @@ describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
     expect(dialog).toHaveAccessibleDescription(/Courgette \(1×1, cells F3\)/);
   });
 
-  it('spells a footprint as rows×cols and a first–last cell range (2 rows × 3 cols at F3 → 2×3, F3–H4)', () => {
-    renderDialog({ spanRows: 2, spanCols: 3 });
+  it('spells a footprint as rows×cols and a first–last cell range (2 rows × 3 cols at F3 → 2×3, F3–H4)', async () => {
+    await renderDialog({ spanRows: 2, spanCols: 3 });
 
     // rows × cols — the panel's footprint-line order (product decision,
     // review round 1): 2 rows down (3 → 4), 3 columns across (F → H).
@@ -61,7 +67,7 @@ describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
   });
 
   it('gives Cancel the initial focus, and Cancel fires onCancel', async () => {
-    const { onCancel, onConfirm } = renderDialog();
+    const { onCancel, onConfirm } = await renderDialog();
 
     const cancel = screen.getByRole('button', { name: 'Cancel' });
     await waitFor(() => expect(cancel).toHaveFocus());
@@ -71,24 +77,24 @@ describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('Remove fires onConfirm and nothing else', () => {
-    const { onCancel, onConfirm } = renderDialog();
+  it('Remove fires onConfirm and nothing else', async () => {
+    const { onCancel, onConfirm } = await renderDialog();
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  it('Escape cancels', () => {
-    const { onCancel, onConfirm } = renderDialog();
+  it('Escape cancels', async () => {
+    const { onCancel, onConfirm } = await renderDialog();
 
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('Enter from the dialog body confirms and takes the key', () => {
-    const { onCancel, onConfirm } = renderDialog();
+  it('Enter from the dialog body confirms and takes the key', async () => {
+    const { onCancel, onConfirm } = await renderDialog();
 
     // fireEvent returns false when a handler called preventDefault().
     expect(
@@ -100,7 +106,7 @@ describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
 
   it('Enter on the focused Cancel button cancels — never removes (the button keeps its own activation)', async () => {
     const user = userEvent.setup();
-    const { onCancel, onConfirm } = renderDialog();
+    const { onCancel, onConfirm } = await renderDialog();
 
     const cancel = screen.getByRole('button', { name: 'Cancel' });
     await waitFor(() => expect(cancel).toHaveFocus());
@@ -114,8 +120,8 @@ describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('ignores an auto-repeated Enter (a held key must not open-and-confirm in one press)', () => {
-    const { onCancel, onConfirm } = renderDialog();
+  it('ignores an auto-repeated Enter (a held key must not open-and-confirm in one press)', async () => {
+    const { onCancel, onConfirm } = await renderDialog();
 
     fireEvent.keyDown(screen.getByRole('dialog'), {
       key: 'Enter',
@@ -125,15 +131,15 @@ describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  it('renders nothing while closed', () => {
-    renderDialog({ open: false });
+  it('renders nothing while closed', async () => {
+    await renderDialog({ open: false });
 
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('carries the French copy (neutral agreement: "sera retiré", "La plante reste")', async () => {
     await i18n.changeLanguage('fr');
-    renderDialog({ spanRows: 2, spanCols: 2 });
+    await renderDialog({ spanRows: 2, spanCols: 2 });
 
     const dialog = screen.getByRole('dialog', { name: 'Retirer ce placement ?' });
     expect(

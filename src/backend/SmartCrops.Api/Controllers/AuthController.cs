@@ -200,11 +200,11 @@ public class AuthController(
     }
 
     /// <summary>
-    /// SMA-31: mails the account-confirmation link. Registration is NOT gated on the
-    /// result — the account already exists and the caller is about to be signed in, so
-    /// an SMTP outage must never cost the user their account. Any delivery failure is
-    /// logged server-side and swallowed; the endpoint still returns 201. Re-sending a
-    /// link after a failed delivery is SMA-320's problem, not this method's.
+    /// SMA-31: mails the account-confirmation link, for Register and ResendConfirmation
+    /// alike. Neither is gated on delivery: the account already exists, so an SMTP
+    /// outage must never cost the user their account. Any delivery failure is logged
+    /// server-side and swallowed, and the caller answers as it would have: the 201 of
+    /// Register, the generic 200 of ResendConfirmation.
     /// </summary>
     private async Task SendConfirmationEmailAsync(ApplicationUser user, string email, CancellationToken ct)
     {
@@ -699,7 +699,10 @@ public class AuthController(
         if (string.IsNullOrEmpty(claimedEmail) || string.IsNullOrEmpty(user.Email)
             || !string.Equals(claimedEmail, user.Email, StringComparison.OrdinalIgnoreCase))
         {
-            logger.LogWarning("google merge refused: email mismatch");
+            logger.LogWarning(
+                "google merge refused: email mismatch (target '{Target}', provider '{Provider}')",
+                MaskEmail(user.Email ?? string.Empty),
+                MaskEmail(LoggableClaim(claimedEmail)));
             return false;
         }
 
@@ -711,7 +714,7 @@ public class AuthController(
         // for any future caller.
         if (!IsGoogleEmailUsable(info))
         {
-            logger.LogWarning("google merge refused: email_verified absent or false");
+            logger.LogWarning("google merge refused: email_verified absent or false for '{Target}'", MaskEmail(user.Email));
             return false;
         }
 
@@ -1287,6 +1290,21 @@ public class AuthController(
         var local = at == 1 ? "***" : $"{email[0]}***";
         return $"{local}{email[at..]}";
     }
+
+    /// <summary>
+    /// The provider's email claim is the one value the merge-refusal logs carry
+    /// that no store has validated: the callback resolves the user from it, any
+    /// other caller bounds nothing. It is echoed (masked) only when it reads as
+    /// one address on one line — exactly one <c>@</c>, no control or white-space
+    /// character; anything else logs as the <c>***</c> fallback of
+    /// <see cref="MaskEmail"/>.
+    /// </summary>
+    private static string LoggableClaim(string? claim) =>
+        claim is not null
+        && claim.Count(c => c == '@') == 1
+        && !claim.Any(c => char.IsControl(c) || char.IsWhiteSpace(c))
+            ? claim
+            : string.Empty;
 
     private void SetAuthCookie(string token)
     {

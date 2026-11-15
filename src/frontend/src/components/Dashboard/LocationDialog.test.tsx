@@ -205,11 +205,13 @@ describe('LocationDialog — the door to CHANGE or REMOVE a location (round 1, V
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
   });
 
-  it('the « Remove » button is a keyboard target like the others', () => {
+  it('the « Remove » button is a keyboard target like the others', async () => {
     renderDialog({ kind: 'profile', current: 'Ecully', canRemove: true });
 
     const remove = screen.getByRole('button', { name: 'Remove' });
-    remove.focus();
+    // MUI's focus handlers set state, and its focus ripple pulses a microtask
+    // later: the gesture runs inside an async act (SMA-452 § 3).
+    await act(async () => remove.focus());
     expect(document.activeElement).toBe(remove);
     expect(remove).not.toHaveAttribute('tabindex', '-1');
   });

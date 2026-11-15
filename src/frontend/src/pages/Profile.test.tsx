@@ -86,7 +86,11 @@ async function armAndConfirmDeletion() {
   fireEvent.change(screen.getByLabelText('Your email address'), {
     target: { value: 'user@example.com' },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
+  // A settled answer lands inside act, not in the hop back to the caller of
+  // this async helper (SMA-452 § 3).
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
+  });
 }
 
 const baseUser: AuthUser = {
