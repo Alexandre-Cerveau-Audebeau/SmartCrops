@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import i18n from '../../i18n/i18n';
 import type { CellData } from '../../types/GardenLayout';
@@ -54,6 +54,8 @@ function renderPanel(props: { catalogReady: boolean }) {
         soil={undefined}
         language={i18n.language}
         catalogReady={props.catalogReady}
+        catalogFailed={false}
+        onCatalogRetry={vi.fn()}
         cellSize="50cm"
         gridRows={3}
         gridCols={3}
@@ -91,6 +93,8 @@ function FootprintHarness(props: {
         soil={undefined}
         language={i18n.language}
         catalogReady
+        catalogFailed={false}
+        onCatalogRetry={vi.fn()}
         cellSize="50cm"
         gridRows={grid.length}
         gridCols={grid[0].length}
@@ -124,6 +128,12 @@ function FootprintHarness(props: {
     </MemoryRouter>
   );
 }
+
+// The file starts on the no-choice default, French (SMA-393): every test
+// states its language here, so each one reads the same run alone.
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 afterEach(async () => {
   // Unmount before the language reset (SMA-174): this hook runs before Testing
@@ -291,6 +301,8 @@ function renderIdentity(
         soil={undefined}
         language="en"
         catalogReady
+        catalogFailed={false}
+        onCatalogRetry={vi.fn()}
         cellSize="50cm"
         gridRows={3}
         gridCols={3}
@@ -304,6 +316,120 @@ function renderIdentity(
     </MemoryRouter>
   );
 }
+
+// SMA-296: `plant` is null on every pending render, the page derives it from
+// an empty list until the catalogue is ready. A plant missing from a READY
+// catalogue is the other null, and that one can still be removed.
+describe('PlacementDetailPanel actions gated on the catalogue (SMA-296)', () => {
+  const hint = 'Select another plant in the sidebar to replace this one.';
+  const note = "Couldn't load the plant catalog.";
+
+  it('while the catalogue is pending, Remove is disabled and the replace hint hidden, like the name', () => {
+    const onRemove = vi.fn();
+    renderIdentity({ plant: null, catalogReady: false, onRemove });
+
+    const remove = screen.getByRole('button', { name: 'Remove from plan' });
+    expect(remove).toBeDisabled();
+    fireEvent.click(remove);
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(screen.queryByText(hint)).toBeNull();
+    // A pending catalogue is not a failed one: no note, no retry, and
+    // nothing for Remove to point at (decision B).
+    expect(screen.queryByText(note)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(remove).not.toHaveAttribute('aria-describedby');
+  });
+
+  it.each([
+    ['a known plant', identityPlant],
+    ['a plant the catalogue does not hold', null],
+  ])('once the catalogue is ready, %s can be removed and the hint is back', (_, plant) => {
+    const onRemove = vi.fn();
+    renderIdentity({ plant, catalogReady: true, onRemove });
+
+    const remove = screen.getByRole('button', { name: 'Remove from plan' });
+    expect(remove).toBeEnabled();
+    fireEvent.click(remove);
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(hint)).toBeInTheDocument();
+  });
+
+  it('after a failure the panel says why Remove is off and offers the retry, where the hint was (decision B)', () => {
+    const onRemove = vi.fn();
+    renderIdentity({
+      plant: null,
+      catalogReady: false,
+      catalogFailed: true,
+      onRemove,
+    });
+
+    const said = screen.getByText(note);
+    // One voice for a failure, the sidebar's alert: here the note is plain
+    // text, or it would be said twice.
+    expect(
+      said.closest('[role="alert"], [role="status"], [aria-live]')
+    ).toBeNull();
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    expect(retry).toBeEnabled();
+    expect(retry).toHaveAccessibleDescription(note);
+
+    const remove = screen.getByRole('button', { name: 'Remove from plan' });
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveAccessibleDescription(note);
+    fireEvent.click(remove);
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(screen.queryByText(hint)).toBeNull();
+  });
+
+  it('Retry asks for the reload and hands its focus to Move, the action that stays (decision B)', async () => {
+    const onCatalogRetry = vi.fn();
+    // The page's part: a retry clears the failure, the catalogue is pending
+    // again and the button that was clicked is gone.
+    function FailedThenPending() {
+      const [failed, setFailed] = useState(true);
+      return (
+        <MemoryRouter>
+          <PlacementDetailPanel
+            placement={placement}
+            plant={null}
+            soil={undefined}
+            language="en"
+            catalogReady={false}
+            catalogFailed={failed}
+            onCatalogRetry={() => {
+              onCatalogRetry();
+              setFailed(false);
+            }}
+            cellSize="50cm"
+            gridRows={3}
+            gridCols={3}
+            checkFit={() => ({ ok: true })}
+            describeOverlap={() => ({ plant: '', cell: '' })}
+            onSetFootprint={vi.fn()}
+            onMove={vi.fn()}
+            onRemove={vi.fn()}
+          />
+        </MemoryRouter>
+      );
+    }
+    render(<FailedThenPending />);
+
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    // Awaited: a MUI button mounts its focus ripple a microtask after the
+    // focus lands, and that update belongs inside the act.
+    await act(async () => {
+      retry.focus();
+    });
+    expect(retry).toHaveFocus();
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+
+    expect(onCatalogRetry).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Move' })).toHaveFocus();
+  });
+});
 
 describe('PlacementDetailPanel identity header (SMA-309)', () => {
   it('renders the section title, the name, the scientific name and the footprint badge', () => {
@@ -469,6 +595,8 @@ describe('PlacementDetailPanel notes (SMA-309)', () => {
           soil={undefined}
           language="en"
           catalogReady
+          catalogFailed={false}
+          onCatalogRetry={vi.fn()}
           cellSize="50cm"
           gridRows={3}
           gridCols={3}
@@ -522,6 +650,24 @@ describe('PlacementDetailPanel exposure override (SMA-309)', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Shade' }));
     expect(onSetExposureOverride).toHaveBeenCalledWith('shade');
   });
+
+  it('the trigger says it opens a menu, and whether it is open (SMA-333)', () => {
+    renderIdentity({ onSetExposureOverride: vi.fn(), exposureOverride: null });
+    // Kept from before the click: an open popover hides the page from role
+    // queries.
+    const trigger = screen.getByRole('button', { name: /Adjust exposure/ });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'true');
+    // Closed, the state is absent, not 'false': the form of the app's other
+    // menu buttons.
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Shade' }));
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+  });
 });
 
 // SMA-309 R2: the details link must carry the SAME origin the
@@ -551,6 +697,8 @@ describe('PlacementDetailPanel plant-details link origin (SMA-309 R2)', () => {
                 soil={undefined}
                 language={i18n.language}
                 catalogReady
+                catalogFailed={false}
+                onCatalogRetry={vi.fn()}
                 cellSize="50cm"
                 gridRows={3}
                 gridCols={3}
@@ -599,6 +747,8 @@ describe('PlacementDetailPanel sheet variant (SMA-18 lot 2 R3)', () => {
           soil={undefined}
           language={i18n.language}
           catalogReady
+          catalogFailed={false}
+          onCatalogRetry={vi.fn()}
           cellSize="50cm"
           gridRows={3}
           gridCols={3}

@@ -2380,6 +2380,8 @@ export default function GardenPlanner() {
           soil: selectedCellSoil,
           language,
           catalogReady,
+          catalogFailed,
+          onCatalogRetry: handleCatalogRetry,
           cellSize,
           gridRows: grid?.length ?? 0,
           gridCols: grid?.[0]?.length ?? 0,

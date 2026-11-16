@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -14,8 +14,10 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
+import { visuallyHidden } from '@mui/utils';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
+import { useLiveRegion } from '../../hooks/useLiveRegion';
 import { spacingToFootprintCells } from '../../pages/gardenPlanner/placementGeometry';
 import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
 import { FootprintBadge } from './FootprintBadge';
@@ -71,7 +73,8 @@ interface Props {
    * the card chrome is STRIPPED (the sheet Paper owns radius and elevation)
    * and the root fills the Paper's bounded height, which is what activates
    * the fixed-chrome/scrollable-list splits the rail only gets from its lg
-   * maxHeight. Content and behavior are identical between the two.
+   * maxHeight. Same content and behavior, but for the tap-to-place hint the
+   * sheet shows under the Plants list.
    */
   variant?: 'rail' | 'sheet';
   /**
@@ -297,6 +300,18 @@ const PlantRow = memo(function PlantRow({
   );
 });
 
+/**
+ * The planner's catalogue sidebar: the shape-edit switch, then three tabs,
+ * Plants (the search and the rows), Soils and Infrastructure. One component,
+ * two mounts, never both at once: the sticky rail from lg up and, below lg,
+ * the bottom sheet (`variant="sheet"`). Fully controlled: the page owns the
+ * search, what is armed, the active tab and the catalogue's state
+ * (`catalogReady`, `catalogFailed`). On the Plants tab a failed catalogue
+ * replaces the search and the rows with the alert and its Retry; otherwise
+ * the results' three states (loading, a count, nothing found) are announced
+ * through one live region (`useLiveRegion`), silent on the other tabs and on
+ * a failure.
+ */
 function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, onSoilFillAll, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady, variant = 'rail', activeTab, onActiveTabChange }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
@@ -310,6 +325,34 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
       return name.toLowerCase().includes(q) || p.scientificName.toLowerCase().includes(q);
     });
   }, [plants, searchQuery, language]);
+
+  // SMA-294: the results' three states reach a screen reader through ONE
+  // region beside the list. Around the list it would read ~536 rows out; on
+  // the message it would be inserted already filled, which is read unreliably
+  // (useLiveRegion). The failure is the alert's alone, and the other tabs have
+  // no results to speak of: the region says nothing there.
+  const resultsSentence =
+    activeTab !== 'plants' || catalogFailed
+      ? ''
+      : !catalogReady
+        ? t('planner.catalogLoading')
+        : filtered.length === 0
+          ? t('planner.sidebar.noResults')
+          : t('library.filters.resultCount', { count: filtered.length });
+  const { announce, regionProps } = useLiveRegion<HTMLElement>({ visible: false });
+  useEffect(() => {
+    announce(resultsSentence);
+  }, [announce, resultsSentence]);
+
+  // SMA-479: Retry lives in the failure's branch and unmounts with it. Its
+  // focus goes to the Plants tab first (mounted in every state, and the
+  // selected one whenever the alert shows), or it would fall back to the
+  // page. The ref's type is MUI's: it types a Tab as a div.
+  const plantsTabRef = useRef<HTMLDivElement>(null);
+  const handleCatalogRetry = () => {
+    plantsTabRef.current?.focus();
+    onCatalogRetry();
+  };
 
   return (
     // R3 (item G): the mockup sidebar CARD — card tokens, radius 12, shadow.
@@ -335,6 +378,9 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
           : { width: { xs: '100%', lg: 320 }, maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` }, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: { xs: 'static', lg: 'sticky' }, top: { lg: STICKY_OFFSET }, alignSelf: { lg: 'flex-start' } }
       }
     >
+      {/* Out of the flow (`position: absolute`), and at the root: a branch would
+          unmount it with the failure. No child: its text is `announce`'s, above. */}
+      <Typography {...regionProps} sx={visuallyHidden} />
       {/* R5 (owner item): the shape-edit toggle adopts the SHARED iPhone-style
           switch (identical to Exposition); mockup row padding 13×16 aligns the
           control with the sidebar content, label 14.5/600 tTitle. */}
@@ -372,7 +418,7 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
           '& .MuiTabs-indicator': { backgroundColor: tk.prim, height: 2 },
         }}
       >
-        <Tab label={t('planner.tabs.plants')} value="plants" />
+        <Tab ref={plantsTabRef} label={t('planner.tabs.plants')} value="plants" />
         {/* Enabled with SMA-14 — the disabled promise is over. */}
         <Tab label={t('planner.tabs.soils')} value="soils" />
         <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" />
@@ -643,7 +689,7 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
             {t('planner.catalogError')}
           </Typography>
-          <Button size="small" variant="outlined" onClick={onCatalogRetry}>
+          <Button size="small" variant="outlined" onClick={handleCatalogRetry}>
             {t('planner.retry')}
           </Button>
         </Box>
