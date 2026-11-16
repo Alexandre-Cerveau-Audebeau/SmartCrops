@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
@@ -34,6 +34,20 @@ function fillAndSubmit(email: string) {
     target: { value: 'Str0ng!Pass' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+}
+
+/** Mounts the sign-in page at the given address, as the router does after a redirect. */
+function renderPageAt(address: string) {
+  return render(
+    <MemoryRouter initialEntries={[address]}>
+      <Login />
+    </MemoryRouter>
+  );
+}
+
+/** The text of every alert on the page, in document order. */
+function alertTexts() {
+  return screen.queryAllByRole('alert').map((alert) => alert.textContent);
 }
 
 describe('Login — unconfirmed-account branch (SMA-320)', () => {
@@ -162,5 +176,140 @@ describe('Login — official Google mark on the OAuth button (SMA-57)', () => {
       'src',
       '/google-g.svg'
     );
+  });
+});
+
+// A failed Google sign-in comes back as /login?error=<code>: the server sends
+// google-failed, no-email, create-failed and link-failed; AuthCallback sends
+// no-code, invalid-code, or the code it received, as is.
+describe('Login — a failed Google sign-in says so (SMA-371)', () => {
+  const GENERIC_MESSAGE = 'Authentication failed. Please try again.';
+
+  beforeEach(async () => {
+    mockLogin.mockReset();
+    await i18next.changeLanguage('en');
+  });
+
+  it('shows one alert that says the Google sign-in failed', () => {
+    renderPageAt('/login?error=google-failed');
+
+    expect(alertTexts()).toEqual(['Google sign-in failed.']);
+  });
+
+  it.each([
+    ['create-failed', 'Account creation failed.'],
+    ['link-failed', 'Failed to link Google account.'],
+  ])('gives the code %s its own message', (code, message) => {
+    renderPageAt(`/login?error=${code}`);
+
+    expect(alertTexts()).toEqual([message]);
+  });
+
+  it.each(['no-email', 'no-code', 'invalid-code', 'not-a-known-code'])(
+    'answers the code %s with the generic message',
+    (code) => {
+      renderPageAt(`/login?error=${code}`);
+
+      expect(alertTexts()).toEqual([GENERIC_MESSAGE]);
+    }
+  );
+
+  // The value is typed by whoever writes the address: it selects a message and
+  // is never shown. The three words are keys every plain object inherits.
+  it.each([
+    ['an image tag', '<img src=x onerror=alert(1)>'],
+    ['an inherited key', 'constructor'],
+    ['the prototype key', '__proto__'],
+    ['an inherited method', 'toString'],
+  ])(
+    'answers %s with the generic message and renders the value nowhere',
+    (_what, value) => {
+      renderPageAt(`/login?error=${encodeURIComponent(value)}`);
+
+      expect(alertTexts()).toEqual([GENERIC_MESSAGE]);
+      // Nowhere as text, nowhere in an attribute, and no element born from
+      // it: the only image is the Google mark, and nothing carries a handler.
+      expect(document.documentElement.textContent).not.toContain(value);
+      expect(
+        Array.from(document.querySelectorAll('*'))
+          .flatMap((element) =>
+            Array.from(element.attributes, (attribute) => attribute.value)
+          )
+          .filter((attributeValue) => attributeValue.includes(value))
+      ).toEqual([]);
+      expect(
+        Array.from(document.querySelectorAll('img'), (img) =>
+          img.getAttribute('src')
+        )
+      ).toEqual(['/google-g.svg']);
+      expect(document.querySelector('[onerror]')).toBeNull();
+    }
+  );
+
+  it.each([
+    ['no error parameter', '/login'],
+    ['an empty error parameter', '/login?error='],
+  ])('shows no alert with %s', (_what, address) => {
+    renderPageAt(address);
+
+    expect(alertTexts()).toEqual([]);
+  });
+
+  it('says it in French', async () => {
+    await i18next.changeLanguage('fr');
+    renderPageAt('/login?error=google-failed');
+
+    expect(alertTexts()).toEqual(['La connexion Google a échoué.']);
+  });
+
+  it('follows a change of language while it is shown', async () => {
+    renderPageAt('/login?error=google-failed');
+    expect(alertTexts()).toEqual(['Google sign-in failed.']);
+
+    await act(async () => {
+      await i18next.changeLanguage('fr');
+    });
+
+    expect(alertTexts()).toEqual(['La connexion Google a échoué.']);
+  });
+
+  it('leaves when the form is sent, and the ordinary error takes its place when the sign-in fails', async () => {
+    let rejectLogin: (reason: Error) => void = () => {};
+    mockLogin.mockReturnValue(
+      new Promise<void>((_resolve, reject) => {
+        rejectLogin = reject;
+      })
+    );
+    renderPageAt('/login?error=google-failed');
+    expect(alertTexts()).toEqual(['Google sign-in failed.']);
+
+    fillAndSubmit('alex@example.com');
+    // Sent, not answered yet: the message left with the submit.
+    expect(alertTexts()).toEqual([]);
+
+    rejectLogin(new Error('Invalid email or password'));
+
+    expect(
+      await screen.findByText('Invalid email or password.')
+    ).toBeInTheDocument();
+    expect(alertTexts()).toEqual(['Invalid email or password.']);
+  });
+
+  it('gives way to the unconfirmed-account warning on the gate sentinel', async () => {
+    mockLogin.mockRejectedValue(new Error(EMAIL_NOT_CONFIRMED));
+    renderPageAt('/login?error=google-failed');
+    expect(alertTexts()).toEqual(['Google sign-in failed.']);
+
+    fillAndSubmit('alex@example.com');
+
+    expect(
+      await screen.findByText(
+        'Your email address has not been confirmed yet. Check your inbox for the confirmation link.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Google sign-in failed.')
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
   });
 });

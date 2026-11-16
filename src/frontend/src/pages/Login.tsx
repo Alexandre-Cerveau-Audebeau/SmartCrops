@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import {
+  Link as RouterLink,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -17,14 +21,58 @@ import { EMAIL_NOT_CONFIRMED, resendConfirmation } from '../services/authApi';
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:5000';
 
-/** The sign-in page: email and password, the Google alternative, and the unconfirmed-account path. */
+/**
+ * The failure codes of a Google sign-in that have a message of their own, each
+ * with its i18n key. The code arrives as `/login?error=<code>`, sent by the
+ * server's Google callback or by `AuthCallback`.
+ *
+ * A `Map` on purpose: it answers for its own entries only, so a value such as
+ * `constructor` or `__proto__`, which every plain object inherits, finds
+ * nothing here.
+ */
+const GOOGLE_FAILURE_MESSAGE_KEYS: ReadonlyMap<string, string> = new Map([
+  ['google-failed', 'auth.googleFailed'],
+  ['create-failed', 'auth.createFailed'],
+  ['link-failed', 'auth.linkFailed'],
+]);
+
+/**
+ * The i18n key for every other non-empty code: `no-email`, `no-code`,
+ * `invalid-code`, and whatever else the address holds.
+ */
+const GOOGLE_FAILURE_FALLBACK_KEY = 'auth.callbackError';
+
+/**
+ * The i18n key of the message that answers the `error` parameter of the
+ * address: the code's own, the generic one for any other non-empty value,
+ * `null` when the parameter is absent or empty.
+ *
+ * Only a key of this module ever comes out: the received value selects a
+ * message and is never rendered nor interpolated.
+ */
+function googleFailureMessageKey(code: string | null): string | null {
+  if (!code) return null;
+  return GOOGLE_FAILURE_MESSAGE_KEYS.get(code) ?? GOOGLE_FAILURE_FALLBACK_KEY;
+}
+
+/**
+ * The sign-in page: email and password, the Google alternative, the
+ * unconfirmed-account path, and the message of a Google sign-in that failed.
+ */
 export default function Login() {
   const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Read once, at mount (a lazy initial state, no effect): the message then
+  // lives until the form is sent, whatever the address becomes. The key is
+  // kept, not the text, so that a change of language translates it again.
+  const [googleFailureKey, setGoogleFailureKey] = useState<string | null>(() =>
+    googleFailureMessageKey(searchParams.get('error'))
+  );
   const [loading, setLoading] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [resendSent, setResendSent] = useState(false);
@@ -32,6 +80,7 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setGoogleFailureKey(null);
     setUnconfirmed(false);
     setResendSent(false);
     setLoading(true);
@@ -74,6 +123,12 @@ export default function Login() {
           >
             {t('auth.login')}
           </Typography>
+
+          {googleFailureKey && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {t(googleFailureKey)}
+            </Alert>
+          )}
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
