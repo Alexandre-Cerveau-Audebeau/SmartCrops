@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
 import Login from './Login';
@@ -48,6 +48,32 @@ function renderPageAt(address: string) {
 /** The text of every alert on the page, in document order. */
 function alertTexts() {
   return screen.queryAllByRole('alert').map((alert) => alert.textContent);
+}
+
+/** Types an address and a password into the form, without sending it. */
+function typeCredentials(email: string) {
+  fireEvent.change(screen.getByLabelText(/Email/), {
+    target: { value: email },
+  });
+  fireEvent.change(screen.getByLabelText(/Password/), {
+    target: { value: 'Str0ng!Pass' },
+  });
+}
+
+/** Sends the form, as a click on its button does. */
+function sendForm() {
+  fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+}
+
+/** The tag name of every element rendered under the given root, in document order. */
+function elementNames(root: Element) {
+  return Array.from(root.querySelectorAll('*'), (element) => element.tagName);
+}
+
+/** Shows the query string the router holds: what the address still carries. */
+function AddressProbe() {
+  const { search } = useLocation();
+  return <output data-testid="address-query">{search}</output>;
 }
 
 describe('Login — unconfirmed-account branch (SMA-320)', () => {
@@ -183,6 +209,10 @@ describe('Login — official Google mark on the OAuth button (SMA-57)', () => {
 // google-failed, no-email, create-failed and link-failed; AuthCallback sends
 // no-code, invalid-code, or the code it received, as is.
 describe('Login — a failed Google sign-in says so (SMA-371)', () => {
+  /**
+   * The English text of auth.callbackError: what any code without a text of
+   * its own gets.
+   */
   const GENERIC_MESSAGE = 'Authentication failed. Please try again.';
 
   beforeEach(async () => {
@@ -214,21 +244,32 @@ describe('Login — a failed Google sign-in says so (SMA-371)', () => {
     }
   );
 
-  // The value is typed by whoever writes the address: it selects a message and
-  // is never shown. The three words are keys every plain object inherits.
+  // The value is typed by whoever writes the address: it selects a message, is
+  // never shown, and is never used as an i18n key. The three words are keys
+  // every plain object inherits; the last two rows name another text of the
+  // catalogue, by its whole key and by its last part.
   it.each([
     ['an image tag', '<img src=x onerror=alert(1)>'],
     ['an inherited key', 'constructor'],
     ['the prototype key', '__proto__'],
     ['an inherited method', 'toString'],
+    ['the key of another text', 'auth.registerSuccessNotice'],
+    ['the name of another text', 'registerSuccessNotice'],
   ])(
     'answers %s with the generic message and renders the value nowhere',
     (_what, value) => {
-      renderPageAt(`/login?error=${encodeURIComponent(value)}`);
+      // The page as it stands for a code it does not know: the reference.
+      const reference = renderPageAt('/login?error=not-a-known-code');
+      const elementsOfThePage = elementNames(reference.container);
+      reference.unmount();
+
+      const { container } = renderPageAt(
+        `/login?error=${encodeURIComponent(value)}`
+      );
 
       expect(alertTexts()).toEqual([GENERIC_MESSAGE]);
       // Nowhere as text, nowhere in an attribute, and no element born from
-      // it: the only image is the Google mark, and nothing carries a handler.
+      // it: the page has the very elements it has for any unknown code.
       expect(document.documentElement.textContent).not.toContain(value);
       expect(
         Array.from(document.querySelectorAll('*'))
@@ -237,12 +278,7 @@ describe('Login — a failed Google sign-in says so (SMA-371)', () => {
           )
           .filter((attributeValue) => attributeValue.includes(value))
       ).toEqual([]);
-      expect(
-        Array.from(document.querySelectorAll('img'), (img) =>
-          img.getAttribute('src')
-        )
-      ).toEqual(['/google-g.svg']);
-      expect(document.querySelector('[onerror]')).toBeNull();
+      expect(elementNames(container)).toEqual(elementsOfThePage);
     }
   );
 
@@ -283,7 +319,11 @@ describe('Login — a failed Google sign-in says so (SMA-371)', () => {
     renderPageAt('/login?error=google-failed');
     expect(alertTexts()).toEqual(['Google sign-in failed.']);
 
-    fillAndSubmit('alex@example.com');
+    typeCredentials('alex@example.com');
+    // Typing does not dismiss it: only sending the form does.
+    expect(alertTexts()).toEqual(['Google sign-in failed.']);
+
+    sendForm();
     // Sent, not answered yet: the message left with the submit.
     expect(alertTexts()).toEqual([]);
 
@@ -300,7 +340,10 @@ describe('Login — a failed Google sign-in says so (SMA-371)', () => {
     renderPageAt('/login?error=google-failed');
     expect(alertTexts()).toEqual(['Google sign-in failed.']);
 
-    fillAndSubmit('alex@example.com');
+    typeCredentials('alex@example.com');
+    expect(alertTexts()).toEqual(['Google sign-in failed.']);
+
+    sendForm();
 
     expect(
       await screen.findByText(
@@ -311,5 +354,30 @@ describe('Login — a failed Google sign-in says so (SMA-371)', () => {
       screen.queryByText('Google sign-in failed.')
     ).not.toBeInTheDocument();
     expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  // The address is not rewritten (a choice of SMA-371): the parameter stays,
+  // so reloading the page shows the message again.
+  it('leaves the address as it came, before and after the form is sent', async () => {
+    mockLogin.mockRejectedValue(new Error('Invalid email or password'));
+    render(
+      <MemoryRouter initialEntries={['/login?error=google-failed']}>
+        <Login />
+        <AddressProbe />
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('address-query').textContent).toBe(
+      '?error=google-failed'
+    );
+
+    typeCredentials('alex@example.com');
+    sendForm();
+
+    expect(
+      await screen.findByText('Invalid email or password.')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('address-query').textContent).toBe(
+      '?error=google-failed'
+    );
   });
 });

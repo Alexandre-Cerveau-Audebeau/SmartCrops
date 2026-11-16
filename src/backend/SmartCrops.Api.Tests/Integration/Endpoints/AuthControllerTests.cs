@@ -547,7 +547,7 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Empty(await users.GetLoginsAsync(fresh));
     }
 
-    // The primitive's refusals say which account, through MaskEmail, never in clear.
+    // The primitive's two claim refusals say which account, through MaskEmail, never in clear.
     // Defence in depth, like the checks they report: the callback refuses an unverified
     // email first, in a log of its own, and finds the user by that very claim.
     private async Task<(string Message, LogLevel Level)> RefusalLogAsync(string email, ExternalLoginInfo info)
@@ -657,9 +657,9 @@ public class AuthControllerTests : IntegrationTestBase
     /// <summary>
     /// Drives the guard into a store failure with the REAL store (SMA-371). The
     /// account is loaded in one scope, then written by another — as a concurrent
-    /// profile save would — so the row's concurrency stamp is no longer the one the
-    /// first instance knows: the guard's own write, made with that stale instance,
-    /// fails with <c>ConcurrencyFailure</c>, and writes nothing.
+    /// confirmation or password reset would — so the row's concurrency stamp is no
+    /// longer the one the first instance knows: the guard's own write, made with
+    /// that stale instance, fails with <c>ConcurrencyFailure</c>, and writes nothing.
     /// </summary>
     private async Task<StaleMerge> MergeWithAStaleAccountAsync(string email)
     {
@@ -738,9 +738,9 @@ public class AuthControllerTests : IntegrationTestBase
 
         var run = await MergeWithAStaleAccountAsync(email);
 
+        Assert.NotNull(run.Before.PasswordHash);
         Assert.False(run.Merged);
         AssertStoreFailureLogged(run, "google merge refused: the latent password could not be removed (ConcurrencyFailure)");
-        Assert.NotNull(run.Before.PasswordHash);
         await AssertAccountUntouchedAsync(email, run.Before);
     }
 
@@ -762,12 +762,92 @@ public class AuthControllerTests : IntegrationTestBase
 
         var run = await MergeWithAStaleAccountAsync(email);
 
+        Assert.Null(run.Before.PasswordHash);
         Assert.False(run.Merged);
         AssertStoreFailureLogged(run, "google merge refused: the security stamp could not be rotated (ConcurrencyFailure)");
-        Assert.Null(run.Before.PasswordHash);
         // The guard set EmailConfirmed on its own instance before the write that
         // failed: what is read here is the database, never that instance.
         await AssertAccountUntouchedAsync(email, run.Before);
+    }
+
+    /// <summary>
+    /// SMA-371 — the codes are the failed result's own, ALL of them, joined; and a
+    /// description that quotes an address never reaches the log. The cheapest real
+    /// failure with two errors: the loaded account is given — on this instance
+    /// only, never saved — the name and the address of ANOTHER account, so
+    /// <c>RemovePasswordAsync</c> fails in the manager's validation, before any
+    /// write, with <c>DuplicateUserName</c> and <c>DuplicateEmail</c>, whose
+    /// descriptions both quote that address.
+    /// </summary>
+    [Fact]
+    public async Task GoogleMerge_PasswordRemovalRefusedWithTwoErrors_LogsBothCodesJoined_AndNoDescription()
+    {
+        var email = NewEmail();
+        var taken = NewEmail();
+        await RegisterAsync(email);
+        await RegisterAsync(taken);
+
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+        user!.UserName = taken;
+        user.Email = taken;
+        string[] descriptions =
+        [
+            users.ErrorDescriber.DuplicateUserName(taken).Description,
+            users.ErrorDescriber.DuplicateEmail(taken).Description,
+        ];
+        // What makes this failure the telling one: each description quotes the address.
+        Assert.All(descriptions, description => Assert.Contains(taken, description));
+        using var capture = new CapturingLoggerProvider();
+
+        var merged = await AuthController.EnsureSafeGoogleMergeAsync(
+            users, user, GoogleInfo(taken, "true", NewProviderKey("gkey-two-errors")), capture.CreateLogger("merge"));
+
+        Assert.False(merged);
+        var entry = Assert.Single(capture.Entries);
+        Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.DoesNotContain("@", entry.Message);
+        Assert.All(descriptions, description => Assert.DoesNotContain(description, entry.Message));
+        Assert.Equal("google merge refused: the latent password could not be removed (DuplicateUserName, DuplicateEmail)", entry.Message);
+        // Refused before any write: in the database the account still answers to its
+        // own address, unconfirmed, its password in place.
+        var persisted = await FindUserAsync(email);
+        Assert.NotNull(persisted);
+        Assert.False(persisted!.EmailConfirmed);
+        Assert.NotNull(persisted.PasswordHash);
+    }
+
+    /// <summary>
+    /// SMA-371 — only a refusal speaks: a merge that goes through BOTH writes of
+    /// branch (b), the password removed then the stamp rotated, leaves the guard's
+    /// logger silent. A log call moved out of its failure branch would be heard
+    /// here.
+    /// </summary>
+    [Fact]
+    public async Task GoogleMerge_UnconfirmedAccountWithPassword_MergesThroughBothWrites_AndLogsNothing()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+        Assert.NotNull(user!.PasswordHash);
+        using var capture = new CapturingLoggerProvider();
+
+        var merged = await AuthController.EnsureSafeGoogleMergeAsync(
+            users, user, GoogleInfo(email, "true", NewProviderKey("gkey-silent")), capture.CreateLogger("merge"));
+
+        Assert.True(merged);
+        Assert.Empty(capture.Entries);
+        // Both writes ran: in the database the password is gone and the account is confirmed.
+        var persisted = await FindUserAsync(email);
+        Assert.NotNull(persisted);
+        Assert.Null(persisted!.PasswordHash);
+        Assert.True(persisted.EmailConfirmed);
     }
 
     [Fact]
