@@ -126,6 +126,7 @@ describe('Login — unconfirmed-account branch (SMA-320)', () => {
     mockLogin.mockReturnValue(new Promise<void>(() => {}));
     sendForm();
 
+    expect(mockLogin).toHaveBeenCalledTimes(2);
     expect(alertTexts()).toEqual([]);
   });
 
