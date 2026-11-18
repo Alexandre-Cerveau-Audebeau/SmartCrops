@@ -97,6 +97,38 @@ describe('Login — unconfirmed-account branch (SMA-320)', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('translates the generic error again when the language changes', async () => {
+    mockLogin.mockRejectedValue(new Error('Invalid email or password'));
+    renderPage();
+
+    fillAndSubmit('alex@example.com');
+    expect(
+      await screen.findByText('Invalid email or password.')
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await i18next.changeLanguage('fr');
+    });
+
+    expect(alertTexts()).toEqual(['E-mail ou mot de passe invalide.']);
+  });
+
+  it('clears the generic error as soon as the form is sent again', async () => {
+    mockLogin.mockRejectedValueOnce(new Error('Invalid email or password'));
+    renderPage();
+
+    fillAndSubmit('alex@example.com');
+    expect(
+      await screen.findByText('Invalid email or password.')
+    ).toBeInTheDocument();
+
+    // The second attempt is sent and never answered: what is read is the submit.
+    mockLogin.mockReturnValue(new Promise<void>(() => {}));
+    sendForm();
+
+    expect(alertTexts()).toEqual([]);
+  });
+
   it('shows the dedicated message and the resend action on the gate sentinel', async () => {
     mockLogin.mockRejectedValue(new Error(EMAIL_NOT_CONFIRMED));
     renderPage();
@@ -227,6 +259,7 @@ describe('Login — a failed Google sign-in says so (SMA-371)', () => {
   });
 
   it.each([
+    ['no-email', 'No email received from Google.'],
     ['create-failed', 'Account creation failed.'],
     ['link-failed', 'Failed to link Google account.'],
   ])('gives the code %s its own message', (code, message) => {
@@ -235,7 +268,7 @@ describe('Login — a failed Google sign-in says so (SMA-371)', () => {
     expect(alertTexts()).toEqual([message]);
   });
 
-  it.each(['no-email', 'no-code', 'invalid-code', 'not-a-known-code'])(
+  it.each(['no-code', 'invalid-code', 'not-a-known-code'])(
     'answers the code %s with the generic message',
     (code) => {
       renderPageAt(`/login?error=${code}`);

@@ -32,13 +32,14 @@ const API_BASE = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:5000';
  */
 const GOOGLE_FAILURE_MESSAGE_KEYS: ReadonlyMap<string, string> = new Map([
   ['google-failed', 'auth.googleFailed'],
+  ['no-email', 'auth.noEmail'],
   ['create-failed', 'auth.createFailed'],
   ['link-failed', 'auth.linkFailed'],
 ]);
 
 /**
- * The i18n key for every other non-empty code: `no-email`, `no-code`,
- * `invalid-code`, and whatever else the address holds.
+ * The i18n key for every other non-empty code: `no-code`, `invalid-code`,
+ * and whatever else the address holds.
  */
 const GOOGLE_FAILURE_FALLBACK_KEY = 'auth.callbackError';
 
@@ -66,7 +67,10 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // Whether the last sign-in was refused for an ordinary reason. A flag, not
+  // the text: the message is translated at render, so it follows a change of
+  // language, like the Google one below.
+  const [loginFailed, setLoginFailed] = useState(false);
   // Read once, at mount (a lazy initial state, no effect): the message then
   // lives until the form is sent, whatever the address becomes. The key is
   // kept, not the text, so that a change of language translates it again.
@@ -79,7 +83,7 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setLoginFailed(false);
     setGoogleFailureKey(null);
     setUnconfirmed(false);
     setResendSent(false);
@@ -93,7 +97,7 @@ export default function Login() {
       if (err instanceof Error && err.message === EMAIL_NOT_CONFIRMED) {
         setUnconfirmed(true);
       } else {
-        setError(t('auth.loginError'));
+        setLoginFailed(true);
       }
     } finally {
       setLoading(false);
@@ -130,9 +134,9 @@ export default function Login() {
             </Alert>
           )}
 
-          {error && (
+          {loginFailed && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
+              {t('auth.loginError')}
             </Alert>
           )}
 
