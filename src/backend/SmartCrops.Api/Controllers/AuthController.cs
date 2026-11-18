@@ -725,7 +725,15 @@ public class AuthController(
             {
                 var removeResult = await userManager.RemovePasswordAsync(user);
                 if (!removeResult.Succeeded)
+                {
+                    // A store failure is a refusal like the two above, and is
+                    // said like them (R3) — by the error CODES alone: no
+                    // address, no account id (SMA-371).
+                    logger.LogError(
+                        "google merge refused: the latent password could not be removed ({ErrorCodes})",
+                        ErrorCodes(removeResult));
                     return false;
+                }
             }
 
             // ONE checked write commits both facts: the manager's rotation is
@@ -734,7 +742,12 @@ public class AuthController(
             user.EmailConfirmed = true;
             var stampResult = await userManager.UpdateSecurityStampAsync(user);
             if (!stampResult.Succeeded)
+            {
+                logger.LogError(
+                    "google merge refused: the security stamp could not be rotated ({ErrorCodes})",
+                    ErrorCodes(stampResult));
                 return false;
+            }
         }
         // (c) Confirmed account: standard verified-email linking — password untouched.
 
@@ -1305,6 +1318,15 @@ public class AuthController(
         && !claim.Any(c => char.IsControl(c) || char.IsWhiteSpace(c))
             ? claim
             : string.Empty;
+
+    /// <summary>
+    /// The error CODES of a failed Identity operation, joined for a log line —
+    /// never <see cref="IdentityError.Description"/>: a description can quote what
+    /// a user typed (a duplicate user name or address), while the describer's
+    /// codes are constant names, such as <c>ConcurrencyFailure</c>.
+    /// </summary>
+    private static string ErrorCodes(IdentityResult result) =>
+        string.Join(", ", result.Errors.Select(error => error.Code));
 
     private void SetAuthCookie(string token)
     {
