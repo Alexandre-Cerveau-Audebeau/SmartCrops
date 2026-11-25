@@ -5,14 +5,14 @@ Material UI 7 and react-i18next.
 
 ## Commands
 
-Run them from this folder (`src/frontend`), with Node.js 20.
+Run them from this folder (`src/frontend`), with Node.js 20 (20.19 or later).
 
 | Command | What it does |
 | --- | --- |
 | `npm ci` | Installs the exact dependencies of `package-lock.json`. |
 | `npm run dev` | Starts the Vite dev server. Requests to `/api` are proxied to `VITE_API_URL`, or to `http://localhost:5000` when it is not set. |
 | `npm run lint` | Runs ESLint on `src/`. |
-| `npm test` | Runs the whole Vitest suite once. The 20-second test timeout is part of the script: do not pass another one. |
+| `npm test` | Runs the whole Vitest suite once (the layout suites need Google Chrome: see [Tests](#tests)). The 20-second test timeout is part of the script: do not pass another one. |
 | `npm run build` | Type-checks the project (`tsc -b`), then builds it into `dist/`. |
 | `npm run format` | Formats `src/` with Prettier. |
 
@@ -28,7 +28,9 @@ Vitest runs two projects, declared in [`vite.config.ts`](vite.config.ts):
   layout in a headless Chrome. They run after the `unit` project, one file at a time.
 
 The layout suites need Google Chrome. They look for it in `CHROME_BIN`, then in the usual
-install locations. In CI the job fails when Chrome is missing.
+install locations. When Chrome is missing, the job fails in CI; on a workstation the two
+suites are skipped and `npm test` still passes, so check that its summary reports no
+skipped test.
 
 ## Where things are
 
