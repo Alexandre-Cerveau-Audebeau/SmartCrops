@@ -277,3 +277,25 @@ export function nextDashboardSize(size: DashboardSize, sizes: DashboardSizeList)
   const index = sizes.indexOf(size);
   return sizes[(index + 1) % sizes.length] ?? sizes[0];
 }
+
+/** The two ways a widget's size steps in the Edit mode (SMA-437): one size down, « − », or one size up, « + ». */
+export type DashboardSizeStep = 'smaller' | 'larger';
+
+/**
+ * SMA-437 — ONE size step through `sizes`, the sizes the widget may take at
+ * its formula (`sizesFor`, A-N11), in their order: Small, Medium, Large, and
+ * the Full width last the day an Expert widget has it. `smaller` gives the
+ * size before `size` in the list, `larger` the size after it, and null at that
+ * end of the scale: the step never wraps, Large never goes back to Small. A
+ * size the list does not hold steps `smaller` to the largest size served and
+ * `larger` nowhere; a one-size list steps nowhere at all.
+ */
+export function stepDashboardSize(
+  size: DashboardSize,
+  sizes: DashboardSizeList,
+  step: DashboardSizeStep
+): DashboardSize | null {
+  const index = sizes.indexOf(size);
+  if (index < 0) return step === 'smaller' ? (sizes[sizes.length - 1] ?? null) : null;
+  return sizes[step === 'smaller' ? index - 1 : index + 1] ?? null;
+}

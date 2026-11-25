@@ -5,6 +5,7 @@ import {
   DASHBOARD_BLOCK_KEYS,
   DASHBOARD_LEVELS,
   nextDashboardSize,
+  stepDashboardSize,
   type DashboardLevel,
   type DashboardSize,
   type DashboardSizeList,
@@ -268,5 +269,48 @@ describe('nextDashboardSize (SMA-336)', () => {
 
   it('steps a size the list does not hold to the first one', () => {
     expect(nextDashboardSize('wide', THREE)).toBe('small');
+  });
+});
+
+// SMA-437 (Alexandre, 05/10, validated on 26/11) — the Edit mode's « − » and
+// « + » step a widget ONE size down or up through the sizes it may take at its
+// formula, in their order, and stop at both ends of the scale: no wrap, Large
+// never steps back to Small. A size the list does not hold (D7): « − » leads
+// to the largest size served, « + » nowhere.
+describe('stepDashboardSize (SMA-437)', () => {
+  const THREE = ['small', 'medium', 'large'] as const;
+  const FOUR = ['small', 'medium', 'large', 'wide'] as const;
+
+  it('steps one size up and one size down on three sizes: Small ⇄ Medium ⇄ Large', () => {
+    expect(stepDashboardSize('small', THREE, 'larger')).toBe('medium');
+    expect(stepDashboardSize('medium', THREE, 'larger')).toBe('large');
+    expect(stepDashboardSize('large', THREE, 'smaller')).toBe('medium');
+    expect(stepDashboardSize('medium', THREE, 'smaller')).toBe('small');
+  });
+
+  it('steps one size up and one size down on four sizes, the Full width last: Small ⇄ Medium ⇄ Large ⇄ Full width', () => {
+    expect(stepDashboardSize('small', FOUR, 'larger')).toBe('medium');
+    expect(stepDashboardSize('medium', FOUR, 'larger')).toBe('large');
+    expect(stepDashboardSize('large', FOUR, 'larger')).toBe('wide');
+    expect(stepDashboardSize('wide', FOUR, 'smaller')).toBe('large');
+    expect(stepDashboardSize('large', FOUR, 'smaller')).toBe('medium');
+    expect(stepDashboardSize('medium', FOUR, 'smaller')).toBe('small');
+  });
+
+  it('stops at both ends of the scale — null, never a wrap: nothing below Small, nothing above Large on three sizes, nothing above the Full width on four', () => {
+    expect(stepDashboardSize('small', THREE, 'smaller')).toBeNull();
+    expect(stepDashboardSize('large', THREE, 'larger')).toBeNull();
+    expect(stepDashboardSize('small', FOUR, 'smaller')).toBeNull();
+    expect(stepDashboardSize('wide', FOUR, 'larger')).toBeNull();
+  });
+
+  it('goes nowhere on a one-size list — the Key figures band, which gets no « − » and no « + »', () => {
+    expect(stepDashboardSize('wide', ['wide'], 'smaller')).toBeNull();
+    expect(stepDashboardSize('wide', ['wide'], 'larger')).toBeNull();
+  });
+
+  it('from a size the list does not hold, « − » leads to the largest size served and « + » nowhere (D7)', () => {
+    expect(stepDashboardSize('wide', THREE, 'smaller')).toBe('large');
+    expect(stepDashboardSize('wide', THREE, 'larger')).toBeNull();
   });
 });
