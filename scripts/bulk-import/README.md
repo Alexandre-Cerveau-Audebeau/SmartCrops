@@ -37,7 +37,8 @@ before enrichment.
 
 ### Auth
 
-The pre-flight endpoint is `[Authorize]` — same policy as bulk-import
+The pre-flight endpoint requires the `Admin` role
+(`[Authorize(Roles = Roles.Admin)]`) — same policy as bulk-import
 itself. Provide an admin bearer token via the environment variable
 (recommended, keeps it out of shell history):
 
@@ -47,8 +48,8 @@ $env:SMARTCROPS_TOKEN = "<jwt>"
 
 Or pass it once via `-Cookie`. **Never hardcode the token in the script or
 this doc**, and never commit it. The token follows the same lifecycle as for
-`Enrich-AllSources.ps1` (lift the JWT from the SPA's local storage, or hit
-the login endpoint directly).
+`Enrich-AllSources.ps1`: it is the value of the `smartcrops_token` cookie
+of a signed-in admin (see that script's Auth section below).
 
 ### Usage
 
@@ -226,12 +227,16 @@ check is purely defensive against a future schema regression.
 
 ## Auth
 
-The `enrich-all` endpoints are `[Authorize]`. Pass an admin bearer token
+The `enrich-all` endpoints require the `Admin` role
+(`[Authorize(Roles = Roles.Admin)]`). Pass an admin bearer token
 via `-Cookie` or `$env:SMARTCROPS_TOKEN`. **No secret is hardcoded** in
 the script or this doc.
 
-Get a token by logging in through the SPA (devtools -> Application ->
-Local Storage -> copy the JWT) or by hitting the login endpoint directly.
+Get a token by signing in through the SPA as an admin, then copying the
+value of the `smartcrops_token` cookie (devtools -> Application ->
+Cookies). The SPA keeps no token in local storage: the cookie is
+`HttpOnly`, and the login endpoint answers with that cookie and an empty
+body. The API accepts the same value as a bearer token.
 
 ## Usage
 

@@ -1,73 +1,60 @@
-# React + TypeScript + Vite
+# SmartCrops — frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The single-page application of [SmartCrops](../../README.md): React 19, TypeScript, Vite,
+Material UI 7 and react-i18next.
 
-Currently, two official plugins are available:
+## Commands
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Run them from this folder (`src/frontend`). The lockfile accepts Node.js 20 (20.19 or
+later), 22 (22.13 or later) and 24 or later; CI runs Node 20.
 
-## React Compiler
+| Command | What it does |
+| --- | --- |
+| `npm ci` | Installs the exact dependencies of `package-lock.json`. |
+| `npm run dev` | Starts the Vite dev server. Requests to `/api` are proxied to `VITE_API_URL`, or to `http://localhost:5000` when it is not set. |
+| `npm run lint` | Runs ESLint on `src/`. |
+| `npm test` | Runs the whole Vitest suite once (the layout suites need Google Chrome: see [Tests](#tests)). The 20-second test timeout is part of the script: do not pass another one. |
+| `npm run build` | Type-checks the project (`tsc -b`), then builds it into `dist/`. |
+| `npm run format` | Formats `src/` with Prettier. |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+`npm run lint`, `npm test` and `npm run build` are the frontend half of the verification
+suite described in the [root README](../../README.md#verification-suite).
 
-## Expanding the ESLint configuration
+## Tests
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Vitest runs two projects, declared in [`vite.config.ts`](vite.config.ts):
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **`unit`** — every test file except the two below, in jsdom.
+- **`layout`** — the two suites of [`src/test/layout`](src/test/layout) that measure real
+  layout in a headless Chrome. They run after the `unit` project, one file at a time.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+The layout suites need Google Chrome. They look for it in `CHROME_BIN`, then in the usual
+install locations. When Chrome is missing, the job fails in CI; on a workstation the two
+suites are skipped and `npm test` still passes, so check that its summary reports no
+skipped test.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Where things are
+
+```text
+src/
+  pages/        One component per route, plus the planner's own modules
+  components/   Shared and feature components (Dashboard, Garden, library, plantDetail…)
+  contexts/     React contexts
+  hooks/        Shared hooks
+  services/     Calls to the API
+  utils/        Pure helpers and their tests
+  types/        Shared TypeScript types
+  constants/    Shared constants
+  i18n/         en.json and fr.json, kept in parity by a test
+  test/         Test setup, fixtures and the layout harness
+  theme.ts      Material UI theme, light and dark
+  theme/        Design tokens of the dashboard and the planner
+public/         Static assets
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Containers
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- [`Dockerfile`](Dockerfile) — the development image: it runs the Vite dev server and is
+  used by the root `docker-compose.yml`.
+- [`Dockerfile.prod`](Dockerfile.prod) — the production image: a multi-stage build whose
+  result is served by an unprivileged nginx, configured by [`nginx.conf`](nginx.conf).
