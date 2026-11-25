@@ -35,6 +35,8 @@ coderabbit-harvest/
 ├── SKILL.md                         # Claude Code skill entry point
 ├── README.md                        # This file
 ├── scripts/
+│   ├── Invoke-Harvest.ps1          # Single entry point: Locate -> Classify -> Write-Report
+│   ├── Locate-Review.ps1           # Finds the Extension review entry of a commit
 │   ├── Classify-Comments.ps1       # Rule-based classification
 │   └── Write-Report.ps1            # JSON output + markdown summary
 └── references/
@@ -51,7 +53,7 @@ coderabbit-harvest/
 
 ## Maintenance
 
-This skill is part of a 5-skill plan (see memory entry #26). The other 4 (`coderabbit-classify`, `pre-flight-checks`, `windows-quirks-handler`, `pr-merge-cleanup`) will follow the same `.claude/skills/<name>/` convention established here.
+`SKILL.md` is the authoritative description of this skill: its three harvest modes, the exit codes of the scripts and the reporting contract. This README is only an overview. The repository holds one other skill, `smartcrops-version-diff`, under the same `.claude/skills/<name>/` convention.
 
 ## See also
 
