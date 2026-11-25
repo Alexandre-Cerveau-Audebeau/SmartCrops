@@ -219,9 +219,11 @@ catalogue was built with the import scripts in
 ### Verification suite
 
 The six checks that run before every commit. They need the
-[.NET 8 SDK](https://dotnet.microsoft.com/download), [Node.js 20](https://nodejs.org/)
-(20.19 or later), Docker (for the integration tests) and Google Chrome (for the layout
-suites). On a fresh clone, run `npm ci` in `src/frontend` first.
+[.NET 8 SDK](https://dotnet.microsoft.com/download), [Node.js](https://nodejs.org/),
+Docker (for the integration tests) and Google Chrome (for the layout suites). The frontend
+lockfile accepts Node.js 20 (20.19 or later), 22 (22.13 or later) and 24 or later; CI runs
+Node 20. On a fresh clone, install the frontend packages first, from the repository root:
+`npm ci --prefix src/frontend`.
 
 ```bash
 dotnet build SmartCrops.sln && \

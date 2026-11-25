@@ -5,7 +5,8 @@ Material UI 7 and react-i18next.
 
 ## Commands
 
-Run them from this folder (`src/frontend`), with Node.js 20 (20.19 or later).
+Run them from this folder (`src/frontend`). The lockfile accepts Node.js 20 (20.19 or
+later), 22 (22.13 or later) and 24 or later; CI runs Node 20.
 
 | Command | What it does |
 | --- | --- |
