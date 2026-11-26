@@ -751,6 +751,9 @@
             "updated": { "label": "Last modified", "sense": "the most recent first" },
             "custom": { "label": "Custom order", "sense": "the order you choose" }
           },
+          "columnsSection": "Columns",
+          "weatherColumn": "Weather of each garden",
+          "weatherColumnHelp": "Shown by default. A garden with no city carries “Add” there.",
           "orderSection_one": "Your order — {{count, number}} garden",
           "orderSection_other": "Your order — {{count, number}} gardens",
           "orderHelp": "Drag ⠿, or use ▲ ▼. The first {{count, number}} are shown in the widget.",

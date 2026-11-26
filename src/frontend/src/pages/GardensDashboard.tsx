@@ -888,7 +888,9 @@ export default function GardensDashboard() {
         );
       case 'gardens':
         // SMA-448, lot F5-a — the count, the sorts the formula serves and,
-        // for the Expert's custom order, the complete list of the gardens.
+        // for the Expert's custom order, the complete list of the gardens;
+        // SMA-482 (D2) — and, at the sizes whose table has one, the MÉTÉO
+        // column: the panel reads the widget's own size.
         return (
           <GardensOptionsPanel
             options={block.options ?? null}
@@ -899,6 +901,7 @@ export default function GardensDashboard() {
               patchBlock('gardens', (current) => ({ ...current, options }))
             }
             order={gardenOrder}
+            size={block.size}
           />
         );
       case 'weather':

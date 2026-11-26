@@ -553,3 +553,35 @@ describe('the MÉTÉO column, a setting of the widget’s own (SMA-482, D1, D5)'
     expect(widget().querySelector('[data-weather-column]')).toBeNull();
   });
 });
+
+// SMA-482 (D2, D5) — the « Columns » section on the page: the switch in the
+// Gardens gear turns the MÉTÉO column off and on again, at once, and writes
+// the widget's own options — beside the sort —, never the layout's order or
+// sizes: the chip never says « adjusted ». The same section at the Gardener.
+describe('the « Columns » section of the gear (SMA-482, D2, D5)', () => {
+  it('off takes the MÉTÉO column away at once and writes weather: false beside the sort; on again brings it back and writes true — the chip never « adjusted »', async () => {
+    const panel = await openGardensOptions('expert', { sort: 'name' });
+    const toggle = within(panel).getByRole('switch', { name: 'Weather of each garden' });
+    expect(toggle).toBeChecked();
+    expect(widget().querySelector('[data-weather-column]')).not.toBeNull();
+
+    fireEvent.click(toggle);
+
+    expect(widget().querySelector('[data-weather-column]')).toBeNull();
+    await waitFor(() => expect(gardensOptionsOf(lastSaved().blocks)).toEqual({ sort: 'name', weather: false }));
+    expect(screen.queryByText(/adjusted/)).toBeNull();
+
+    fireEvent.click(within(panel).getByRole('switch', { name: 'Weather of each garden' }));
+
+    expect(widget().querySelector('[data-weather-column]')).not.toBeNull();
+    await waitFor(() => expect(gardensOptionsOf(lastSaved().blocks)).toEqual({ sort: 'name', weather: true }));
+    expect(screen.queryByText(/adjusted/)).toBeNull();
+  });
+
+  it('the Gardener’s gear has the same section, the same switch on by default — a setting, never a right of a formula', async () => {
+    const panel = await openGardensOptions('gardener');
+
+    expect(within(panel).getByRole('heading', { level: 4, name: 'Columns' })).toBeInTheDocument();
+    expect(within(panel).getByRole('switch', { name: 'Weather of each garden' })).toBeChecked();
+  });
+});

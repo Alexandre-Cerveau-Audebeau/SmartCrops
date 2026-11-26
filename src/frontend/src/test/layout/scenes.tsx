@@ -16,7 +16,7 @@ import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOpti
 import { cardBearsWeather, noviceCardsOf, type NoviceCard } from '../../components/Dashboard/noviceCards';
 import { LAYOUT_NOW_MS } from './clock';
 import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
-import { customOrderIds } from '../../components/Dashboard/blocks/gardensOptions';
+import { customOrderIds, drawsWeatherColumn } from '../../components/Dashboard/blocks/gardensOptions';
 import type { GardenOrder } from '../../hooks/useGardenOrder';
 import type { GardenLayoutData } from '../../services/gardenLayoutApi';
 import type { Garden } from '../../types/Garden';
@@ -659,17 +659,24 @@ export function panelGardens(count: number): DashboardGardenData[] {
   return list;
 }
 
-/** What the panel scene mounts: its gardens, their served order — read, never written — and the Expert's five sorts. */
+/**
+ * What the panel scene mounts: its gardens, their served order — read, never
+ * written —, the Expert's five sorts, and the size of the widget it sets: the
+ * Full width of the Expert's preset, a size whose table has the MÉTÉO column,
+ * so the panel draws its « Colonnes » section (SMA-482, D2).
+ */
 export function panelSceneData(scene: PanelScene): {
   gardens: DashboardGardenData[];
   order: GardenOrder;
   sorts: FormulaCapabilities['gardenSorts'];
+  size: DashboardSize;
 } {
   const list = panelGardens(scene.gardens);
   return {
     gardens: list,
     order: { ids: customOrderIds(list), order: null, state: 'idle', failure: null, move: noop },
     sorts: capabilitiesFor('expert').gardenSorts,
+    size: 'wide',
   };
 }
 
@@ -958,11 +965,14 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
       // scene says so — or the list the scene names (lot F5-b: one, five,
       // sixty, very long names); the page's three otherwise.
       const list = scene.gardens ? gardensListOf(scene.gardens.list ?? 'twelve') : gs;
+      const options = scene.gardens?.options ?? null;
       return (
         <GardensBlock
           {...common}
           gardens={list}
-          showWeatherColumn
+          // SMA-482 (D1) — the MÉTÉO column as the page draws it: the one rule,
+          // from the scene's size and options, never written in.
+          showWeatherColumn={drawsWeatherColumn({ size: scene.size, options })}
           showHarvestColumn={false}
           weather={gardensWeather(weather, list)}
           onLocate={noop}
@@ -970,7 +980,7 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
           onChanged={noop}
           onDeleted={noop}
           onExpand={noop}
-          options={scene.gardens?.options ?? null}
+          options={options}
           sorts={capabilitiesFor('expert').gardenSorts}
           defaultExpanded={scene.gardens?.expanded}
           defaultQuery={scene.gardens?.query}

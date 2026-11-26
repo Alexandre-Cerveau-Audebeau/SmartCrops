@@ -751,6 +751,9 @@
             "updated": { "label": "Dernière modification", "sense": "le plus récent d’abord" },
             "custom": { "label": "Ordre personnalisé", "sense": "l’ordre que vous choisissez" }
           },
+          "columnsSection": "Colonnes",
+          "weatherColumn": "Météo de chaque jardin",
+          "weatherColumnHelp": "Affichée par défaut. Un jardin sans ville y porte « Ajouter ».",
           "orderSection_one": "Votre ordre — {{count, number}} jardin",
           "orderSection_other": "Votre ordre — {{count, number}} jardins",
           "orderHelp": "Glissez ⠿, ou utilisez ▲ ▼. Les {{count, number}} premiers sont affichés dans le widget.",
