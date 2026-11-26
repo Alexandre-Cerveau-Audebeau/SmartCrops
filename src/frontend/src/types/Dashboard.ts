@@ -126,7 +126,7 @@ export interface FormulaCapabilities {
   maxGardenSize: { width: number; height: number };
   /** The widgets it has, in its preset's order. */
   widgets: DashboardBlockKey[];
-  /** For each of its widgets, the sizes that widget may take, in the order the corner handle steps through them. */
+  /** For each of its widgets, the sizes that widget may take, in the order the size pill's « − » and « + » step through them. */
   sizes: Partial<Record<DashboardBlockKey, DashboardSizeList>>;
   /** Its default layout — what « Réinitialiser » returns to, and « · ajustée » compares against. */
   preset: DashboardBlock[];
@@ -264,16 +264,24 @@ export function isGardenSort(value: string): value is GardenSort {
   return (GARDEN_SORTS as readonly string[]).includes(value);
 }
 
+/** The two ways a widget's size steps in the Edit mode (SMA-437): one size down, « − », or one size up, « + ». */
+export type DashboardSizeStep = 'smaller' | 'larger';
+
 /**
- * The Edit-mode corner handle steps through `sizes` — the sizes the widget may
- * take at its formula (`sizesFor`, SMA-437 A-N11), in their order: Small ->
- * Medium -> Large -> Small, and -> Full width before Small the day an Expert
- * widget has it. It WRAPS on purpose: without the wrap a widget grown to its
- * largest size could never be brought back down, since the handle is the only
- * resize gesture. A size the list does not hold steps to the first one; a
- * one-size list has no handle at all (`SortableWidget`).
+ * SMA-437 — ONE size step through `sizes`, the sizes the widget may take at
+ * its formula (`sizesFor`, A-N11), in their order: Small, Medium, Large, and
+ * the Full width last the day an Expert widget has it. `smaller` gives the
+ * size before `size` in the list, `larger` the size after it, and null at that
+ * end of the scale: the step never wraps, Large never goes back to Small. A
+ * size the list does not hold steps `smaller` to the largest size served and
+ * `larger` nowhere; a size on a one-size list steps nowhere at all.
  */
-export function nextDashboardSize(size: DashboardSize, sizes: DashboardSizeList): DashboardSize {
+export function stepDashboardSize(
+  size: DashboardSize,
+  sizes: DashboardSizeList,
+  step: DashboardSizeStep
+): DashboardSize | null {
   const index = sizes.indexOf(size);
-  return sizes[(index + 1) % sizes.length] ?? sizes[0];
+  if (index < 0) return step === 'smaller' ? (sizes[sizes.length - 1] ?? null) : null;
+  return sizes[step === 'smaller' ? index - 1 : index + 1] ?? null;
 }

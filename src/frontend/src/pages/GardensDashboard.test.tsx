@@ -216,7 +216,9 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
     expect(within(band).queryByText('Coming soon')).toBeNull();
   });
 
-  it('gives the band three Edit-mode controls — hide, move, options — and NO corner grip: it has one size (C28)', async () => {
+  // REWRITTEN by SMA-437's size stepper: it pinned « NO corner grip » by the
+  // grip's name. What the one-size band does not get is the size pill now.
+  it('gives the band three Edit-mode controls — hide, move, options — and NO size pill: it has one size (C28)', async () => {
     servePreferences('expert');
 
     renderPage();
@@ -228,9 +230,10 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
     expect(await screen.findByRole('button', { name: 'Hide Key figures' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Move Key figures' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Key figures options' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Change the size of Key figures/ })).toBeNull();
-    // …while a widget with three sizes keeps its grip.
-    expect(screen.getByRole('button', { name: /Change the size of Weather/ })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /^Size of Key figures/ })).toBeNull();
+    expect(document.querySelector('[data-widget="keyfigures"]')!.parentElement!.querySelector('[data-size-step]')).toBeNull();
+    // …while a widget with several sizes has its pill.
+    expect(screen.getByRole('group', { name: /^Size of Weather/ })).toBeInTheDocument();
   });
 
   it('leaves the level’s hidden widgets out of the grid', async () => {

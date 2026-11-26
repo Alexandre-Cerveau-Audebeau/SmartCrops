@@ -64,9 +64,9 @@ interface Props {
   onReset: () => void;
   /** The blocks in their new order — the write the Edit mode's drop makes. */
   onReorder: (blocks: DashboardBlock[]) => void;
-  /** A widget shown or hidden — the Edit mode's « − », both ways. */
+  /** A widget shown or hidden — the Edit mode's cross, both ways. */
   onVisibilityChange: (key: DashboardBlockKey, hidden: boolean) => void;
-  /** A widget's size, chosen — where the Edit mode's corner handle steps. */
+  /** A widget's size, chosen — where the Edit mode's size pill steps. */
   onSizeChange: (key: DashboardBlockKey, size: DashboardSize) => void;
 }
 

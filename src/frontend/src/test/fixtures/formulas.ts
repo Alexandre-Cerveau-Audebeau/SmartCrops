@@ -31,7 +31,7 @@ export function presetFor(level: DashboardLevel): DashboardBlock[] {
   return reference.presets[level].map((block) => ({ ...block }) as DashboardBlock);
 }
 
-/** The sizes a widget may take at a formula, in the order the corner handle steps through them. */
+/** The sizes a widget may take at a formula, in the order the size pill's « − » and « + » step through them. */
 export function sizesFor(key: DashboardBlockKey, level: DashboardLevel): DashboardSizeList {
   return [...reference.sizesFor[level][key]] as unknown as DashboardSizeList;
 }

@@ -1,34 +1,54 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DndContext } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
 import { ThemeProvider, getOverlayAlpha } from '@mui/material/styles';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../../i18n/i18n';
 import { createAppTheme } from '../../theme';
-import { declaredAtBreakpoint, rulesFor, slotOf } from '../../test/dashboardDom';
-import { contrast, hex, over } from '../../test/contrast';
+import { declaredAtBreakpoint, emittedRules, emotionClass, rulesFor, slotOf } from '../../test/dashboardDom';
+import { contrast, hex, over, resolveColor } from '../../test/contrast';
 import SortableWidget from './SortableWidget';
-import type { DashboardBlock, DashboardSize } from '../../types/Dashboard';
+import type { DashboardBlock, DashboardSize, DashboardSizeStep } from '../../types/Dashboard';
 
-// SMA-437 lot 1, PR A, step A2 (pre-flight D3) — the corner handle is drawn
+// SMA-437 lot 1, PR A, step A2 (pre-flight D3) — the size control is drawn
 // only for a widget that has more than one size at its formula. A-N11: « Chiffres
 // clés — une seule taille, pas de poignée ». No widget of PR A has one size, so
-// the rule is pinned on the cell itself, whatever list it is given.
+// the rule is pinned on the cell itself, whatever list it is given. Since
+// SMA-437's size stepper (Alexandre, 05/10, validated on 26/11) that control is
+// the pill of « − » and « + », in place of the corner grip.
+
+/** What the two segments lead to on the cells these tests draw with a pill: a Medium, between Small and Large. */
+const MEDIUM_STEPS = { smaller: 'Small', larger: 'Large' } as const;
 
 /** One grid cell — in Edit mode unless told otherwise — inside the drag context the grid gives it. */
-function renderCell(block: DashboardBlock, resizable: boolean, editing = true) {
+function renderCell(
+  block: DashboardBlock,
+  resizable: boolean,
+  editing = true,
+  {
+    sizeLabel = 'Medium',
+    sizeSteps = MEDIUM_STEPS,
+    onResize = () => {},
+    mode = 'light',
+  }: {
+    sizeLabel?: string;
+    sizeSteps?: Record<DashboardSizeStep, string | null>;
+    onResize?: (step: DashboardSizeStep) => void;
+    mode?: 'light' | 'dark';
+  } = {}
+) {
   return render(
-    <ThemeProvider theme={createAppTheme('light')}>
+    <ThemeProvider theme={createAppTheme(mode)}>
       <DndContext>
         <SortableContext items={[block.key]}>
           <SortableWidget
             block={block}
             label="Tips"
             editing={editing}
-            sizeLabel="Medium"
-            resizable={resizable}
+            sizeLabel={sizeLabel}
+            sizeSteps={resizable ? sizeSteps : null}
             onHide={() => {}}
-            onResize={() => {}}
+            onResize={onResize}
           >
             <div data-widget={block.key}>Tips body</div>
           </SortableWidget>
@@ -38,28 +58,156 @@ function renderCell(block: DashboardBlock, resizable: boolean, editing = true) {
   );
 }
 
-describe('SortableWidget — the corner handle follows the sizes of the formula (SMA-437, A-N11)', () => {
+describe('SortableWidget — the size pill follows the sizes of the formula (SMA-437, A-N11)', () => {
   const tips: DashboardBlock = { key: 'tips', size: 'medium', hidden: false };
 
   beforeEach(async () => {
     await i18next.changeLanguage('en');
   });
 
-  it('draws no size button for a widget that has one size: three controls, hide, move and options', () => {
+  // REWRITTEN by SMA-437's size stepper: it pinned the absence of the corner
+  // grip, read by the grip's name. What a one-size widget does not get is the
+  // size pill now.
+  it('draws no size pill for a widget that has one size: three controls, hide, move and options', () => {
     renderCell(tips, false);
 
-    expect(screen.queryByRole('button', { name: /^Change the size of Tips/ })).toBeNull();
+    expect(screen.queryByRole('group', { name: /^Size of Tips/ })).toBeNull();
+    expect(document.querySelector('[data-size-step]')).toBeNull();
     expect(screen.getByRole('button', { name: 'Hide Tips' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Move Tips' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tips options' })).toBeInTheDocument();
   });
 
-  it('draws it for a widget that has several', () => {
+  // REWRITTEN likewise: it pinned the grip's name, « Change the size of Tips —
+  // currently Medium ».
+  it('draws it for a widget that has several: ONE group beside the card, named with the size it stands at, holding « − » then « + », each named with the size it leads to', () => {
     renderCell(tips, true);
 
-    expect(
-      screen.getByRole('button', { name: 'Change the size of Tips — currently Medium' })
-    ).toBeInTheDocument();
+    const pill = screen.getByRole('group', { name: 'Size of Tips: Medium' });
+    // One direct child of the widget's wrapper, beside the card (D5).
+    expect(pill.parentElement).toBe(document.querySelector('[data-widget="tips"]')!.parentElement);
+    const segments = within(pill).getAllByRole('button');
+    expect(segments.map((segment) => segment.getAttribute('data-size-step'))).toEqual(['smaller', 'larger']);
+    expect(segments[0]).toHaveAccessibleName('Make Tips smaller — to Small');
+    expect(segments[1]).toHaveAccessibleName('Make Tips larger — to Large');
+    expect(segments[0]!.querySelector('svg[data-testid="RemoveRoundedIcon"]')).not.toBeNull();
+    expect(segments[1]!.querySelector('svg[data-testid="AddRoundedIcon"]')).not.toBeNull();
+  });
+
+  // SMA-437 (D3) — the end of the scale on the cell itself: what the page
+  // tests walk to with clicks (`GardensDashboard.edit.test.tsx`).
+  it('makes a segment at the end of the scale inert — aria-disabled, never disabled, named for the end — and its click asks for no step, where the other one asks for its own', () => {
+    const onResize = vi.fn();
+    renderCell(tips, true, true, { sizeLabel: 'Small', sizeSteps: { smaller: null, larger: 'Medium' }, onResize });
+
+    const shrink = screen.getByRole('button', { name: 'Make Tips smaller — already at the smallest size' });
+    expect(shrink).toHaveAttribute('aria-disabled', 'true');
+    expect(shrink).toBeEnabled();
+    fireEvent.click(shrink);
+    expect(onResize).not.toHaveBeenCalled();
+
+    const grow = screen.getByRole('button', { name: 'Make Tips larger — to Medium' });
+    expect(grow).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(grow);
+    expect(onResize).toHaveBeenCalledTimes(1);
+    expect(onResize).toHaveBeenCalledWith('larger');
+  });
+
+  // SMA-437 (Alexandre's visual pass, 26/11) — hiding is a CROSS. The artboard
+  // drew a « − »; since the size pill, « − » makes a widget one size smaller,
+  // and two « − » on one card read as one gesture: « ce devrait être une croix
+  // pour supprimer, comme dans toutes les autres app ».
+  it('hides a widget by a cross, and leaves « − » to the size pill alone', () => {
+    renderCell(tips, true);
+
+    const hide = screen.getByRole('button', { name: 'Hide Tips' });
+    expect(hide.querySelector('svg[data-testid="CloseRoundedIcon"]')).not.toBeNull();
+    expect(hide.querySelector('svg[data-testid="RemoveRoundedIcon"]')).toBeNull();
+    const minus = [...document.querySelectorAll('svg[data-testid="RemoveRoundedIcon"]')];
+    expect(minus).toHaveLength(1);
+    expect(minus[0]!.closest('[data-size-step]')).toHaveAttribute('data-size-step', 'smaller');
+  });
+});
+
+// SMA-437 (Alexandre's visual pass, 26/11) — « pas très visible quand c'est
+// grisé en mode nuit ». A segment at the end of its scale has to READ as
+// greyed: its ink stands at 3:1 or more from the live glyph's, and stays
+// visible on the chip, 2.5:1 or more. By day the theme's disabled ink does it
+// (5.67:1 and 2.64:1). At night that ink is 50 % of white — 2.46:1 from the
+// live glyph, a segment that did not look inert —, so the night takes
+// `mutedText` (3.76:1 and 2.86:1). Read on the rules Emotion emits, like the
+// pill's make below; an inert control has no contrast floor of its own (WCAG
+// 1.4.3 exempts it), these two are the product's.
+describe('SortableWidget — the inert segment reads as greyed, by day and at night (SMA-437)', () => {
+  beforeEach(async () => {
+    await i18next.changeLanguage('en');
+  });
+
+  /** The `color` a segment's own rule declares — or the rule of its `[aria-disabled="true"]` state. */
+  const inkOf = (segment: Element, state: '' | '[aria-disabled="true"]'): string => {
+    const opening = `.${emotionClass(segment)}${state}{`;
+    const rule = emittedRules(segment).find((text) => text.startsWith(opening));
+    const colours = [...(rule ?? '').matchAll(/[{;]color:([^;}]+)/g)].map((match) => match[1]!);
+    if (colours.length === 0) throw new Error(`No colour declared by ${opening}…}`);
+    return colours[colours.length - 1]!;
+  };
+
+  it.each(['light', 'dark'] as const)('%s — the inert « − » is 3:1 or more from the live « + », and 2.5:1 or more on the chip', (mode) => {
+    const { palette } = createAppTheme(mode);
+    renderCell({ key: 'tips', size: 'small', hidden: false }, true, true, {
+      sizeLabel: 'Small',
+      sizeSteps: { smaller: null, larger: 'Medium' },
+      mode,
+    });
+    const inert = screen.getByRole('button', { name: 'Make Tips smaller — already at the smallest size' });
+    const live = screen.getByRole('button', { name: 'Make Tips larger — to Medium' });
+
+    const chip = hex(palette.surfaceSubtle);
+    expect(inkOf(inert, '[aria-disabled="true"]').toLowerCase()).toBe(
+      (mode === 'dark' ? palette.mutedText : palette.text.disabled).toLowerCase()
+    );
+    const inertInk = resolveColor(inkOf(inert, '[aria-disabled="true"]'), chip)!;
+    const liveInk = resolveColor(inkOf(live, ''), chip)!;
+
+    expect(contrast(inertInk, liveInk)).toBeGreaterThanOrEqual(3);
+    expect(contrast(inertInk, chip)).toBeGreaterThanOrEqual(2.5);
+  });
+});
+
+// SMA-437 (D1) — where the pill stands and what it is made of: the card's top
+// band, LEFT of the gear — 6 px down, 42 px in from the right edge (the gear's
+// 10 px, its 26 px and a 6 px gap) —, 26 px high, two segments 26 px wide
+// around a 1 px rule, the chips' own tokens and the drag pill's 14 px radius.
+// Read on the rules Emotion emits, under the product theme so the tokens
+// resolve; the harness measures the drawn boxes (`dashboardLayout.test.tsx`).
+describe('SortableWidget — the size pill’s place and make (SMA-437, D1)', () => {
+  beforeEach(async () => {
+    await i18next.changeLanguage('en');
+  });
+
+  it('stands it in the top band left of the gear — top 6, right 42, 26 px high, the 14 px radius — on the chips’ surface and border, its two 26 px segments around a 1 px rule, its glyphs at 16 px', () => {
+    const { palette } = createAppTheme('light');
+    renderCell({ key: 'tips', size: 'medium', hidden: false }, true);
+    const pill = screen.getByRole('group', { name: 'Size of Tips: Medium' });
+    const flat = (node: Element) => rulesFor(node).toLowerCase().replace(/\s+/g, '');
+
+    const rules = flat(pill);
+    expect(rules).toContain('position:absolute');
+    expect(rules).toContain('top:6px');
+    expect(rules).toContain('right:42px');
+    expect(rules).toContain('height:26px');
+    expect(rules).toContain('box-sizing:border-box');
+    expect(rules).toContain('border-radius:14px');
+    expect(rules).toContain(`background-color:${palette.surfaceSubtle.toLowerCase()}`);
+    expect(rules).toContain(`border-color:${palette.borderSubtle.toLowerCase()}`);
+
+    const [shrink, rule, grow] = [...pill.children];
+    for (const segment of [shrink!, grow!]) {
+      expect(flat(segment)).toContain('width:26px');
+      expect(flat(segment.querySelector('svg')!)).toContain('font-size:16px');
+    }
+    expect(flat(rule!)).toContain('width:1px');
+    expect(flat(rule!)).toContain(`background-color:${palette.borderSubtle.toLowerCase()}`);
   });
 });
 
@@ -111,7 +259,7 @@ describe('SortableWidget — the options panel at night (SMA-437, D15)', () => {
               label="Tips"
               editing
               sizeLabel="Medium"
-              resizable
+              sizeSteps={MEDIUM_STEPS}
               onHide={() => {}}
               onResize={() => {}}
             >

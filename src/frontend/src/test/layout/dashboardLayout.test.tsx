@@ -727,9 +727,10 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
 
     // SMA-437 (D19): every card of a whole grid, the same four rules — and
     // no two cards meeting, and in Edit mode every control inside its card,
-    // over none of its text, with the corner grip on every card that has
-    // more than one size at its formula: every one but the Key figures band,
-    // whose one size is the Full width (PR B, step B1 — A-N11, C28).
+    // over none of its text, with the size pill on every card that has more
+    // than one size at its formula — the corner grip's place until SMA-437's
+    // size stepper: every one but the Key figures band, whose one size is the
+    // Full width (PR B, step B1 — A-N11, C28).
     it.each(GRID_SCENES.map((grid) => grid.name))('%s: every card clean, no two cards meeting, the Edit controls clear of the text', (name) => {
       const grid = gridOf(run, name);
       const scene = GRID_SCENES.find((candidate) => candidate.name === name)!;
@@ -743,11 +744,34 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         for (const { key, controls } of grid.controls) {
           expect(controls.filter((control) => !control.inside).map((control) => control.label), key).toEqual([]);
           expect(controls.flatMap((control) => control.covers.map((text) => `${control.label} over ${text}`)), key).toEqual([]);
-          const grips = sizesFor(key as DashboardBlockKey, scene.level).length > 1 ? 1 : 0;
-          expect(controls.filter((control) => control.grip), key).toHaveLength(grips);
+          const pills = sizesFor(key as DashboardBlockKey, scene.level).length > 1 ? 1 : 0;
+          expect(controls.filter((control) => control.sizePill), key).toHaveLength(pills);
         }
       } else {
         expect(grid.controls).toEqual([]);
+      }
+    });
+
+    // SMA-437's size stepper (Alexandre, 05/10, validated on 26/11) — the
+    // pill stands in the top band the card reserves for its controls in Edit
+    // mode (`DashboardBlock`: 34 px, 38 in Large and in Full width), where the
+    // corner grip stood over the card's bottom corner; and no two controls of
+    // a card meet, the pill beside the gear included.
+    it.each(GRID_SCENES.filter((grid) => grid.editing).map((grid) => grid.name))('%s: the size pill within the top band, and no Edit control over another', (name) => {
+      const grid = gridOf(run, name);
+      for (const { key, controls } of grid.controls) {
+        const card = grid.cards.find((candidate) => candidate.key === key)!;
+        const band = card.size === 'large' || card.size === 'wide' ? 38 : 34;
+        for (const pill of controls.filter((control) => control.sizePill)) {
+          expect(pill.y + pill.h, `${key}: ${pill.label} at (${pill.x}, ${pill.y}) ${pill.w} × ${pill.h}`).toBeLessThanOrEqual(band);
+        }
+        const meeting = controls.flatMap((a, index) =>
+          controls
+            .slice(index + 1)
+            .filter((b) => Math.min(a.x + a.w, b.x + b.w) > Math.max(a.x, b.x) && Math.min(a.y + a.h, b.y + b.h) > Math.max(a.y, b.y))
+            .map((b) => `${a.label} (${a.x}, ${a.y}) ${a.w} × ${a.h} ∩ ${b.label} (${b.x}, ${b.y}) ${b.w} × ${b.h}`)
+        );
+        expect(meeting, key).toEqual([]);
       }
     });
   });
@@ -962,13 +986,13 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       }
     });
 
-    it('gives the band three Edit-mode controls and no grip, clear of its title and its tiles — and keeps the ordinary rows around it pinned', () => {
+    it('gives the band three Edit-mode controls and no size pill, clear of its title and its tiles — and keeps the ordinary rows around it pinned', () => {
       for (const run of WIDE_RUNS) {
         for (const name of ['grid-expert-edit', 'grid-expert-band-between-edit']) {
           const grid = gridOf(run, name);
           const band = grid.controls.find((card) => card.key === 'keyfigures')!;
           expect(band.controls, `${run.id} ${name}`).toHaveLength(3);
-          expect(band.controls.filter((control) => control.grip), `${run.id} ${name}`).toEqual([]);
+          expect(band.controls.filter((control) => control.sizePill), `${run.id} ${name}`).toEqual([]);
           expect(band.controls.flatMap((control) => control.covers), `${run.id} ${name}`).toEqual([]);
         }
         const between = gridOf(run, 'grid-expert-band-between');

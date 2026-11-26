@@ -48,8 +48,8 @@ import GardensDashboard from './GardensDashboard';
 import { fetchDashboardData, fetchDashboardPreferences, saveDashboardPreferences } from '../services/dashboardApi';
 
 // SMA-448, lot F5-b — THE FULL WIDTH OF THE GARDENS WIDGET ON THE PAGE (V3-03,
-// V3-04; contract v3 § 4.7 a; A-N11): the Expert's corner handle steps Large →
-// Full width, and the page draws the seven-column table; the Gardener's handle
+// V3-04; contract v3 § 4.7 a; A-N11): the Expert's « + » steps Large →
+// Full width, and the page draws the seven-column table; the Gardener's « + »
 // never reaches it — a right the served capabilities carry and the server
 // refuses (R8), never a difference of interface alone. In it, the settings of
 // lot F5-a hold (the count, « + N autres jardins » unfolding in place, the
@@ -196,30 +196,42 @@ afterEach(() => {
 });
 
 describe('the Full width of the Gardens widget, a right of the Expert (SMA-448, lot F5-b — A-N11, R8)', () => {
-  it('the Expert’s corner handle on Gardens at Large steps to the Full width: the seven columns appear, and the layout is saved with « wide »', async () => {
+  // REWRITTEN by SMA-437's size stepper (Alexandre, 05/10, validated on
+  // 26/11): the corner handle was clicked by its name; « + » steps Large to
+  // the Full width now, and stops there.
+  it('the Expert’s « + » on Gardens at Large steps to the Full width: the seven columns appear, the layout is saved with « wide » — and « + » is at the end of its scale there', async () => {
     serve('expert', 'large');
     await renderPage();
     await enterEditMode();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Change the size of Gardens — currently Large' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make Gardens larger — to Full width' }));
 
-    expect(await screen.findByRole('button', { name: 'Change the size of Gardens — currently Full width' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Size of Gardens: Full width' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Make Gardens larger — already at the largest size' })).toHaveAttribute('aria-disabled', 'true');
     expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
     await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
     expect(lastSaved().blocks.find((block) => block.key === 'gardens')!.size).toBe('wide');
   });
 
-  it('the Gardener’s corner handle on Gardens at Large steps to Small — the Full width is never offered, by the interface as by the server', async () => {
+  // REWRITTEN likewise: it pinned the WRAP — the Gardener's handle at Large
+  // stepped to Small. Large is the end of the Gardener's scale: « + » is inert
+  // there, and the Full width is still never offered.
+  it('the Gardener’s Gardens at Large is at the end of its scale: « + » is inert and its click changes nothing — the Full width is never offered, by the interface as by the server', async () => {
     serve('gardener', 'large');
     await renderPage();
     await enterEditMode();
+    const grow = screen.getByRole('button', { name: 'Make Gardens larger — already at the largest size' });
+    const indicator = within(document.querySelector('[data-dashboard-actions]') as HTMLElement).getByRole('status');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Change the size of Gardens — currently Large' }));
+    expect(grow).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Make Gardens smaller — to Medium' })).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(grow);
 
-    expect(await screen.findByRole('button', { name: 'Change the size of Gardens — currently Small' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Change the size of Gardens — currently Full width' })).toBeNull();
-    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
-    expect(lastSaved().blocks.find((block) => block.key === 'gardens')!.size).toBe('small');
+    expect(screen.getByRole('group', { name: 'Size of Gardens: Large' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Size of Gardens: Full width' })).toBeNull();
+    // No write scheduled: the indicator would say « Saving… » at once.
+    expect(indicator).toBeEmptyDOMElement();
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 
   it('an Expert’s stored layout with Gardens in the Full width draws the seven-column table', async () => {

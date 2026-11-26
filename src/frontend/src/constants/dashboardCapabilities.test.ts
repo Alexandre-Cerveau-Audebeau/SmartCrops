@@ -4,10 +4,11 @@ import { capabilitiesFor } from '../test/fixtures/formulas';
 import {
   DASHBOARD_BLOCK_KEYS,
   DASHBOARD_LEVELS,
-  nextDashboardSize,
+  stepDashboardSize,
   type DashboardLevel,
   type DashboardSize,
   type DashboardSizeList,
+  type DashboardSizeStep,
 } from '../types/Dashboard';
 
 // SMA-437 lot 1, PR A, step A2 (pre-flight D3) — the sizes a widget may take,
@@ -17,12 +18,10 @@ import {
 // fixture's, which are the reference file's, which is the contract the served
 // catalogue is tested against on the server (`FormulasControllerTests`).
 
-/** Every size the handle reaches from `start`, stepping `steps` times. */
-function walk(start: DashboardSize, sizes: DashboardSizeList, steps: number): DashboardSize[] {
+/** Every size one segment of the size pill reaches from `start`, one click after another, until that end of the scale. */
+function ladder(start: DashboardSize, sizes: DashboardSizeList, step: DashboardSizeStep): DashboardSize[] {
   const reached: DashboardSize[] = [];
-  let size = start;
-  for (let step = 0; step < steps; step += 1) {
-    size = nextDashboardSize(size, sizes);
+  for (let size = stepDashboardSize(start, sizes, step); size !== null; size = stepDashboardSize(size, sizes, step)) {
     reached.push(size);
   }
   return reached;
@@ -114,44 +113,52 @@ describe('permitsBlock — as served (SMA-448, R1)', () => {
   });
 });
 
-describe('the corner handle, per formula (A-N11)', () => {
-  it('the Gardener’s cycle never passes through the Full width, for any widget, from any size', () => {
+// REWRITTEN by SMA-437's size stepper (Alexandre, 05/10, validated on 26/11):
+// these pinned the corner handle's CYCLE, Large back to Small. « − » and « + »
+// climb down and up the same lists, and stop at both ends.
+describe('the size pill, per formula (A-N11; SMA-437)', () => {
+  it('the Gardener’s steps never reach the Full width, for any widget, from any size, in either direction', () => {
     const capabilities = capabilitiesFor('gardener');
     for (const key of capabilities.widgets) {
       const sizes = sizesFor(key, capabilities)!;
       for (const start of sizes) {
-        expect(walk(start, sizes, 6), `${key} from ${start}`).not.toContain('wide');
+        for (const step of ['smaller', 'larger'] as const) {
+          expect(ladder(start, sizes, step), `${key} from ${start}, ${step}`).not.toContain('wide');
+        }
       }
     }
   });
 
-  it('the Expert’s cycle of every resizable widget not drawn in Full width — Tips, To do, Harvest — is Small → Medium → Large → Small', () => {
+  it('the Expert’s every resizable widget not drawn in Full width — Tips, To do, Harvest — climbs Small → Medium → Large, stops there, and comes back down the same way', () => {
     const capabilities = capabilitiesFor('expert');
     const threeSized = capabilities.widgets.filter((candidate) => candidate !== 'keyfigures' && !EXPERT_FULL_WIDTH.includes(candidate));
     expect(threeSized).toEqual(['tips', 'todo', 'harvest']);
     for (const key of threeSized) {
-      expect(walk('small', sizesFor(key, capabilities)!, 3), key).toEqual(['medium', 'large', 'small']);
+      expect(ladder('small', sizesFor(key, capabilities)!, 'larger'), key).toEqual(['medium', 'large']);
+      expect(ladder('large', sizesFor(key, capabilities)!, 'smaller'), key).toEqual(['medium', 'small']);
     }
   });
 
-  it.each(['stats', 'counters', 'month'] as const)('the Expert’s %s cycles through the Full width: Small → Medium → Large → Full width → Small (A-N11; SMA-437, lot V3-08)', (key) => {
-    expect(walk('small', sizesFor(key, capabilitiesFor('expert'))!, 4)).toEqual(['medium', 'large', 'wide', 'small']);
+  it.each(['stats', 'counters', 'month'] as const)('the Expert’s %s climbs through the Full width and stops there: Small → Medium → Large → Full width (A-N11; SMA-437, lot V3-08)', (key) => {
+    expect(ladder('small', sizesFor(key, capabilitiesFor('expert'))!, 'larger')).toEqual(['medium', 'large', 'wide']);
   });
 
-  it('the Expert’s Weather cycles through the Full width: Small → Medium → Large → Full width → Small (A-N11; SMA-448, lot F4)', () => {
-    expect(walk('small', sizesFor('weather', capabilitiesFor('expert'))!, 4)).toEqual(['medium', 'large', 'wide', 'small']);
+  it('the Expert’s Weather climbs through the Full width and stops there: Small → Medium → Large → Full width (A-N11; SMA-448, lot F4)', () => {
+    expect(ladder('small', sizesFor('weather', capabilitiesFor('expert'))!, 'larger')).toEqual(['medium', 'large', 'wide']);
   });
 
-  it('the Expert’s Gardens cycles through the Full width too: Small → Medium → Large → Full width → Small — and the Gardener’s Gardens never does (A-N11; SMA-448, lot F5-b)', () => {
-    expect(walk('small', sizesFor('gardens', capabilitiesFor('expert'))!, 4)).toEqual(['medium', 'large', 'wide', 'small']);
-    expect(walk('large', sizesFor('gardens', capabilitiesFor('gardener'))!, 3)).toEqual(['small', 'medium', 'large']);
+  it('the Expert’s Gardens climbs through the Full width too and comes back down from it — and the Gardener’s Gardens stops at Large (A-N11; SMA-448, lot F5-b)', () => {
+    expect(ladder('small', sizesFor('gardens', capabilitiesFor('expert'))!, 'larger')).toEqual(['medium', 'large', 'wide']);
+    expect(ladder('wide', sizesFor('gardens', capabilitiesFor('expert'))!, 'smaller')).toEqual(['large', 'medium', 'small']);
+    expect(ladder('large', sizesFor('gardens', capabilitiesFor('gardener'))!, 'larger')).toEqual([]);
   });
 
-  it('the Key figures band has no cycle at all: one size, so no corner handle (A-N11, C28)', () => {
-    // `DashboardGrid` draws the grip for a widget with MORE than one size.
+  it('the Key figures band takes no step at all: one size, so no size pill (A-N11, C28)', () => {
+    // `DashboardGrid` draws the pill for a widget with MORE than one size.
     const sizes = sizesFor('keyfigures', capabilitiesFor('expert'))!;
     expect(sizes).toHaveLength(1);
-    expect(walk('wide', sizes, 3)).toEqual(['wide', 'wide', 'wide']);
+    expect(ladder('wide', sizes, 'smaller')).toEqual([]);
+    expect(ladder('wide', sizes, 'larger')).toEqual([]);
   });
 });
 
@@ -245,28 +252,45 @@ describe('isAdjusted (SMA-336)', () => {
   });
 });
 
-describe('nextDashboardSize (SMA-336)', () => {
+// SMA-437 (Alexandre, 05/10, validated on 26/11) — the Edit mode's « − » and
+// « + » step a widget ONE size down or up through the sizes it may take at its
+// formula, in their order, and stop at both ends of the scale: no wrap, Large
+// never steps back to Small. A size the list does not hold (D7): « − » leads
+// to the largest size served, « + » nowhere.
+describe('stepDashboardSize (SMA-437)', () => {
   const THREE = ['small', 'medium', 'large'] as const;
+  const FOUR = ['small', 'medium', 'large', 'wide'] as const;
 
-  it('cycles Small to Medium to Large and wraps back to Small', () => {
-    expect(nextDashboardSize('small', THREE)).toBe('medium');
-    expect(nextDashboardSize('medium', THREE)).toBe('large');
-    expect(nextDashboardSize('large', THREE)).toBe('small');
+  it('steps one size up and one size down on three sizes: Small ⇄ Medium ⇄ Large', () => {
+    expect(stepDashboardSize('small', THREE, 'larger')).toBe('medium');
+    expect(stepDashboardSize('medium', THREE, 'larger')).toBe('large');
+    expect(stepDashboardSize('large', THREE, 'smaller')).toBe('medium');
+    expect(stepDashboardSize('medium', THREE, 'smaller')).toBe('small');
   });
 
-  // SMA-437 lot 1, PR A, step A2 (pre-flight D3) — the handle steps through
-  // the sizes the widget may take at its formula, never through every size.
-  it('steps through the list it is given: with the Full width in it, Large → Full width → Small (the Expert cycle of A-N11)', () => {
-    const expert = ['small', 'medium', 'large', 'wide'] as const;
-    expect(nextDashboardSize('large', expert)).toBe('wide');
-    expect(nextDashboardSize('wide', expert)).toBe('small');
+  it('steps one size up and one size down on four sizes, the Full width last: Small ⇄ Medium ⇄ Large ⇄ Full width', () => {
+    expect(stepDashboardSize('small', FOUR, 'larger')).toBe('medium');
+    expect(stepDashboardSize('medium', FOUR, 'larger')).toBe('large');
+    expect(stepDashboardSize('large', FOUR, 'larger')).toBe('wide');
+    expect(stepDashboardSize('wide', FOUR, 'smaller')).toBe('large');
+    expect(stepDashboardSize('large', FOUR, 'smaller')).toBe('medium');
+    expect(stepDashboardSize('medium', FOUR, 'smaller')).toBe('small');
   });
 
-  it('stays put on a one-size list — the Key figures band, which has no handle', () => {
-    expect(nextDashboardSize('wide', ['wide'])).toBe('wide');
+  it('stops at both ends of the scale — null, never a wrap: nothing below Small, nothing above Large on three sizes, nothing above the Full width on four', () => {
+    expect(stepDashboardSize('small', THREE, 'smaller')).toBeNull();
+    expect(stepDashboardSize('large', THREE, 'larger')).toBeNull();
+    expect(stepDashboardSize('small', FOUR, 'smaller')).toBeNull();
+    expect(stepDashboardSize('wide', FOUR, 'larger')).toBeNull();
   });
 
-  it('steps a size the list does not hold to the first one', () => {
-    expect(nextDashboardSize('wide', THREE)).toBe('small');
+  it('goes nowhere on a one-size list — the Key figures band, which gets no « − » and no « + »', () => {
+    expect(stepDashboardSize('wide', ['wide'], 'smaller')).toBeNull();
+    expect(stepDashboardSize('wide', ['wide'], 'larger')).toBeNull();
+  });
+
+  it('from a size the list does not hold, « − » leads to the largest size served and « + » nowhere (D7)', () => {
+    expect(stepDashboardSize('wide', THREE, 'smaller')).toBe('large');
+    expect(stepDashboardSize('wide', THREE, 'larger')).toBeNull();
   });
 });

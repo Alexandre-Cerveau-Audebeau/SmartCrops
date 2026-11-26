@@ -440,6 +440,30 @@ const lastSaved = () => {
 };
 const lastSavedKeys = () => lastSaved().blocks.map((block) => block.key);
 
+/** The Gardener preset, its Weather at `size` (SMA-437's size stepper). */
+const weatherAt = (size: DashboardSize) =>
+  presetFor('gardener').map((block) => (block.key === 'weather' ? { ...block, size } : block));
+
+/**
+ * A click on a segment at the end of the scale changes NOTHING (SMA-437, D3):
+ * the pill keeps its size, and no write is scheduled — the header's save
+ * indicator would say « Saving… » at once (`useDashboardPreferences.schedule`),
+ * and the save mock would count a call more. Read once the last write has
+ * landed, the indicator on « Saved ».
+ */
+async function expectNothingChangesOnClick(segment: HTMLElement, pill: () => HTMLElement, name: string) {
+  const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+  await waitFor(() => expect(header.getByRole('status')).toHaveTextContent('Saved'), RENDER_TIMEOUT);
+  const writes = vi.mocked(saveDashboardPreferences).mock.calls.length;
+
+  fireEvent.click(segment);
+
+  expect(pill()).toHaveAccessibleName(name);
+  expect(segment).toHaveAttribute('aria-disabled', 'true');
+  expect(header.getByRole('status')).toHaveTextContent('Saved');
+  expect(vi.mocked(saveDashboardPreferences).mock.calls).toHaveLength(writes);
+}
+
 
 beforeEach(() => {
   vi.mocked(fetchDashboardWeather).mockResolvedValue(EMPTY_WEATHER_DATA);
@@ -656,23 +680,21 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect([...pair.children]).toEqual([edit, customize]);
   });
 
-  it('puts the four controls inside every card', async () => {
+  // REWRITTEN by SMA-437's size stepper: the fourth control was the corner
+  // grip, read by its name; it is the size pill now.
+  it('puts the four controls inside every card — hide, move, options and the size pill', async () => {
     await enterEditMode();
 
     expect(screen.getByRole('button', { name: 'Hide Weather' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Move Weather' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Weather options' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', {
-        name: 'Change the size of Weather — currently Medium',
-      })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Size of Weather: Medium' })).toBeInTheDocument();
   });
 
   it('stands each top control on the artboard’s own 26 px chip (A10-10)', async () => {
     // `A6Modifier.dc.html` — `.hb { position: absolute; top: 6px; width: 26px;
     // height: 26px; border-radius: 50%; background: var(--surface); border:
-    // 1px solid var(--card-bd) }` for the « − » and the gear, and `.mv { top:
+    // 1px solid var(--card-bd) }` for the hide chip and the gear, and `.mv { top:
     // 6px; left: 50%; height: 26px; padding: 0 12px; border-radius: 14px }` for
     // the drag handle. The three were bare glyphs in one flex row spanning the
     // card, floating on the widget's own background.
@@ -1012,70 +1034,112 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
   });
 });
 
-describe('GardensDashboard — the resize grip (round 4, A9)', () => {
-  it('is the artboard’s two diagonal strokes, not a two-headed arrow', async () => {
-    // `A6Modifier.dc.html`:
-    //   <svg class="grip" viewBox="0 0 16 16">
-    //     <path d="M15 1 1 15M15 8l-7 7" stroke="currentColor"
-    //           stroke-width="2" stroke-linecap="round" fill="none"/>
-    //   </svg>
-    //
-    // It was `OpenInFullOutlined` — a drag affordance on a button that steps
-    // through three fixed sizes on a click, and the loudest glyph in Edit mode.
-    await enterEditMode();
+// SMA-437 (Alexandre, 05/10, validated on 26/11) — REWRITTEN: this describe
+// pinned the corner grip, the artboard's two diagonal strokes (round 4, A9),
+// on a button that changed the size on a click where the strokes said « drag
+// me ». The « − » and « + » of the size pill replace it, and nothing is left in
+// the card's bottom corner (D2).
+describe('GardensDashboard — the size pill in place of the corner grip (SMA-437)', () => {
+  it('draws the grip’s two strokes nowhere: no element of the page carries their path, and every widget of more than one size has its pill', async () => {
+    await enterEditMode('expert');
 
-    const handle = screen.getByRole('button', {
-      name: 'Change the size of Weather — currently Medium',
-    });
-    const path = handle.querySelector('svg[viewBox="0 0 16 16"] path');
-    expect(path).not.toBeNull();
-    expect(path).toHaveAttribute('d', 'M15 1 1 15M15 8l-7 7');
-    expect(path).toHaveAttribute('fill', 'none');
-    // The gesture it names has not changed: it still resizes, and it is still
-    // a button a keyboard can reach.
-    expect(handle.tagName).toBe('BUTTON');
+    expect(document.querySelector('path[d="M15 1 1 15M15 8l-7 7"]')).toBeNull();
+    // Eight of the Expert's nine widgets: all but the Key figures band, whose one size is the Full width.
+    expect(screen.getAllByRole('group', { name: /^Size of .+: .+$/ })).toHaveLength(8);
   });
 });
 
 describe('GardensDashboard — resizing and hiding (SMA-336)', () => {
-  it('the corner handle cycles Medium to Large and persists the layout', async () => {
-    await enterEditMode();
+  // REWRITTEN by SMA-437's size stepper: « the corner handle cycles Medium to
+  // Large and persists the layout ». The handle stepped one way only and
+  // wrapped; « + » grows the widget one size at a time and stops at the end of
+  // the scale.
+  it('« + » grows the widget one size at a time — Small, Medium, Large — and persists it; at Large it is inert: aria-disabled, named for the end, and its click changes nothing', async () => {
+    await enterEditMode('gardener', weatherAt('small'));
+    const pill = () => screen.getByRole('group', { name: /^Size of Weather: / });
+    const grow = () => within(pill()).getByRole('button', { name: /^Make Weather larger/ });
 
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Change the size of Weather — currently Medium',
-      })
+    expect(pill()).toHaveAccessibleName('Size of Weather: Small');
+    expect(grow()).toHaveAccessibleName('Make Weather larger — to Medium');
+    fireEvent.click(grow());
+    expect(pill()).toHaveAccessibleName('Size of Weather: Medium');
+    expect(grow()).toHaveAccessibleName('Make Weather larger — to Large');
+    fireEvent.click(grow());
+    expect(pill()).toHaveAccessibleName('Size of Weather: Large');
+
+    // The end of the scale: inert, never disabled — the keyboard still reaches it (D3).
+    expect(grow()).toHaveAccessibleName('Make Weather larger — already at the largest size');
+    expect(grow()).toHaveAttribute('aria-disabled', 'true');
+    expect(grow()).toBeEnabled();
+    await waitFor(
+      () => expect(lastSaved().blocks.find((block) => block.key === 'weather')!.size).toBe('large'),
+      RENDER_TIMEOUT
     );
-
-    expect(
-      await screen.findByRole('button', {
-        name: 'Change the size of Weather — currently Large',
-      })
-    ).toBeInTheDocument();
-    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
-    expect(
-      lastSaved().blocks.find((block) => block.key === 'weather')!.size
-    ).toBe('large');
+    await expectNothingChangesOnClick(grow(), pill, 'Size of Weather: Large');
   });
 
-  it('the cycle wraps Large back to Small so a widget is never stuck', async () => {
+  // REWRITTEN by SMA-437's size stepper: « the cycle wraps Large back to Small
+  // so a widget is never stuck ». No wrap any more: « − » brings it down.
+  it('« − » brings it back down one size at a time — Large, Medium, Small — so a widget is never stuck at its largest; at Small it is inert, named for the end, and its click changes nothing (the Expert’s Tips)', async () => {
     await enterEditMode('expert');
+    const pill = () => screen.getByRole('group', { name: /^Size of Tips: / });
+    const shrink = () => within(pill()).getByRole('button', { name: /^Make Tips smaller/ });
 
-    const handle = () =>
-      screen.getByRole('button', { name: /Change the size of Tips/ });
-    expect(handle()).toHaveAccessibleName(
-      'Change the size of Tips — currently Large'
+    expect(pill()).toHaveAccessibleName('Size of Tips: Large');
+    // Tips has no Full width, at the Expert formula either: Large is the top of its scale.
+    expect(within(pill()).getByRole('button', { name: 'Make Tips larger — already at the largest size' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
     );
-    fireEvent.click(handle());
+    fireEvent.click(shrink());
+    expect(pill()).toHaveAccessibleName('Size of Tips: Medium');
+    fireEvent.click(shrink());
+    expect(pill()).toHaveAccessibleName('Size of Tips: Small');
 
-    await waitFor(() =>
-      expect(handle()).toHaveAccessibleName(
-        'Change the size of Tips — currently Small'
-      )
+    expect(shrink()).toHaveAccessibleName('Make Tips smaller — already at the smallest size');
+    expect(shrink()).toHaveAttribute('aria-disabled', 'true');
+    expect(shrink()).toBeEnabled();
+    await waitFor(
+      () => expect(lastSaved().blocks.find((block) => block.key === 'tips')!.size).toBe('small'),
+      RENDER_TIMEOUT
     );
+    await expectNothingChangesOnClick(shrink(), pill, 'Size of Tips: Small');
   });
 
-  it('« − » removes the widget from the grid and persists it hidden', async () => {
+  // SMA-437 (D3) — the focus never leaves the segment pressed: the widget is
+  // not remounted when its size changes, and a segment that has just reached
+  // the end of the scale is `aria-disabled`, never `disabled` — a disabled
+  // button drops the focus. Driven by `userEvent`, which focuses what it
+  // presses as a browser does: a bare `click()` never moves the focus.
+  it('keeps the focus on the segment pressed, click after click — on « + » once it has just turned inert at Large, on « − » once it has at Small (D3)', async () => {
+    servePreferences('gardener', weatherAt('small'));
+    renderPage();
+    const user = userEvent.setup();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    await user.click(edit);
+    const pill = await screen.findByRole('group', { name: 'Size of Weather: Small' }, RENDER_TIMEOUT);
+    const shrink = within(pill).getByRole('button', { name: /^Make Weather smaller/ });
+    const grow = within(pill).getByRole('button', { name: /^Make Weather larger/ });
+
+    await user.click(grow);
+    expect(pill).toHaveAccessibleName('Size of Weather: Medium');
+    expect(document.activeElement).toBe(grow);
+    await user.click(grow);
+    expect(pill).toHaveAccessibleName('Size of Weather: Large');
+    expect(grow).toHaveAttribute('aria-disabled', 'true');
+    expect(document.activeElement).toBe(grow);
+
+    await user.click(shrink);
+    expect(pill).toHaveAccessibleName('Size of Weather: Medium');
+    expect(document.activeElement).toBe(shrink);
+    await user.click(shrink);
+    expect(pill).toHaveAccessibleName('Size of Weather: Small');
+    expect(shrink).toHaveAttribute('aria-disabled', 'true');
+    expect(document.activeElement).toBe(shrink);
+  });
+
+  it('the cross removes the widget from the grid and persists it hidden', async () => {
     await enterEditMode();
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide Tips' }));

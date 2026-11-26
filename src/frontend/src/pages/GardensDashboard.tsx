@@ -62,7 +62,7 @@ import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
 import { formatSurface } from '../utils/formatNumber';
 import {
   isDashboardLevel,
-  nextDashboardSize,
+  stepDashboardSize,
   type DashboardBlock,
   type DashboardBlockKey,
   type DashboardLevel,
@@ -1091,15 +1091,16 @@ export default function GardensDashboard() {
           onHide={(key) =>
             patchBlock(key, (block) => ({ ...block, hidden: true }))
           }
-          // Through the sizes the widget may take at THIS formula (SMA-437,
-          // A-N11), as the server serves them (SMA-448, S5): the Gardener's
-          // cycle never reaches the Full width.
-          onResize={(key) =>
-            patchBlock(key, (block) => ({
-              ...block,
-              size: nextDashboardSize(block.size, sizesFor(block.key, capabilities) ?? ([block.size] as const)),
-            }))
-          }
+          // One size up or down through the sizes the widget may take at THIS
+          // formula (SMA-437, A-N11), as the server serves them (SMA-448, S5):
+          // the Gardener's steps never reach the Full width, and a step past
+          // either end of the scale writes nothing (SMA-437, D3).
+          onResize={(key, step) => {
+            const current = blocks.find((block) => block.key === key);
+            const sizes = sizesFor(key, capabilities);
+            const size = current && sizes ? stepDashboardSize(current.size, sizes, step) : null;
+            if (size !== null) patchBlock(key, (block) => ({ ...block, size }));
+          }}
           renderBlock={renderBlock}
           renderBlockOptions={renderBlockOptions}
         />
