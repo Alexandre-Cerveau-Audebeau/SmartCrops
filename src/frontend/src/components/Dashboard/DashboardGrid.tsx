@@ -26,20 +26,28 @@ import { createDashboardSortingStrategy } from './dashboardSortingStrategy';
 import { sizesFor } from '../../constants/dashboardCapabilities';
 import { hasFreeHeight, spanFor } from '../../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../../theme/dashboardTokens';
-import type { DashboardBlock, DashboardBlockKey, FormulaCapabilities } from '../../types/Dashboard';
+import {
+  stepDashboardSize,
+  type DashboardBlock,
+  type DashboardBlockKey,
+  type DashboardSizeStep,
+  type FormulaCapabilities,
+} from '../../types/Dashboard';
 
 interface Props {
   /** Every block, hidden ones included - the grid renders the visible ones. */
   blocks: DashboardBlock[];
   /**
    * What the formula permits, as served (SMA-448, S5): the sizes a widget may
-   * take — and so whether it gets a corner handle (SMA-437, A-N11).
+   * take — and so whether it gets a size pill, and where each of its two
+   * segments leads (SMA-437, A-N11).
    */
   capabilities: FormulaCapabilities;
   editing: boolean;
   onReorder: (blocks: DashboardBlock[]) => void;
   onHide: (key: DashboardBlockKey) => void;
-  onResize: (key: DashboardBlockKey) => void;
+  /** A segment of a widget's size pill: one size smaller or larger (SMA-437). */
+  onResize: (key: DashboardBlockKey, step: DashboardSizeStep) => void;
   renderBlock: (block: DashboardBlock) => ReactNode;
   /** A widget's own settings for the Edit-mode gear; undefined when it has none. */
   renderBlockOptions?: (block: DashboardBlock) => ReactNode;
@@ -227,21 +235,35 @@ export default function DashboardGrid({
             gap: `${DASHBOARD_SPACING.gutter}px`,
           }}
         >
-          {visible.map((block) => (
-            <SortableWidget
-              key={block.key}
-              block={block}
-              label={label(block.key)}
-              editing={editing}
-              sizeLabel={t(`dashboard.sizes.${block.size}`)}
-              resizable={(sizesFor(block.key, capabilities)?.length ?? 0) > 1}
-              onHide={() => onHide(block.key)}
-              onResize={() => onResize(block.key)}
-              options={renderBlockOptions?.(block)}
-            >
-              {renderBlock(block)}
-            </SortableWidget>
-          ))}
+          {visible.map((block) => {
+            // The sizes the widget may take at this formula (SMA-437, A-N11):
+            // a pill for more than one, each segment naming the size its click
+            // leads to — or nothing, at that end of the scale.
+            const sizes = sizesFor(block.key, capabilities);
+            const stepTo = (step: DashboardSizeStep) => {
+              const next = sizes === null ? null : stepDashboardSize(block.size, sizes, step);
+              return next === null ? null : t(`dashboard.sizes.${next}`);
+            };
+            return (
+              <SortableWidget
+                key={block.key}
+                block={block}
+                label={label(block.key)}
+                editing={editing}
+                sizeLabel={t(`dashboard.sizes.${block.size}`)}
+                sizeSteps={
+                  sizes !== null && sizes.length > 1
+                    ? { smaller: stepTo('smaller'), larger: stepTo('larger') }
+                    : null
+                }
+                onHide={() => onHide(block.key)}
+                onResize={(step) => onResize(block.key, step)}
+                options={renderBlockOptions?.(block)}
+              >
+                {renderBlock(block)}
+              </SortableWidget>
+            );
+          })}
         </Box>
       </SortableContext>
 

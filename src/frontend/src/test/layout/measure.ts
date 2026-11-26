@@ -689,20 +689,21 @@ export interface ControlMeasure {
   inside: boolean;
   /** The card's text a painted part covers by {@link VISIBLE_OVERLAP_PX} or more in both dimensions. */
   covers: string[];
-  /** The corner resize grip: the artboard's two diagonal strokes. */
-  grip: boolean;
+  /**
+   * The size pill (SMA-437): the group of the « − » and « + » segments
+   * (`data-size-step`), which took the corner grip's place.
+   */
+  sizePill: boolean;
 }
-
-/** The path of the corner grip (`SortableWidget`'s `ResizeGrip`, `A6Modifier.dc.html`). */
-const GRIP_PATH = 'M15 1 1 15M15 8l-7 7';
 
 /**
  * SMA-437 lot 1, PR A, step A7 (pre-flight D19) — the Edit-mode controls of a
- * card: the « − » (or the lock), the drag pill, the gear and the corner grip,
- * which `SortableWidget` lays OVER the card, beside it in the DOM — so
- * `measureCard`, which reads the card's own subtree, never sees them. What is
- * read is what is PAINTED: a chip's box, or the glyph of a button that paints
- * no box (the grip's 16 px strokes inside its 26 px target). Each must lie
+ * card: the « − » (or the lock), the drag pill, the gear and, since SMA-437's
+ * size stepper, the size pill in the corner grip's place — which
+ * `SortableWidget` lays OVER the card, beside it in the DOM, so `measureCard`,
+ * which reads the card's own subtree, never sees them. What is read is what
+ * is PAINTED: a chip's box — the size pill's whole box, its two segments and
+ * their rule —, or the glyphs of a control that paints none. Each must lie
  * inside the card and cover none of the card's text — the top padding the
  * card reserves in Edit mode (34 px, 38 in Large) is where they belong.
  */
@@ -755,7 +756,7 @@ export function measureControls(card: HTMLElement): ControlMeasure[] {
         box.right <= cardBox.right + 0.5 &&
         box.bottom <= cardBox.bottom + 0.5,
       covers,
-      grip: control.querySelector(`path[d="${GRIP_PATH}"]`) !== null,
+      sizePill: control.getAttribute('role') === 'group' && control.querySelector('[data-size-step]') !== null,
     });
   }
   return controls;

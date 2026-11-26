@@ -207,15 +207,17 @@ afterEach(() => {
 });
 
 describe('Statistics in the Full width, on the page (SMA-437, lot V3-08, S2 — A-14)', () => {
-  it('the Expert’s corner handle on Statistics at Large steps to the Full width: one line per garden appears, and the layout is saved with « wide »', async () => {
+  // REWRITTEN by SMA-437's size stepper: the corner handle was clicked by its
+  // name; « + » steps Large to the Full width now.
+  it('the Expert’s « + » on Statistics at Large steps to the Full width: one line per garden appears, and the layout is saved with « wide »', async () => {
     stubWidth(1024);
     serve('stats', 'large');
     await renderPage('Terrasse');
     await enterEditMode();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Change the size of Statistics — currently Large' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make Statistics larger — to Full width' }));
 
-    expect(await screen.findByRole('button', { name: 'Change the size of Statistics — currently Full width' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Size of Statistics: Full width' })).toBeInTheDocument();
     expect(card('stats').querySelector('[data-stats-wide="one-line"]')).not.toBeNull();
     await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
     expect(lastSaved().blocks.find((block) => block.key === 'stats')!.size).toBe('wide');
@@ -268,15 +270,17 @@ describe('Statistics in the Full width, on the page (SMA-437, lot V3-08, S2 — 
 describe('Counts in the Full width, on the page (SMA-437, lot V3-08, S3 — A-14)', () => {
   const rows = () => card('counters').querySelectorAll('[data-variety-row]').length;
 
-  it('the Expert’s corner handle on Counts at Large steps to the Full width: four columns at 1 280 px, and the layout is saved with « wide »', async () => {
+  // REWRITTEN by SMA-437's size stepper: the corner handle was clicked by its
+  // name; « + » steps Large to the Full width now.
+  it('the Expert’s « + » on Counts at Large steps to the Full width: four columns at 1 280 px, and the layout is saved with « wide »', async () => {
     stubWidth(1280);
     serve('counters', 'large', { varieties: fortyFour });
     await renderPage('Terrasse');
     await enterEditMode();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Change the size of Counts by variety — currently Large' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make Counts by variety larger — to Full width' }));
 
-    expect(await screen.findByRole('button', { name: 'Change the size of Counts by variety — currently Full width' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Size of Counts by variety: Full width' })).toBeInTheDocument();
     expect(card('counters').querySelector('[data-counters-wide="4"]')).not.toBeNull();
     await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
     expect(lastSaved().blocks.find((block) => block.key === 'counters')!.size).toBe('wide');
@@ -325,15 +329,17 @@ describe('Counts in the Full width, on the page (SMA-437, lot V3-08, S3 — A-14
 describe('This month in the Full width, on the page (SMA-437, lot V3-08, S4 — A-14)', () => {
   const rows = () => card('month').querySelectorAll('[data-month-plant]').length;
 
-  it('the Expert’s corner handle on This month at Large steps to the Full width: the widened grid, and the layout is saved with « wide »', async () => {
+  // REWRITTEN by SMA-437's size stepper: the corner handle was clicked by its
+  // name; « + » steps Large to the Full width now.
+  it('the Expert’s « + » on This month at Large steps to the Full width: the widened grid, and the layout is saved with « wide »', async () => {
     stubWidth(1280);
     serve('month', 'large', { varieties: sixteenPruned });
     await renderPage('Terrasse');
     await enterEditMode();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Change the size of This month — currently Large' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make This month larger — to Full width' }));
 
-    expect(await screen.findByRole('button', { name: 'Change the size of This month — currently Full width' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Size of This month: Full width' })).toBeInTheDocument();
     expect(card('month').querySelector('[data-month-wide]')).not.toBeNull();
     expect(card('month').querySelectorAll('[data-month-axis-long]')).toHaveLength(12);
     await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());

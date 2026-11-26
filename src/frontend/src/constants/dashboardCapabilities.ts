@@ -18,9 +18,9 @@ import type {
  */
 
 /**
- * The sizes `key` may take at the formula, in the order the corner handle
- * steps through them; null for a widget the formula does not have — which the
- * page never renders (`permitsBlock`, and `dashboardApi.normalize`).
+ * The sizes `key` may take at the formula, in the order the size pill's « − »
+ * and « + » step through them; null for a widget the formula does not have —
+ * which the page never renders (`permitsBlock`, and `dashboardApi.normalize`).
  */
 export function sizesFor(
   key: DashboardBlockKey,

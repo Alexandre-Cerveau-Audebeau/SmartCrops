@@ -126,7 +126,7 @@ export interface FormulaCapabilities {
   maxGardenSize: { width: number; height: number };
   /** The widgets it has, in its preset's order. */
   widgets: DashboardBlockKey[];
-  /** For each of its widgets, the sizes that widget may take, in the order the corner handle steps through them. */
+  /** For each of its widgets, the sizes that widget may take, in the order the size pill's « − » and « + » step through them. */
   sizes: Partial<Record<DashboardBlockKey, DashboardSizeList>>;
   /** Its default layout — what « Réinitialiser » returns to, and « · ajustée » compares against. */
   preset: DashboardBlock[];
@@ -262,20 +262,6 @@ export function isWeatherMode(value: string): value is WeatherMode {
 
 export function isGardenSort(value: string): value is GardenSort {
   return (GARDEN_SORTS as readonly string[]).includes(value);
-}
-
-/**
- * The Edit-mode corner handle steps through `sizes` — the sizes the widget may
- * take at its formula (`sizesFor`, SMA-437 A-N11), in their order: Small ->
- * Medium -> Large -> Small, and -> Full width before Small the day an Expert
- * widget has it. It WRAPS on purpose: without the wrap a widget grown to its
- * largest size could never be brought back down, since the handle is the only
- * resize gesture. A size the list does not hold steps to the first one; a
- * one-size list has no handle at all (`SortableWidget`).
- */
-export function nextDashboardSize(size: DashboardSize, sizes: DashboardSizeList): DashboardSize {
-  const index = sizes.indexOf(size);
-  return sizes[(index + 1) % sizes.length] ?? sizes[0];
 }
 
 /** The two ways a widget's size steps in the Edit mode (SMA-437): one size down, « − », or one size up, « + ». */

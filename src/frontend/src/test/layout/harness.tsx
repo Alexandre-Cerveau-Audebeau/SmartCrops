@@ -340,7 +340,7 @@ function sceneTree(scene: LayoutScene | ProbeScene, mode: 'light' | 'dark') {
             blocks={[{ key: scene.key, size: scene.size, hidden: false }]}
             // The formula with every widget and every size (SMA-437): the
             // scenes measure the widgets, and the formula only decides the
-            // grip — its capabilities as the server serves them (SMA-448, S5).
+            // size pill — its capabilities as the server serves them (SMA-448, S5).
             capabilities={capabilitiesFor('expert')}
             editing={false}
             onReorder={noop}

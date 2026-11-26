@@ -9,6 +9,7 @@ import IconButton from '@mui/material/IconButton';
 import Popover from '@mui/material/Popover';
 import Typography from '@mui/material/Typography';
 import { keyframes } from '@mui/material/styles';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
@@ -16,7 +17,7 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { OptionsPanelEscapeContext } from './optionsPanelEscape';
 import { hasFreeHeight, pinnedHeight, spanFor } from '../../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../../theme/dashboardTokens';
-import { NON_HIDABLE_BLOCK, type DashboardBlock } from '../../types/Dashboard';
+import { NON_HIDABLE_BLOCK, type DashboardBlock, type DashboardSizeStep } from '../../types/Dashboard';
 
 /**
  * The Edit-mode wobble (_spec.md 8): a half-degree rock, the iOS idiom for
@@ -27,43 +28,6 @@ const wobble = keyframes`
   50% { transform: rotate(0.5deg); }
   100% { transform: rotate(-0.5deg); }
 `;
-
-/**
- * The corner resize grip (round 4, A9) — `A6Modifier.dc.html`, verbatim:
- *
- *   .grip { position: absolute; right: 8px; bottom: 8px; width: 16px;
- *           height: 16px; z-index: 3; color: var(--prim); }
- *   <svg class="grip" viewBox="0 0 16 16">
- *     <path d="M15 1 1 15M15 8l-7 7" stroke="currentColor" stroke-width="2"
- *           stroke-linecap="round" fill="none"/>
- *   </svg>
- *
- * Two diagonal strokes and nothing else. It was `OpenInFullOutlined`, a
- * two-headed arrow — a control that says « drag me in both directions » on a
- * button that steps through three fixed sizes on a click, and the one glyph in
- * Edit mode loud enough to be seen before the widget it sits on.
- *
- * A `<path>` rather than an icon from the set: no icon of `@mui/icons-material`
- * is these two strokes, and the artboard's own drawing is four attributes long.
- */
-function ResizeGrip() {
-  return (
-    <Box
-      component="svg"
-      viewBox="0 0 16 16"
-      aria-hidden
-      sx={{ width: 16, height: 16, display: 'block' }}
-    >
-      <path
-        d="M15 1 1 15M15 8l-7 7"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        fill="none"
-      />
-    </Box>
-  );
-}
 
 /**
  * The chip every Edit-mode control of the card's top edge stands on (round 5,
@@ -96,21 +60,100 @@ const leftChipSx = {
   zIndex: 3,
 } as const;
 
+/**
+ * The size pill (SMA-437 — Alexandre, 05/10, validated on 26/11): « − » and
+ * « + », ONE pill of two segments standing in the card's top band, LEFT of the
+ * gear — 6 px down, 42 px in from the right edge (the gear's 10 px, its 26 px
+ * and a 6 px gap), 26 px high, on the chips' own surface and border, with the
+ * drag pill's 14 px radius. It took the place of the corner grip, whose two
+ * diagonal strokes said « drag me » on a button that changed the size on a
+ * click: the top band is the room `DashboardBlock` already reserves for the
+ * Edit-mode controls (34 px, 38 in Large), where two buttons painted in the
+ * bottom corner would have covered the cards' text.
+ *
+ * `border-box` because a `Box` is no `ButtonBase`: the 26 px are the pill's
+ * whole height, its border included, as they are every chip's.
+ */
+const sizePillSx = {
+  ...editChipSx,
+  position: 'absolute',
+  top: 6,
+  right: 42,
+  zIndex: 3,
+  width: 'auto',
+  boxSizing: 'border-box',
+  alignItems: 'stretch',
+  borderRadius: '14px',
+} as const;
+
+interface SizeSegmentProps {
+  step: DashboardSizeStep;
+  /** The localized size a click leads to, or null at that end of the scale. */
+  to: string | null;
+  /** Localized widget name. */
+  widget: string;
+  onStep: (step: DashboardSizeStep) => void;
+}
+
+/**
+ * One segment of the size pill, 26 px wide — the target of every Edit-mode
+ * control, above the 24 px floor of WCAG 2.2 § 2.5.8 —, its outer corners
+ * rounded with the pill's. At its end of the scale it is `aria-disabled`,
+ * never `disabled` (SMA-437, D3): a disabled button drops the focus, and the
+ * focus has to stay on the segment a click has just brought to the end. It
+ * keeps its place in the tab order, its name says why it does nothing, and
+ * its click does nothing — the idiom of the reorderable list's ▲ ▼.
+ */
+function SizeSegment({ step, to, widget, onStep }: SizeSegmentProps) {
+  const { t } = useTranslation();
+  const smaller = step === 'smaller';
+  const Glyph = smaller ? RemoveRoundedIcon : AddRoundedIcon;
+  return (
+    <IconButton
+      size="small"
+      data-size-step={step}
+      aria-label={
+        to === null
+          ? t(smaller ? 'dashboard.editMode.shrinkEnd' : 'dashboard.editMode.growEnd', { widget })
+          : t(smaller ? 'dashboard.editMode.shrink' : 'dashboard.editMode.grow', { widget, size: to })
+      }
+      aria-disabled={to === null || undefined}
+      onClick={() => {
+        if (to !== null) onStep(step);
+      }}
+      sx={{
+        width: 26,
+        height: '100%',
+        p: 0,
+        // The pill's 14 px less its 1 px border, on the outer side alone.
+        borderRadius: smaller ? '13px 0 0 13px' : '0 13px 13px 0',
+        color: 'text.primary',
+        '&[aria-disabled="true"]': { color: 'text.disabled', cursor: 'default' },
+      }}
+    >
+      <Glyph sx={{ fontSize: 16 }} />
+    </IconButton>
+  );
+}
+
 interface Props {
   block: DashboardBlock;
   /** Localized widget name, for every control label. */
   label: string;
   editing: boolean;
-  /** Localized current size, so the resize label says where it stands. */
+  /** Localized current size, so the size pill's name says where the widget stands. */
   sizeLabel: string;
   /**
-   * More than one size at the widget's formula (`sizesFor`, SMA-437 A-N11).
-   * False draws no corner handle — « une seule taille, pas de poignée » —
-   * rather than a button that would change nothing.
+   * The size pill's two segments (SMA-437): for each, the localized size its
+   * click leads to — or null at that end of the scale, where the segment is
+   * inert. Null as a whole for a widget that has ONE size at its formula
+   * (`sizesFor`, A-N11): no pill — « une seule taille, pas de poignée » —
+   * rather than two segments that would change nothing.
    */
-  resizable: boolean;
+  sizeSteps: Record<DashboardSizeStep, string | null> | null;
   onHide: () => void;
-  onResize: () => void;
+  /** One size smaller or larger — never asked by a segment at its end of the scale. */
+  onResize: (step: DashboardSizeStep) => void;
   /**
    * The widget's own settings, rendered inside the gear menu (SMA-336 PR 2/5).
    *
@@ -126,8 +169,8 @@ interface Props {
  * SMA-336 - one cell of the dashboard grid: its footprint, and in Edit mode the
  * four controls the frozen design puts INSIDE the card (_spec.md 8, point 5) -
  * hide (or the lock, on Gardens), the drag handle, the options gear and the
- * corner resize handle, which a widget with a single size does not get
- * (SMA-437, A-N11).
+ * size pill, « − » and « + », which a widget with a single size does not get
+ * (SMA-437, A-N11) — the pill took the corner resize handle's place.
  *
  * The controls are an overlay on the grid cell rather than props threaded
  * through every widget: the cell is the one element that knows the block, and
@@ -145,7 +188,7 @@ export default function SortableWidget({
   label,
   editing,
   sizeLabel,
-  resizable,
+  sizeSteps,
   onHide,
   onResize,
   options,
@@ -349,6 +392,27 @@ export default function SortableWidget({
               <DragIndicatorIcon sx={{ fontSize: 17 }} />
             </IconButton>
 
+            {/* The size pill (SMA-437): « − », a 1 px rule, « + » — ONE group,
+                one child of this wrapper like the three chips, named with the
+                size the widget stands at; each segment named with the size
+                its click leads to, or with the end of the scale. Before the
+                gear in the DOM, as it stands before it on screen, so the tab
+                order reads the band from left to right. The 6 px gap and the
+                pill's own border keep the « + » segment's centre more than
+                24 px from the gear's. Only for a widget with more than one
+                size at its formula (A-N11). */}
+            {sizeSteps && (
+              <Box
+                role="group"
+                aria-label={t('dashboard.editMode.size', { widget: label, size: sizeLabel })}
+                sx={sizePillSx}
+              >
+                <SizeSegment step="smaller" to={sizeSteps.smaller} widget={label} onStep={onResize} />
+                <Box sx={{ width: '1px', backgroundColor: 'borderSubtle' }} />
+                <SizeSegment step="larger" to={sizeSteps.larger} widget={label} onStep={onResize} />
+              </Box>
+            )}
+
             <IconButton
               size="small"
               onClick={(event) => setOptionsAnchor(event.currentTarget)}
@@ -363,31 +427,6 @@ export default function SortableWidget({
             >
               <SettingsOutlinedIcon sx={{ fontSize: 15 }} />
             </IconButton>
-
-            {/* 3 px of offset plus the small IconButton's own 5 px of padding
-                put the 16 px grip exactly where the artboard has it — 8 px in
-                from both edges — while the button around it stays a full
-                keyboard target. Only for a widget with more than one size at
-                its formula (SMA-437, A-N11). */}
-            {resizable && (
-              <IconButton
-                size="small"
-                onClick={onResize}
-                aria-label={t('dashboard.editMode.resize', {
-                  widget: label,
-                  size: sizeLabel,
-                })}
-                sx={{
-                  position: 'absolute',
-                  bottom: 3,
-                  right: 3,
-                  zIndex: 3,
-                  color: 'primary.main',
-                }}
-              >
-                <ResizeGrip />
-              </IconButton>
-            )}
 
             {/* Generic options shell (_spec.md 8, A8). PR 1/5 shipped the frame
                 and nothing in it; PR 2/5 drops the Counters entries in. A widget
