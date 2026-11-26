@@ -695,7 +695,6 @@
           "occupancy": "Occupancy",
           "exposure": "Exposure",
           "weather": "Weather",
-          "harvest": "Harvest",
           "modified": "Modified",
           "actions": "Actions"
         },

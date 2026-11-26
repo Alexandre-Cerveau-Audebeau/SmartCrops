@@ -973,7 +973,6 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
           // SMA-482 (D1) — the MÉTÉO column as the page draws it: the one rule,
           // from the scene's size and options, never written in.
           showWeatherColumn={drawsWeatherColumn({ size: scene.size, options })}
-          showHarvestColumn={false}
           weather={gardensWeather(weather, list)}
           onLocate={noop}
           onCreateClick={noop}

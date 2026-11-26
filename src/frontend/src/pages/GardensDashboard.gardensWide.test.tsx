@@ -478,11 +478,43 @@ describe('the Expert preset puts the Gardens widget in the Full width (PR #300, 
     expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
   });
 
+  // REWRITTEN by SMA-482 (D3): the headers ended with HARVEST — the Harvest
+  // widget is on the Expert's page —; that column is withdrawn until harvest
+  // data exists (SMA-335), and MODIFIED ends them.
   it('an Expert’s STORED layout with the Gardens widget in Large keeps it: the Large table is drawn, not the Full width', async () => {
     serve('expert', 'large');
     await renderPage();
 
     expect(widget().querySelector('[data-gardens-wide]')).toBeNull();
-    expect(headers()).toEqual(['Garden', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Harvest', 'Actions']);
+    expect(headers()).toEqual(['Garden', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Modified', 'Actions']);
+  });
+});
+
+// SMA-482 (D3 — Alexandre, 26/11) — THE HARVEST COLUMN IS WITHDRAWN until
+// harvest data exists (SMA-335): it carried « Soon » on every row. In Large the
+// last column is MODIFIED, the Harvest widget on the page or not, and no size
+// of the table draws a HARVEST column.
+describe('the Gardens table has no HARVEST column until harvest data exists (SMA-482, D3)', () => {
+  it.each([
+    ['the Expert', 'on the page', 'expert'],
+    ['the Gardener', 'off the page', 'gardener'],
+  ] as const)('%s, Gardens in Large, the Harvest widget %s: the last column is MODIFIED', async (_formula, harvest, level) => {
+    serve(level, 'large');
+    await renderPage();
+
+    expect(document.querySelector('[data-widget="harvest"]') !== null).toBe(harvest === 'on the page');
+    expect(headers().slice(-2)).toEqual(['Modified', 'Actions']);
+    expect(headers()).not.toContain('Harvest');
+    // The column's one content, the « Soon » marker, went with it.
+    expect(within(widget()).queryByText('Soon')).toBeNull();
+  });
+
+  it.each(['small', 'medium', 'large', 'wide'] as const)('the Expert, Gardens in %s, the Harvest widget on the page: no HARVEST column', async (size) => {
+    serve('expert', size);
+    await renderPage();
+
+    expect(document.querySelector('[data-widget="harvest"]')).not.toBeNull();
+    expect([...widget().querySelectorAll('th')].map((th) => th.textContent)).not.toContain('Harvest');
+    expect(within(widget()).queryByText('Soon')).toBeNull();
   });
 });

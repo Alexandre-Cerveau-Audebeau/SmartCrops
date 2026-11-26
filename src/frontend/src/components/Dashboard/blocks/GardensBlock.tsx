@@ -113,9 +113,10 @@ const TABLE_THUMB_H = 30;
  * How wide the DESCRIPTION line of the identity cell may ever ask to be
  * (round 5, V18).
  *
- * The two numbers are the identity column of the design contract § 2, measured
- * in the artboards: 130 px on the Gardener table (the MODIFIÉ layout) and 106 on
- * the Expert one (RÉCOLTE, whose own column is wider). A `white-space: nowrap`
+ * The identity column of the design contract § 2, measured in the artboards:
+ * 130 px on the MODIFIÉ layout — the one layout of the Large table since its
+ * RÉCOLTE column was withdrawn (SMA-482, D3), and the 106 px of the RÉCOLTE
+ * layout with it. A `white-space: nowrap`
  * line contributes its WHOLE text to a table column's preferred width, and the
  * table is inside a horizontal scroller, so one garden with a long description
  * would otherwise widen the identity column for every row and push the table —
@@ -126,7 +127,7 @@ const TABLE_THUMB_H = 30;
  * description visible à l'écran » — while the line still gets the whole column
  * instead of the 40-odd px it had left over beside the date.
  */
-const DESCRIPTION_MAX_PX = { gardener: 130, expert: 106 } as const;
+const DESCRIPTION_MAX_PX = 130;
 
 /**
  * The fade, and NOT a rule (round 4, part B).
@@ -318,13 +319,6 @@ interface Props {
    * another widget of the page (SMA-482, D1). Shown by default.
    */
   showWeatherColumn?: boolean;
-  /**
-   * Whether the HARVEST column belongs on the Large table. The frozen design
-   * ties it to the Harvest widget: a column for data the user has taken off
-   * their dashboard is a column of nothing. The page passes what the layout
-   * says.
-   */
-  showHarvestColumn?: boolean;
   /** The weather each garden reads, for the MÉTÉO column (PR 3b/5). */
   weather?: GardensWeather;
   /** Opens the location dialog on this garden — the « Ajouter » of an unlocated cell. */
@@ -375,7 +369,8 @@ interface Props {
  * of their own (`RenameGardenDialog`, `GardenActions`): the Novice page draws
  * the same ones, by construction.
  *
- * HARVEST renders a marker with NO gesture (decision D10) until PR 5/5. WEATHER
+ * The HARVEST column is withdrawn until harvest data exists (SMA-482, D3: it
+ * carried « Soon » on every row; it comes back as an option with SMA-335). WEATHER
  * is fed since PR 3b/5 (amendment A6 lifted): the `.pill.wx` of `Main.dc.html`
  * — a 14 px glyph and the temperature — over the place name, or the dashed
  * marker and the « Ajouter » link of `A4Manquantes.dc.html` (`_spec.md` § 10.20,
@@ -390,7 +385,6 @@ export default function GardensBlock({
   loadError,
   refreshing = false,
   showWeatherColumn = false,
-  showHarvestColumn = false,
   weather,
   onLocate,
   onCreateClick,
@@ -1129,9 +1123,9 @@ export default function GardensBlock({
    * the frozen design's own arbitration, measured: seven labelled columns need
    * 590 px and a Large card offers 516.
    *
-   * The thumbnail lives in the identity cell and steps aside when HARVEST is
-   * shown, exactly as the design has it: that column is the wider one, and the
-   * cell cannot carry both.
+   * The thumbnail lives in the identity cell at every formula (V11), and the
+   * last column is MODIFIÉ: the HARVEST column the design paid for with the
+   * thumbnail is withdrawn (SMA-482, D3).
    */
   /**
    * The MÉTÉO cell of one row (PR 3b/5, A6 lifted) — `Main.dc.html`: `<span
@@ -1447,9 +1441,9 @@ export default function GardensBlock({
       ...(showWeatherColumn
         ? [t('dashboard.blocks.gardens.columns.weather')]
         : []),
-      ...(showHarvestColumn
-        ? [t('dashboard.blocks.gardens.columns.harvest')]
-        : [t('dashboard.blocks.gardens.columns.modified')]),
+      // MODIFIÉ ends the Large at every formula: the HARVEST column that took
+      // its place beside the Harvest widget is withdrawn (SMA-482, D3).
+      t('dashboard.blocks.gardens.columns.modified'),
       // NO trailing empty entry (round 1, E9 / G2). The actions column has its
       // own `th` below, with the screen-reader label this list cannot carry, so
       // a placeholder here emitted a SEVENTH header for six body cells: every
@@ -1515,7 +1509,6 @@ export default function GardensBlock({
                 garden={garden}
                 view={views.get(garden.id)}
                 showWeatherColumn={showWeatherColumn}
-                showHarvestColumn={showHarvestColumn}
                 weather={weatherCell(garden)}
                 modified={modifiedText(garden)}
                 typeLabel={typeLabel(garden)}
@@ -1872,7 +1865,6 @@ interface RowProps {
   /** Derived once for the whole page — see `useGardenViews`. */
   view: GardenView | undefined;
   showWeatherColumn: boolean;
-  showHarvestColumn: boolean;
   /** The MÉTÉO cell, resolved by the block (`weatherCell`); the row keeps no weather logic. */
   weather: React.ReactNode;
   /**
@@ -1900,7 +1892,6 @@ function GardenRow({
   garden,
   view,
   showWeatherColumn,
-  showHarvestColumn,
   weather,
   modified,
   typeLabel,
@@ -1919,9 +1910,10 @@ function GardenRow({
   const subSx = TABLE_SUB_SX;
 
   /**
-   * The first sub-line of the identity cell — the artboard's own text: « 10 × 8 »
-   * in Gardener, « modifié il y a 2 h » in Expert, « plan non dessiné » when
-   * there is none (round 4, A5).
+   * The first sub-line of the identity cell — the artboard's own text: « 10 × 8 »,
+   * « plan non dessiné » when there is none (round 4, A5). The Expert's
+   * « modifié il y a 2 h » went with the RÉCOLTE column (SMA-482, D3): the date
+   * has its MODIFIÉ column at every formula.
    *
    * Round 5 (V18) takes the DESCRIPTION back off it. Round 4 had concatenated
    * the two behind a middle dot to hold the cell to three children, and on a
@@ -1930,20 +1922,12 @@ function GardenRow({
    * design contract: « deux sous-lignes, PLUS une troisième ligne réservée à la
    * description lorsqu'elle existe ».
    */
-  const primarySub = showHarvestColumn ? (
-    modified !== null ? (
-      t('dashboard.blocks.gardens.lastModified', { when: modified })
-    ) : (
-      <MissingDataMark label={t('dashboard.blocks.gardens.noDate')} />
-    )
-  ) : view?.hasPlan ? (
-    t('dashboard.blocks.gardens.dimensions', {
-      cols: garden.width,
-      rows: garden.height,
-    })
-  ) : (
-    t('dashboard.blocks.gardens.noPlan')
-  );
+  const primarySub = view?.hasPlan
+    ? t('dashboard.blocks.gardens.dimensions', {
+        cols: garden.width,
+        rows: garden.height,
+      })
+    : t('dashboard.blocks.gardens.noPlan');
 
   return (
     <Box component="tr" ref={rowRef}>
@@ -2031,9 +2015,7 @@ function GardenRow({
                 data-garden-description
                 sx={{
                   ...subSx,
-                  maxWidth: showHarvestColumn
-                    ? DESCRIPTION_MAX_PX.expert
-                    : DESCRIPTION_MAX_PX.gardener,
+                  maxWidth: DESCRIPTION_MAX_PX,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   // The tooltip is the way to the rest, and it needs a
@@ -2048,8 +2030,9 @@ function GardenRow({
           )}
           {/* V11 — the plan thumbnail is back, at every level.
 
-              It was never missing on the Gardener dashboard: it was tied to
-              `!showHarvestColumn`, so it vanished the moment the Harvest widget
+              It was never missing on the Gardener dashboard: it was tied to the
+              HARVEST column being off — a column withdrawn since SMA-482, D3 —,
+              so it vanished the moment the Harvest widget
               joined the page — which is the Expert preset, and the only place
               the defect was seen. That condition transcribed `_spec.md` § 4 and
               § 10.18 faithfully, and both are a WIDTH arbitration: seven
@@ -2147,19 +2130,14 @@ function GardenRow({
         </Box>
       )}
 
-      {showHarvestColumn ? (
-        <Box component="td" sx={cellSx}>
-          <MissingDataMark label={t('dashboard.blocks.gardens.columnSoon')} />
-        </Box>
-      ) : (
-        <Box component="td" sx={cellSx}>
-          {modified !== null ? (
-            <Typography sx={subSx}>{modified}</Typography>
-          ) : (
-            <MissingDataMark label={t('dashboard.blocks.gardens.noDate')} />
-          )}
-        </Box>
-      )}
+      {/* MODIFIÉ, the last column at every formula (SMA-482, D3). */}
+      <Box component="td" sx={cellSx}>
+        {modified !== null ? (
+          <Typography sx={subSx}>{modified}</Typography>
+        ) : (
+          <MissingDataMark label={t('dashboard.blocks.gardens.noDate')} />
+        )}
+      </Box>
 
       {/* 2 px in, nothing out: the column ends at the card's own padding, and
           the zone starts where the fade to its left finishes. */}

@@ -34,7 +34,6 @@ const lyon = (list: readonly DashboardGardenData[]): GardensWeather => ({
 
 interface RenderOptions {
   gardens?: readonly DashboardGardenData[];
-  showHarvestColumn?: boolean;
   options?: Record<string, unknown> | null;
   /** The Full width unless said — the Large for what the two sizes share. */
   size?: 'large' | 'wide';
@@ -44,9 +43,10 @@ interface RenderOptions {
  * The widget as the page hands it. REWRITTEN by SMA-482 (D1): the MÉTÉO
  * column was a prop of its own, « the Weather widget on the page »; it is
  * read here as the page reads it — `drawsWeatherColumn`, the widget's own
- * size and options.
+ * size and options. The HARVEST column it could also switch on is withdrawn
+ * (SMA-482, D3), and its prop with it.
  */
-function renderWide({ gardens = sceneGardens, showHarvestColumn = false, options = null, size = 'wide' }: RenderOptions = {}) {
+function renderWide({ gardens = sceneGardens, options = null, size = 'wide' }: RenderOptions = {}) {
   localStorage.setItem('smartcrops-language', 'en');
   render(
     <ThemeProvider theme={createTheme()}>
@@ -59,7 +59,6 @@ function renderWide({ gardens = sceneGardens, showHarvestColumn = false, options
               loading={false}
               loadError={false}
               showWeatherColumn={drawsWeatherColumn({ size, options })}
-              showHarvestColumn={showHarvestColumn}
               weather={lyon(gardens)}
               onLocate={() => {}}
               onCreateClick={() => {}}
@@ -115,8 +114,11 @@ afterEach(() => {
 });
 
 describe('GardensBlock in the Full width — the seven columns (SMA-448, lot F5-b; C.4)', () => {
-  it('draws JARDIN, TYPE, PLANTES, OCCUPATION, EXPOSITION, MÉTÉO and the actions — no MODIFIÉ column, no RÉCOLTE column even with the Harvest widget on the page', () => {
-    const card = renderWide({ showHarvestColumn: true });
+  // REWRITTEN by SMA-482 (D3): « … no RÉCOLTE column even with the Harvest
+  // widget on the page » — the prop that drew it in Large is gone, and the
+  // column with it, at every size.
+  it('draws JARDIN, TYPE, PLANTES, OCCUPATION, EXPOSITION, MÉTÉO and the actions — no MODIFIÉ column, no RÉCOLTE column', () => {
+    const card = renderWide();
 
     expect(headers(card)).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
     expect(rowNames(card)).toEqual(['Terrasse', 'Balcon sud', 'Potager du fond']);

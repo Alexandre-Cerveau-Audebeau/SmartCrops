@@ -622,9 +622,9 @@ export default function GardensDashboard() {
 
   /**
    * Whether a widget is ON the page — what the weather warning reads of its
-   * bearers. The Gardens table's HARVEST column still follows the Harvest
-   * widget; its MÉTÉO column never follows the Weather widget any more: it is
-   * the Gardens widget's own setting (SMA-482, D1 — `drawsWeatherColumn`).
+   * bearers, and nothing else: no widget's content reads another widget
+   * (SMA-482). The Gardens table's MÉTÉO column is its own setting (D1 —
+   * `drawsWeatherColumn`), and its HARVEST column is withdrawn (D3).
    */
   // The blocks the page DRAWS: none on the cards page, whatever the layout
   // carries (SMA-448, lot F2) — a widget that is not drawn shows no weather.
@@ -700,7 +700,6 @@ export default function GardensDashboard() {
             // SMA-482 (D1) — the widget's OWN size and option, through the one
             // rule the weather warning reads too; never the Weather widget.
             showWeatherColumn={drawsWeatherColumn(block)}
-            showHarvestColumn={isBlockVisible('harvest')}
             weather={gardensWeather}
             onLocate={openLocate}
             onCreateClick={createFromWidget}
