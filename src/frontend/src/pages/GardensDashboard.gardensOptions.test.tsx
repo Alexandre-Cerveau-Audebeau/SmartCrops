@@ -516,3 +516,40 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     expect(saveGardenOrder).not.toHaveBeenCalled();
   });
 });
+
+// SMA-482 (D1, D5) — the MÉTÉO column is a SETTING of the Gardens widget, its
+// own: stored off, the table draws none, the Weather widget on the page or
+// not; a setting never turns the chip « · adjusted » (`isAdjusted` reads no
+// option — V19); and « Reset » of the layout keeps it, as it keeps the count
+// and the sort (A-17).
+describe('the MÉTÉO column, a setting of the widget’s own (SMA-482, D1, D5)', () => {
+  it('stored off: no MÉTÉO column — the Weather widget on the page all the same — and the chip never says « adjusted »', async () => {
+    renderPage('expert', { weather: false });
+    await screen.findAllByText('Terrasse');
+
+    expect(document.querySelector('[data-widget="weather"]')).not.toBeNull();
+    expect(widget().querySelector('table')).not.toBeNull();
+    expect(widget().querySelector('[data-weather-column]')).toBeNull();
+    expect([...widget().querySelectorAll('thead th')].map((th) => th.textContent)).not.toContain('Weather');
+    expect(screen.queryByText(/adjusted/)).toBeNull();
+  });
+
+  it('« Reset » of the layout keeps it: the reset’s write carries weather: false beside the sort, and the column stays off', async () => {
+    renderPage('expert', { weather: false, sort: 'name' });
+    await screen.findAllByText('Terrasse');
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).toBeEnabled());
+    fireEvent.click(edit);
+    await screen.findByRole('button', { name: 'Done' });
+    // An arrangement for the reset to undo: Tips hidden.
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Tips' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset the Expert layout' }));
+
+    await waitFor(() => expect(lastSaved().blocks.find((block) => block.key === 'tips')?.hidden).toBe(false));
+    expect(gardensOptionsOf(lastSaved().blocks)).toEqual({ weather: false, sort: 'name' });
+    expect(widget().querySelector('[data-weather-column]')).toBeNull();
+  });
+});

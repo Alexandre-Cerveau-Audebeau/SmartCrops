@@ -16,7 +16,7 @@ import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/w
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { gardens as sceneGardens, varieties as sceneVarieties } from '../test/layout/scenes';
 import { WEATHER_BEARING_BLOCKS } from '../components/Dashboard/weatherDisclaimer';
-import type { DashboardBlockKey, DashboardLevel } from '../types/Dashboard';
+import type { DashboardBlockKey, DashboardLevel, DashboardSize } from '../types/Dashboard';
 import type { DashboardWeatherData, WeatherStatus } from '../types/DashboardWeather';
 
 vi.mock('../services/gardenApi', () => ({
@@ -160,6 +160,13 @@ const SHOWN_BESIDE: readonly DashboardBlockKey[] = ['gardens', 'month', 'counter
  * `SHOWN_BESIDE` its formula has shown, and everything else hidden: Harvest as
  * the preset has it, and at the Expert level the Key figures band. Statistics
  * is shown only where the formula has it — the Expert's since SMA-448 (R1).
+ *
+ * REWRITTEN by SMA-482 (D4): the Gardens widget is shown with its MÉTÉO
+ * column turned OFF — its own option —, so the three widgets stay the page's
+ * only weather-bearers in the tests that read this layout, as their names
+ * say. The column used to follow the Weather widget and leave the page with
+ * it; the Gardens widget bears the warning by its own column now — its
+ * describe closes this file.
  */
 function serveLayoutShowing(
   visible: readonly DashboardBlockKey[],
@@ -177,6 +184,7 @@ function serveLayoutShowing(
       hidden: bearing.includes(block.key)
         ? !visible.includes(block.key)
         : !SHOWN_BESIDE.includes(block.key),
+      ...(block.key === 'gardens' ? { options: { weather: false } } : {}),
     })),
     updatedAt: null,
   });
@@ -492,7 +500,15 @@ describe.each(['light', 'dark'] as const)(
 // Expert page with the band on it and the three bearing widgets hidden: the
 // band alone decides.
 describe('GardensDashboard — the Key figures band bears the warning by what it shows (SMA-437, A-N8)', () => {
-  /** An Expert layout: Weather, To-do and Tips hidden; the band hidden or not, showing `figures` (its defaults when null). */
+  /**
+   * An Expert layout: Weather, To-do and Tips hidden; the band hidden or not, showing `figures` (its defaults when null).
+   *
+   * REWRITTEN by SMA-482 (D4): the Gardens widget, in the Full width at the
+   * Expert, has its MÉTÉO column turned OFF — its own option —, so « the band
+   * alone decides » here, as this describe says. The column used to follow
+   * the Weather widget, hidden with it; it bears the warning by its own
+   * column now (the describe that closes this file).
+   */
   function serveBand(figures: string[] | null, hidden = false) {
     const bearing: readonly string[] = WEATHER_BEARING_BLOCKS;
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
@@ -505,6 +521,7 @@ describe('GardensDashboard — the Key figures band bears the warning by what it
         ...block,
         hidden: block.key === 'keyfigures' ? hidden : bearing.includes(block.key),
         ...(block.key === 'keyfigures' && figures ? { options: { figures } } : {}),
+        ...(block.key === 'gardens' ? { options: { weather: false } } : {}),
       })),
       updatedAt: null,
     });
@@ -793,5 +810,92 @@ describe('GardensDashboard — the weather warning follows the weather by formul
     expect(weatherCard().querySelector('[data-weather-summary]')).toBeNull();
     expect(screen.queryByRole('note')).toBeNull();
     expect(disclaimers()).toHaveLength(0);
+  });
+});
+
+// SMA-482 (D4 — the provider's terms, V1: the warning is never absent while a
+// weather figure is on the screen) — the Gardens widget's MÉTÉO column is its
+// OWN setting, never the Weather widget's: a page with none of the three
+// bearers and no band shows the weather in that column as soon as the widget
+// draws it — in Large or in the Full width, its option untouched —, and then
+// bears the warning. Its option off, or at a size whose table has no such
+// column, it draws no weather figure and bears none.
+describe('GardensDashboard — the Gardens widget bears the warning while it draws its MÉTÉO column (SMA-482, D4)', () => {
+  /** A stored layout with none of the three bearers and no band: the Gardens widget at `size` with `options`, « Ce mois-ci », Counters — and Statistics at the Expert. */
+  function serveGardensAlone(level: DashboardLevel, size: DashboardSize, options: Record<string, unknown> | null = null) {
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level,
+      capabilities: capabilitiesFor(level),
+      isPreset: false,
+      formulaChosen: true,
+      blocks: presetFor(level).map((block) =>
+        block.key === 'gardens'
+          ? { ...block, size, hidden: false, ...(options ? { options } : {}) }
+          : { ...block, hidden: !SHOWN_BESIDE.includes(block.key) }
+      ),
+      updatedAt: null,
+    });
+  }
+  const gardensCard = () => document.querySelector('[data-widget="gardens"]') as HTMLElement;
+
+  it.each([
+    ['gardener', 'large'],
+    ['expert', 'large'],
+    ['expert', 'wide'],
+  ] as const)('%s, Gardens in %s, its option untouched: the MÉTÉO column shows the place’s weather — and the warning is under the grid', async (level, size) => {
+    serveGardensAlone(level, size);
+
+    await renderPage('fr');
+
+    const note = await screen.findByRole('note');
+    expect(disclaimers()).toHaveLength(1);
+    const rendered = renderedWidgets();
+    for (const key of [...WEATHER_BEARING_BLOCKS, 'keyfigures']) expect(rendered).not.toContain(key);
+    expect(gardensCard().querySelectorAll('[data-weather-column]')).toHaveLength(1);
+    expect(gardensCard().querySelector('[data-weather-cell]')).toHaveTextContent('24°');
+    expect(note.closest('[data-widget]')).toBeNull();
+    expect(note.textContent).toBe(fr.dashboard.weatherDisclaimer);
+  });
+
+  it.each([
+    ['gardener', 'large'],
+    ['expert', 'wide'],
+  ] as const)('%s, Gardens in %s, its option OFF: no MÉTÉO column, no weather figure anywhere — and no warning, the aggregate landed WITH data', async (level, size) => {
+    serveGardensAlone(level, size, { weather: false });
+    const land = holdWeather();
+
+    await renderPage('fr');
+    expect(await screen.findAllByText('Casa Lolo')).not.toHaveLength(0);
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(1));
+
+    await land(aggregateWith('fresh'));
+
+    expect(gardensCard().querySelector('table')).not.toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(disclaimers()).toHaveLength(0);
+    expect(weatherFigures()).toHaveLength(0);
+    expect(document.body.textContent).not.toMatch(/\d\s?°/);
+  });
+
+  it.each([
+    ['gardener', 'medium'],
+    ['gardener', 'small'],
+    ['expert', 'medium'],
+  ] as const)('%s, Gardens in %s — a size whose table has no MÉTÉO column —, its option untouched: no weather figure — and no warning', async (level, size) => {
+    serveGardensAlone(level, size);
+    const land = holdWeather();
+
+    await renderPage('fr');
+    expect(await screen.findAllByText('Casa Lolo')).not.toHaveLength(0);
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(1));
+
+    await land(aggregateWith('fresh'));
+
+    expect(gardensCard().querySelector('table')).toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(disclaimers()).toHaveLength(0);
+    expect(weatherFigures()).toHaveLength(0);
+    expect(document.body.textContent).not.toMatch(/\d\s?°/);
   });
 });

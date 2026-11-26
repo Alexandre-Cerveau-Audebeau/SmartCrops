@@ -312,13 +312,18 @@ interface Props {
    */
   refreshing?: boolean;
   /**
-   * Whether the WEATHER and HARVEST columns belong on the Large table.
-   *
-   * The frozen design ties them to their own widgets: a column for data the user
-   * has taken off their dashboard is a column of nothing. The page passes what
-   * the layout says.
+   * Whether the table draws its MÉTÉO column — the Large's and the Full
+   * width's, the only sizes that have one: `drawsWeatherColumn` of the widget,
+   * which the page reads from the widget's OWN size and options, never from
+   * another widget of the page (SMA-482, D1). Shown by default.
    */
   showWeatherColumn?: boolean;
+  /**
+   * Whether the HARVEST column belongs on the Large table. The frozen design
+   * ties it to the Harvest widget: a column for data the user has taken off
+   * their dashboard is a column of nothing. The page passes what the layout
+   * says.
+   */
   showHarvestColumn?: boolean;
   /** The weather each garden reads, for the MÉTÉO column (PR 3b/5). */
   weather?: GardensWeather;
@@ -1535,8 +1540,8 @@ export default function GardensBlock({
    * sub-line « 10 × 8 · 50 cm · 20 m² · modifié il y a 2 h », its description
    * on a truncated line, V33), TYPE (the chip with its glyph), PLANTES (the
    * pill and the varieties in full), OCCUPATION (the bar, « 68 % · 26 cases
-   * libres » under it), EXPOSITION, MÉTÉO when the Weather widget is on the
-   * page (V23), the frozen actions column — with NO MODIFIÉ column and NO
+   * libres » under it), EXPOSITION, MÉTÉO unless the widget's own option turns
+   * it off (SMA-482), the frozen actions column — with NO MODIFIÉ column and NO
    * RÉCOLTE column. The card grows with its rows (A-N10): nothing scrolls
    * vertically; under 1 152 px of card the table scrolls horizontally under
    * its frozen actions, the Large's idiom. The settings of lot F5-a hold: the
@@ -1648,7 +1653,7 @@ export default function GardensBlock({
    * V3-04 `rowsPhone`; contract v3 § 4.7 a « Au téléphone »): the thumbnail,
    * the name on its own line as the door to the garden, « 10 × 8 · 50 cm ·
    * 20 m² », the chips (the type with its glyph, « N plantes », « Ornemental »,
-   * the MÉTÉO cell when the Weather widget is on the page) that wrap, « 68 % ·
+   * the MÉTÉO cell unless the widget's own option turns it off) that wrap, « 68 % ·
    * 26 cases libres · Plein soleil », the description (V33), and the pencil,
    * the bin and the chevron at their place (V21). The unfolding's rule stands
    * between the rows where the cut fell.

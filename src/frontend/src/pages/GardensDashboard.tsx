@@ -27,6 +27,7 @@ import GardensOptionsPanel from '../components/Dashboard/blocks/GardensOptionsPa
 import GardensBlock, {
   type GardensWeather,
 } from '../components/Dashboard/blocks/GardensBlock';
+import { drawsWeatherColumn } from '../components/Dashboard/blocks/gardensOptions';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import KeyFiguresBlock from '../components/Dashboard/blocks/KeyFiguresBlock';
 import KeyFiguresOptionsPanel from '../components/Dashboard/blocks/KeyFiguresOptionsPanel';
@@ -620,9 +621,10 @@ export default function GardensDashboard() {
   ) => setBlocks(blocks.map((block) => (block.key === key ? patch(block) : block)));
 
   /**
-   * Whether a widget is ON the page. The Gardens table hides its WEATHER and
-   * HARVEST columns when theirs are not (frozen design): a column for data the
-   * user has taken off their dashboard is a column of nothing.
+   * Whether a widget is ON the page — what the weather warning reads of its
+   * bearers. The Gardens table's HARVEST column still follows the Harvest
+   * widget; its MÉTÉO column never follows the Weather widget any more: it is
+   * the Gardens widget's own setting (SMA-482, D1 — `drawsWeatherColumn`).
    */
   // The blocks the page DRAWS: none on the cards page, whatever the layout
   // carries (SMA-448, lot F2) — a widget that is not drawn shows no weather.
@@ -635,7 +637,9 @@ export default function GardensDashboard() {
   // under the grid, as long as at least one place carries data a surface
   // draws — « fresh » or « stale » — AND a widget that draws it is on the page
   // (review round 1, G1): the Weather widget, the To-do block or the Tips
-  // block; the MÉTÉO column follows the Weather widget's own visibility.
+  // block; and, since SMA-482 (D4), the Gardens widget while it draws its
+  // MÉTÉO column — read through `drawsWeatherColumn`, the rule the page draws
+  // the column by, so the warning and the column cannot disagree.
   // Nothing to warn about while the aggregate loads, when no place is
   // located, when every place is unavailable, or behind a load error: every
   // surface then shows the error, not figures. A passive refresh keeps the
@@ -658,6 +662,7 @@ export default function GardensDashboard() {
     isBlockVisible,
     keyFigures: band ? keyFiguresOptions(band.options ?? null).figures : [],
     cards: noviceCards.some(cardBearsWeather),
+    gardens: drawnBlocks.find((block) => block.key === 'gardens' && !block.hidden) ?? null,
   });
 
   const renderBlock = (block: DashboardBlock) => {
@@ -692,7 +697,9 @@ export default function GardensDashboard() {
             loading={gardensLoading}
             refreshing={gardensRefreshing}
             loadError={gardensError}
-            showWeatherColumn={isBlockVisible('weather')}
+            // SMA-482 (D1) — the widget's OWN size and option, through the one
+            // rule the weather warning reads too; never the Weather widget.
+            showWeatherColumn={drawsWeatherColumn(block)}
             showHarvestColumn={isBlockVisible('harvest')}
             weather={gardensWeather}
             onLocate={openLocate}

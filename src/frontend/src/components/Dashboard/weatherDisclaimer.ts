@@ -1,5 +1,6 @@
-import type { DashboardBlockKey } from '../../types/Dashboard';
+import type { DashboardBlock, DashboardBlockKey } from '../../types/Dashboard';
 import type { WeatherLocation } from '../../types/DashboardWeather';
+import { drawsWeatherColumn } from './blocks/gardensOptions';
 import type { KeyFigure } from './blocks/keyFiguresOptions';
 
 /**
@@ -16,11 +17,12 @@ import type { KeyFigure } from './blocks/keyFiguresOptions';
  */
 
 /**
- * The widgets that draw a figure of the weather aggregate — the ones the
- * warning follows. The Gardens table's MÉTÉO column is NOT listed on purpose:
- * it follows the Weather widget's own visibility (`showWeatherColumn`), so it
- * is covered by `weather`. « Ce mois-ci » reads the aggregate for the place's
- * local month only and prints no weather figure, so it is out.
+ * The widgets that draw a figure of the weather aggregate whenever they are on
+ * the page — the ones the warning follows by their presence. The Gardens
+ * widget is NOT listed: it draws one only in its MÉTÉO column, a setting of
+ * its own (SMA-482), and bears the warning by what it draws — `gardens`
+ * below. « Ce mois-ci » reads the aggregate for the place's local month only
+ * and prints no weather figure, so it is out.
  */
 export const WEATHER_BEARING_BLOCKS = [
   'weather',
@@ -59,9 +61,18 @@ export interface WeatherDisclaimerInput {
    * temperature at the garden's city, or a task read from a forecast
    * (`cardBearsWeather`). A bearer that is not a widget: the page says it,
    * from the same derivation it draws the cards with. False on a page of
-   * widgets, whose bearers are the two inputs above.
+   * widgets, whose bearers are the inputs above and below.
    */
   cards: boolean;
+  /**
+   * SMA-482 (D4) — the Gardens widget as the page of widgets draws it, its
+   * size and its options; null, or left out, when no Gardens widget is drawn
+   * (the cards page). It bears the warning while it draws its MÉTÉO column —
+   * `drawsWeatherColumn`, the very rule the page draws the column by —
+   * whatever its own state, as the rule treats To-do and Tips: the rows it
+   * shows are not read.
+   */
+  gardens?: Pick<DashboardBlock, 'size' | 'options'> | null;
 }
 
 /**
@@ -70,12 +81,12 @@ export interface WeatherDisclaimerInput {
  * data a surface draws — « fresh » or « stale », i.e. anything but
  * « unavailable » (a status added later is treated as data, so the warning
  * errs on the side of showing); and at least one of `WEATHER_BEARING_BLOCKS`
- * is visible — or the Key figures band shows one of
- * `WEATHER_BEARING_FIGURES` (SMA-437, A-N8), whatever its own state
- * (skeleton, invitation), as the rule already treats To-do and Tips — or a
- * card of the Novice page shows a weather figure (SMA-448, lot F2). A layout
- * with every weather-bearing surface off the page shows no weather figure, so
- * it shows no warning either (G1).
+ * is visible — or the Gardens widget draws its MÉTÉO column (SMA-482, D4) —
+ * or the Key figures band shows one of `WEATHER_BEARING_FIGURES` (SMA-437,
+ * A-N8), whatever its own state (skeleton, invitation), as the rule already
+ * treats To-do and Tips — or a card of the Novice page shows a weather figure
+ * (SMA-448, lot F2). A layout with every weather-bearing surface off the page
+ * shows no weather figure, so it shows no warning either (G1).
  */
 export function weatherDisclaimerVisible({
   loading,
@@ -84,12 +95,14 @@ export function weatherDisclaimerVisible({
   isBlockVisible,
   keyFigures,
   cards,
+  gardens = null,
 }: WeatherDisclaimerInput): boolean {
   if (loading || error) return false;
   if (!locations.some((place) => place.status !== 'unavailable')) return false;
   const bearing: readonly KeyFigure[] = WEATHER_BEARING_FIGURES;
   return (
     WEATHER_BEARING_BLOCKS.some((key) => isBlockVisible(key)) ||
+    (gardens !== null && drawsWeatherColumn(gardens)) ||
     keyFigures.some((figure) => bearing.includes(figure)) ||
     cards
   );

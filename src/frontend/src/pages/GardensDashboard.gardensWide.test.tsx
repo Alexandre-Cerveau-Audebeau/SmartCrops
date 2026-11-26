@@ -365,12 +365,54 @@ describe('the MÉTÉO column of the Full width follows the page’s weather (SMA
     expect(screen.queryByRole('note')).toBeNull();
   });
 
-  it('the Weather widget off the page: no MÉTÉO column — six columns, the actions included', async () => {
+  // REWRITTEN by SMA-482 (D1): the column followed the Weather widget and left
+  // the page with it — a rule the page said nowhere. It is the Gardens
+  // widget's own setting now: the Weather widget off the page, it stays.
+  it('the Weather widget off the page: the MÉTÉO column stays — seven columns, each row its own city (SMA-482, D1)', async () => {
     serve('expert', 'wide', { weather: twoCities(), hideWeather: true });
     await renderPage();
 
-    expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Actions']);
+    await waitFor(() => expect(tableCities()).toEqual(['Lyon', 'Lyon', 'Annecy']));
+    expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
+    expect(document.querySelector('[data-widget="weather"]')).toBeNull();
+  });
+});
+
+// SMA-482 (D1 — Alexandre, 26/11: « tout est ajustable dans les options de
+// chaque widget, mais pas en fonction des autres widgets de la page ») — the
+// MÉTÉO column is a setting of the Gardens widget's own, shown by default: the
+// Weather widget on the page or not, the column is drawn in Large and in the
+// Full width; the widget's option off, it is not — whether the Weather widget
+// is there or not.
+describe('the MÉTÉO column is the Gardens widget’s own setting, never the Weather widget’s (SMA-482, D1)', () => {
+  it.each([
+    ['gardener', 'large', ['Garden', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Modified', 'Actions']],
+    ['expert', 'wide', ['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']],
+  ] as const)('%s, Gardens in %s, the Weather widget off the page, the option untouched: the column is drawn, each row its own city', async (level, size, columns) => {
+    serve(level, size, { weather: twoCities(), hideWeather: true });
+    await renderPage();
+
+    await waitFor(() => expect(tableCities()).toEqual(['Lyon', 'Lyon', 'Annecy']));
+    expect(headers()).toEqual([...columns]);
+    expect(document.querySelector('[data-widget="weather"]')).toBeNull();
+  });
+
+  it.each([
+    ['gardener', 'large', 'on the page', ['Garden', 'Plants', 'Occupancy', 'Exposure', 'Modified', 'Actions']],
+    ['gardener', 'large', 'off the page', ['Garden', 'Plants', 'Occupancy', 'Exposure', 'Modified', 'Actions']],
+    ['expert', 'wide', 'on the page', ['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Actions']],
+    ['expert', 'wide', 'off the page', ['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Actions']],
+  ] as const)('%s, Gardens in %s, its option OFF, the Weather widget %s: no MÉTÉO column, the aggregate landed', async (level, size, weatherWidget, columns) => {
+    serve(level, size, { weather: twoCities(), hideWeather: weatherWidget === 'off the page', options: { weather: false } });
+    await renderPage();
+
+    // The aggregate has landed: the page's other bearers — To-do and Tips are
+    // on both presets — put the warning under the grid. The column stays off.
+    await screen.findByRole('note');
+    expect(headers()).toEqual([...columns]);
     expect(widget().querySelector('[data-weather-column]')).toBeNull();
+    expect(tableCities()).toEqual([]);
+    expect(document.querySelector('[data-widget="weather"]') !== null).toBe(weatherWidget === 'on the page');
   });
 });
 
