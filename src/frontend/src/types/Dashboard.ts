@@ -274,7 +274,7 @@ export type DashboardSizeStep = 'smaller' | 'larger';
  * size before `size` in the list, `larger` the size after it, and null at that
  * end of the scale: the step never wraps, Large never goes back to Small. A
  * size the list does not hold steps `smaller` to the largest size served and
- * `larger` nowhere; a one-size list steps nowhere at all.
+ * `larger` nowhere; a size on a one-size list steps nowhere at all.
  */
 export function stepDashboardSize(
   size: DashboardSize,

@@ -51,7 +51,7 @@ import { fetchDashboardData, fetchDashboardPreferences, saveDashboardPreferences
 // SMA-437, lot V3-08 — STATISTICS, COUNTS AND THIS MONTH IN THE FULL WIDTH, ON
 // THE PAGE (A-14, decided by Alexandre on 28/09): an Expert's layout storing
 // one of them at `wide` draws its own Full width, never its Large stretched;
-// the Expert's corner handle reaches it; ten lines at rest, then a fold that
+// the Expert's « + » reaches it; ten lines at rest, then a fold that
 // unfolds IN PLACE and WRITES NOTHING (a reading position, not a preference);
 // and the page never contradicts itself (A-4) — what a Full width counts is
 // what the rest of the page counts, folded or unfolded.

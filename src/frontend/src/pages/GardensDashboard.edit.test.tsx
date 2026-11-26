@@ -694,7 +694,7 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
   it('stands each top control on the artboard’s own 26 px chip (A10-10)', async () => {
     // `A6Modifier.dc.html` — `.hb { position: absolute; top: 6px; width: 26px;
     // height: 26px; border-radius: 50%; background: var(--surface); border:
-    // 1px solid var(--card-bd) }` for the « − » and the gear, and `.mv { top:
+    // 1px solid var(--card-bd) }` for the hide chip and the gear, and `.mv { top:
     // 6px; left: 50%; height: 26px; padding: 0 12px; border-radius: 14px }` for
     // the drag handle. The three were bare glyphs in one flex row spanning the
     // card, floating on the widget's own background.
@@ -1139,7 +1139,7 @@ describe('GardensDashboard — resizing and hiding (SMA-336)', () => {
     expect(document.activeElement).toBe(shrink);
   });
 
-  it('« − » removes the widget from the grid and persists it hidden', async () => {
+  it('the cross removes the widget from the grid and persists it hidden', async () => {
     await enterEditMode();
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide Tips' }));

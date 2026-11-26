@@ -8,8 +8,9 @@ import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Popover from '@mui/material/Popover';
 import Typography from '@mui/material/Typography';
-import { keyframes } from '@mui/material/styles';
+import { keyframes, useTheme } from '@mui/material/styles';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
@@ -103,9 +104,17 @@ interface SizeSegmentProps {
  * focus has to stay on the segment a click has just brought to the end. It
  * keeps its place in the tab order, its name says why it does nothing, and
  * its click does nothing — the idiom of the reorderable list's ▲ ▼.
+ *
+ * Its inert ink is the theme's `text.disabled` by day and `mutedText` at
+ * night (Alexandre's visual pass of 26/11: « pas très visible quand c'est
+ * grisé en mode nuit »). At night MUI's disabled ink is 50 % of white: on the
+ * chip it stood at 2.46:1 from the live glyph, against 5.67:1 by day — a
+ * segment at the end of its scale did not read as greyed. `mutedText` puts it
+ * at 3.76:1 from the live glyph and keeps it visible on the chip, 2.86:1.
  */
 function SizeSegment({ step, to, widget, onStep }: SizeSegmentProps) {
   const { t } = useTranslation();
+  const night = useTheme().palette.mode === 'dark';
   const smaller = step === 'smaller';
   const Glyph = smaller ? RemoveRoundedIcon : AddRoundedIcon;
   return (
@@ -128,7 +137,7 @@ function SizeSegment({ step, to, widget, onStep }: SizeSegmentProps) {
         // The pill's 14 px less its 1 px border, on the outer side alone.
         borderRadius: smaller ? '13px 0 0 13px' : '0 13px 13px 0',
         color: 'text.primary',
-        '&[aria-disabled="true"]': { color: 'text.disabled', cursor: 'default' },
+        '&[aria-disabled="true"]': { color: night ? 'mutedText' : 'text.disabled', cursor: 'default' },
       }}
     >
       <Glyph sx={{ fontSize: 16 }} />
@@ -361,7 +370,11 @@ export default function SortableWidget({
                 aria-label={t('dashboard.editMode.hide', { widget: label })}
                 sx={{ ...editChipSx, ...leftChipSx }}
               >
-                <RemoveRoundedIcon sx={{ fontSize: 16 }} />
+                {/* A cross, not the artboard's « − » (Alexandre's visual pass
+                    of 26/11): since the size pill, « − » makes a widget one
+                    size smaller, and a cross is what removes a thing in the
+                    interfaces people know. */}
+                <CloseRoundedIcon sx={{ fontSize: 16 }} />
               </IconButton>
             )}
 

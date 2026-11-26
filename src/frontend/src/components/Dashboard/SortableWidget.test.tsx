@@ -5,8 +5,8 @@ import { ThemeProvider, getOverlayAlpha } from '@mui/material/styles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../../i18n/i18n';
 import { createAppTheme } from '../../theme';
-import { declaredAtBreakpoint, rulesFor, slotOf } from '../../test/dashboardDom';
-import { contrast, hex, over } from '../../test/contrast';
+import { declaredAtBreakpoint, emittedRules, emotionClass, rulesFor, slotOf } from '../../test/dashboardDom';
+import { contrast, hex, over, resolveColor } from '../../test/contrast';
 import SortableWidget from './SortableWidget';
 import type { DashboardBlock, DashboardSize, DashboardSizeStep } from '../../types/Dashboard';
 
@@ -29,14 +29,16 @@ function renderCell(
     sizeLabel = 'Medium',
     sizeSteps = MEDIUM_STEPS,
     onResize = () => {},
+    mode = 'light',
   }: {
     sizeLabel?: string;
     sizeSteps?: Record<DashboardSizeStep, string | null>;
     onResize?: (step: DashboardSizeStep) => void;
+    mode?: 'light' | 'dark';
   } = {}
 ) {
   return render(
-    <ThemeProvider theme={createAppTheme('light')}>
+    <ThemeProvider theme={createAppTheme(mode)}>
       <DndContext>
         <SortableContext items={[block.key]}>
           <SortableWidget
@@ -109,6 +111,66 @@ describe('SortableWidget — the size pill follows the sizes of the formula (SMA
     fireEvent.click(grow);
     expect(onResize).toHaveBeenCalledTimes(1);
     expect(onResize).toHaveBeenCalledWith('larger');
+  });
+
+  // SMA-437 (Alexandre's visual pass, 26/11) — hiding is a CROSS. The artboard
+  // drew a « − »; since the size pill, « − » makes a widget one size smaller,
+  // and two « − » on one card read as one gesture: « ce devrait être une croix
+  // pour supprimer, comme dans toutes les autres app ».
+  it('hides a widget by a cross, and leaves « − » to the size pill alone', () => {
+    renderCell(tips, true);
+
+    const hide = screen.getByRole('button', { name: 'Hide Tips' });
+    expect(hide.querySelector('svg[data-testid="CloseRoundedIcon"]')).not.toBeNull();
+    expect(hide.querySelector('svg[data-testid="RemoveRoundedIcon"]')).toBeNull();
+    const minus = [...document.querySelectorAll('svg[data-testid="RemoveRoundedIcon"]')];
+    expect(minus).toHaveLength(1);
+    expect(minus[0]!.closest('[data-size-step]')).toHaveAttribute('data-size-step', 'smaller');
+  });
+});
+
+// SMA-437 (Alexandre's visual pass, 26/11) — « pas très visible quand c'est
+// grisé en mode nuit ». A segment at the end of its scale has to READ as
+// greyed: its ink stands at 3:1 or more from the live glyph's, and stays
+// visible on the chip, 2.5:1 or more. By day the theme's disabled ink does it
+// (5.67:1 and 2.64:1). At night that ink is 50 % of white — 2.46:1 from the
+// live glyph, a segment that did not look inert —, so the night takes
+// `mutedText` (3.76:1 and 2.86:1). Read on the rules Emotion emits, like the
+// pill's make below; an inert control has no contrast floor of its own (WCAG
+// 1.4.3 exempts it), these two are the product's.
+describe('SortableWidget — the inert segment reads as greyed, by day and at night (SMA-437)', () => {
+  beforeEach(async () => {
+    await i18next.changeLanguage('en');
+  });
+
+  /** The `color` a segment's own rule declares — or the rule of its `[aria-disabled="true"]` state. */
+  const inkOf = (segment: Element, state: '' | '[aria-disabled="true"]'): string => {
+    const opening = `.${emotionClass(segment)}${state}{`;
+    const rule = emittedRules(segment).find((text) => text.startsWith(opening));
+    const colours = [...(rule ?? '').matchAll(/[{;]color:([^;}]+)/g)].map((match) => match[1]!);
+    if (colours.length === 0) throw new Error(`No colour declared by ${opening}…}`);
+    return colours[colours.length - 1]!;
+  };
+
+  it.each(['light', 'dark'] as const)('%s — the inert « − » is 3:1 or more from the live « + », and 2.5:1 or more on the chip', (mode) => {
+    const { palette } = createAppTheme(mode);
+    renderCell({ key: 'tips', size: 'small', hidden: false }, true, true, {
+      sizeLabel: 'Small',
+      sizeSteps: { smaller: null, larger: 'Medium' },
+      mode,
+    });
+    const inert = screen.getByRole('button', { name: 'Make Tips smaller — already at the smallest size' });
+    const live = screen.getByRole('button', { name: 'Make Tips larger — to Medium' });
+
+    const chip = hex(palette.surfaceSubtle);
+    expect(inkOf(inert, '[aria-disabled="true"]').toLowerCase()).toBe(
+      (mode === 'dark' ? palette.mutedText : palette.text.disabled).toLowerCase()
+    );
+    const inertInk = resolveColor(inkOf(inert, '[aria-disabled="true"]'), chip)!;
+    const liveInk = resolveColor(inkOf(live, ''), chip)!;
+
+    expect(contrast(inertInk, liveInk)).toBeGreaterThanOrEqual(3);
+    expect(contrast(inertInk, chip)).toBeGreaterThanOrEqual(2.5);
   });
 });
 

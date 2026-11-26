@@ -698,7 +698,7 @@ export interface ControlMeasure {
 
 /**
  * SMA-437 lot 1, PR A, step A7 (pre-flight D19) — the Edit-mode controls of a
- * card: the « − » (or the lock), the drag pill, the gear and, since SMA-437's
+ * card: the hide cross (or the lock), the drag pill, the gear and, since SMA-437's
  * size stepper, the size pill in the corner grip's place — which
  * `SortableWidget` lays OVER the card, beside it in the DOM, so `measureCard`,
  * which reads the card's own subtree, never sees them. What is read is what

@@ -48,8 +48,8 @@ import GardensDashboard from './GardensDashboard';
 import { fetchDashboardData, fetchDashboardPreferences, saveDashboardPreferences } from '../services/dashboardApi';
 
 // SMA-448, lot F5-b — THE FULL WIDTH OF THE GARDENS WIDGET ON THE PAGE (V3-03,
-// V3-04; contract v3 § 4.7 a; A-N11): the Expert's corner handle steps Large →
-// Full width, and the page draws the seven-column table; the Gardener's handle
+// V3-04; contract v3 § 4.7 a; A-N11): the Expert's « + » steps Large →
+// Full width, and the page draws the seven-column table; the Gardener's « + »
 // never reaches it — a right the served capabilities carry and the server
 // refuses (R8), never a difference of interface alone. In it, the settings of
 // lot F5-a hold (the count, « + N autres jardins » unfolding in place, the
