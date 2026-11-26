@@ -82,6 +82,7 @@ describe('weatherDisclaimerVisible — with data, the warning follows the weathe
         isBlockVisible: layoutWith(['todo']),
         keyFigures: [],
         cards: false,
+        gardens: null,
       })
     ).toBe(true);
   });
@@ -102,6 +103,7 @@ describe('weatherDisclaimerVisible — absent when no surface shows a figure, wh
         isBlockVisible: everything,
         keyFigures,
         cards: false,
+        gardens: null,
       })
     ).toBe(false);
   });
@@ -115,6 +117,7 @@ describe('weatherDisclaimerVisible — absent when no surface shows a figure, wh
         isBlockVisible: everything,
         keyFigures,
         cards: false,
+        gardens: null,
       })
     ).toBe(false);
   });
@@ -128,6 +131,7 @@ describe('weatherDisclaimerVisible — absent when no surface shows a figure, wh
         isBlockVisible: everything,
         keyFigures,
         cards: false,
+        gardens: null,
       })
     ).toBe(false);
   });
@@ -141,6 +145,7 @@ describe('weatherDisclaimerVisible — absent when no surface shows a figure, wh
         isBlockVisible: everything,
         keyFigures,
         cards: false,
+        gardens: null,
       })
     ).toBe(false);
   });
@@ -184,6 +189,7 @@ describe('weatherDisclaimerVisible — the Key figures band bears the weather by
         isBlockVisible: layoutWith([...NON_BEARING, 'keyfigures']),
         keyFigures: DEFAULT_KEY_FIGURES,
         cards: false,
+        gardens: null,
       })
     ).toBe(true);
   });
@@ -202,6 +208,7 @@ describe('weatherDisclaimerVisible — the Key figures band bears the weather by
         isBlockVisible: layoutWith([...NON_BEARING, ...(figures.length ? (['keyfigures'] as const) : []), ...subset]),
         keyFigures: figures,
         cards: false,
+        gardens: null,
       })
     ).toBe(subset.length > 0 || bandBears);
   });
@@ -220,6 +227,7 @@ describe('weatherDisclaimerVisible — the Key figures band bears the weather by
         isBlockVisible: layoutWith([...NON_BEARING, 'keyfigures']),
         keyFigures: figures,
         cards: false,
+        gardens: null,
       });
       // Never less (V1) — and, with nothing else bearing, never more.
       expect(shown, figures.join(',')).toBe(shows);
@@ -246,6 +254,7 @@ describe('weatherDisclaimerVisible — the Novice page bears the weather by what
         isBlockVisible: noWidget,
         keyFigures: [],
         cards: true,
+        gardens: null,
       })
     ).toBe(true);
   });
@@ -259,6 +268,7 @@ describe('weatherDisclaimerVisible — the Novice page bears the weather by what
         isBlockVisible: noWidget,
         keyFigures: [],
         cards: false,
+        gardens: null,
       })
     ).toBe(false);
   });
@@ -269,7 +279,7 @@ describe('weatherDisclaimerVisible — the Novice page bears the weather by what
       [false, true],
     ] as const) {
       expect(
-        weatherDisclaimerVisible({ loading, error, locations: places('fresh'), isBlockVisible: noWidget, keyFigures: [], cards: true }),
+        weatherDisclaimerVisible({ loading, error, locations: places('fresh'), isBlockVisible: noWidget, keyFigures: [], cards: true, gardens: null }),
         `loading ${loading}, error ${error}`
       ).toBe(false);
     }

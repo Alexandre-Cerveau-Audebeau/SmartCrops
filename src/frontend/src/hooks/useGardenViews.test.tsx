@@ -77,6 +77,8 @@ function renderBoth(gardens: DashboardGardenData[]) {
         <MemoryRouter>
           <GardensBlock
             size="large"
+            // The MÉTÉO column is not this test's subject: off, said out loud (the prop is required since SMA-482).
+            showWeatherColumn={false}
             gardens={gardens}
             loading={false}
             loadError={false}

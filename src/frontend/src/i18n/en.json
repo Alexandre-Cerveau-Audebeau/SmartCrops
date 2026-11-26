@@ -564,7 +564,7 @@
       "hiddenSaid": "“{{widget}}” hidden.",
       "sizedSaid": "“{{widget}}” set to {{size}}.",
       "reset": "Reset the {{level}} layout",
-      "resetNote": "Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, photos) are kept.",
+      "resetNote": "Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, columns, photos) are kept.",
       "resetDone": "This is already the starting layout.",
       "resetSaid": "The {{level}} layout is restored.",
       "refused": "Can’t switch to {{level}}: {{reasons, list}}",

@@ -316,9 +316,12 @@ interface Props {
    * Whether the table draws its MÉTÉO column — the Large's and the Full
    * width's, the only sizes that have one: `drawsWeatherColumn` of the widget,
    * which the page reads from the widget's OWN size and options, never from
-   * another widget of the page (SMA-482, D1). Shown by default.
+   * another widget of the page (SMA-482, D1). REQUIRED, with no default here:
+   * « shown by default » is the option's default (`weatherOf`), and a second
+   * default in this component would be a second rule — a caller that forgot
+   * the prop would silently lose the column. Every caller says it.
    */
-  showWeatherColumn?: boolean;
+  showWeatherColumn: boolean;
   /** The weather each garden reads, for the MÉTÉO column (PR 3b/5). */
   weather?: GardensWeather;
   /** Opens the location dialog on this garden — the « Ajouter » of an unlocated cell. */
@@ -384,7 +387,7 @@ export default function GardensBlock({
   loading,
   loadError,
   refreshing = false,
-  showWeatherColumn = false,
+  showWeatherColumn,
   weather,
   onLocate,
   onCreateClick,

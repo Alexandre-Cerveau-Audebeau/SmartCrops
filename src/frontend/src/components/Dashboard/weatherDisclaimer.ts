@@ -66,13 +66,14 @@ export interface WeatherDisclaimerInput {
   cards: boolean;
   /**
    * SMA-482 (D4) — the Gardens widget as the page of widgets draws it, its
-   * size and its options; null, or left out, when no Gardens widget is drawn
-   * (the cards page). It bears the warning while it draws its MÉTÉO column —
+   * size and its options; null when no Gardens widget is drawn (the cards
+   * page). REQUIRED: left out, the widget would silently stop bearing the
+   * warning. It bears the warning while it draws its MÉTÉO column —
    * `drawsWeatherColumn`, the very rule the page draws the column by —
    * whatever its own state, as the rule treats To-do and Tips: the rows it
    * shows are not read.
    */
-  gardens?: Pick<DashboardBlock, 'size' | 'options'> | null;
+  gardens: Pick<DashboardBlock, 'size' | 'options'> | null;
 }
 
 /**
@@ -95,7 +96,7 @@ export function weatherDisclaimerVisible({
   isBlockVisible,
   keyFigures,
   cards,
-  gardens = null,
+  gardens,
 }: WeatherDisclaimerInput): boolean {
   if (loading || error) return false;
   if (!locations.some((place) => place.status !== 'unavailable')) return false;

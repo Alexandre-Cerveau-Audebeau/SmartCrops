@@ -1091,7 +1091,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     await waitFor(() => expect(reset).not.toHaveAttribute('aria-disabled'));
     expect(
       within(screen.getByRole('dialog', { name: 'Customize' })).getByText(
-        'Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, photos) are kept.'
+        'Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, columns, photos) are kept.'
       )
     ).toBeInTheDocument();
 
