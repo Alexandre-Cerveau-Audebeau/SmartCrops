@@ -27,6 +27,7 @@ import GardensOptionsPanel from '../components/Dashboard/blocks/GardensOptionsPa
 import GardensBlock, {
   type GardensWeather,
 } from '../components/Dashboard/blocks/GardensBlock';
+import { drawsWeatherColumn } from '../components/Dashboard/blocks/gardensOptions';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import KeyFiguresBlock from '../components/Dashboard/blocks/KeyFiguresBlock';
 import KeyFiguresOptionsPanel from '../components/Dashboard/blocks/KeyFiguresOptionsPanel';
@@ -620,9 +621,10 @@ export default function GardensDashboard() {
   ) => setBlocks(blocks.map((block) => (block.key === key ? patch(block) : block)));
 
   /**
-   * Whether a widget is ON the page. The Gardens table hides its WEATHER and
-   * HARVEST columns when theirs are not (frozen design): a column for data the
-   * user has taken off their dashboard is a column of nothing.
+   * Whether a widget is ON the page — what the weather warning reads of its
+   * bearers, and nothing else: no widget's content reads another widget
+   * (SMA-482). The Gardens table's MÉTÉO column is its own setting (D1 —
+   * `drawsWeatherColumn`), and its HARVEST column is withdrawn (D3).
    */
   // The blocks the page DRAWS: none on the cards page, whatever the layout
   // carries (SMA-448, lot F2) — a widget that is not drawn shows no weather.
@@ -635,7 +637,9 @@ export default function GardensDashboard() {
   // under the grid, as long as at least one place carries data a surface
   // draws — « fresh » or « stale » — AND a widget that draws it is on the page
   // (review round 1, G1): the Weather widget, the To-do block or the Tips
-  // block; the MÉTÉO column follows the Weather widget's own visibility.
+  // block; and, since SMA-482 (D4), the Gardens widget while it draws its
+  // MÉTÉO column — read through `drawsWeatherColumn`, the rule the page draws
+  // the column by, so the warning and the column cannot disagree.
   // Nothing to warn about while the aggregate loads, when no place is
   // located, when every place is unavailable, or behind a load error: every
   // surface then shows the error, not figures. A passive refresh keeps the
@@ -658,6 +662,7 @@ export default function GardensDashboard() {
     isBlockVisible,
     keyFigures: band ? keyFiguresOptions(band.options ?? null).figures : [],
     cards: noviceCards.some(cardBearsWeather),
+    gardens: drawnBlocks.find((block) => block.key === 'gardens' && !block.hidden) ?? null,
   });
 
   const renderBlock = (block: DashboardBlock) => {
@@ -692,8 +697,9 @@ export default function GardensDashboard() {
             loading={gardensLoading}
             refreshing={gardensRefreshing}
             loadError={gardensError}
-            showWeatherColumn={isBlockVisible('weather')}
-            showHarvestColumn={isBlockVisible('harvest')}
+            // SMA-482 (D1) — the widget's OWN size and option, through the one
+            // rule the weather warning reads too; never the Weather widget.
+            showWeatherColumn={drawsWeatherColumn(block)}
             weather={gardensWeather}
             onLocate={openLocate}
             onCreateClick={createFromWidget}
@@ -881,7 +887,9 @@ export default function GardensDashboard() {
         );
       case 'gardens':
         // SMA-448, lot F5-a — the count, the sorts the formula serves and,
-        // for the Expert's custom order, the complete list of the gardens.
+        // for the Expert's custom order, the complete list of the gardens;
+        // SMA-482 (D2) — and, at the sizes whose table has one, the MÉTÉO
+        // column: the panel reads the widget's own size.
         return (
           <GardensOptionsPanel
             options={block.options ?? null}
@@ -892,6 +900,7 @@ export default function GardensDashboard() {
               patchBlock('gardens', (current) => ({ ...current, options }))
             }
             order={gardenOrder}
+            size={block.size}
           />
         );
       case 'weather':

@@ -7,19 +7,22 @@ import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
+import Switch from '@mui/material/Switch';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import ReconnectButton from '../../ReconnectButton';
 import ReorderableList from '../ReorderableList';
 import { useHoldOptionsPanelEscape } from '../optionsPanelEscape';
-import { defaultGardensCount, gardensCap, gardensOptions } from './gardensOptions';
+import { OptionRow } from './CountersOptionsPanel';
+import { defaultGardensCount, gardensCap, gardensOptions, sizeHasWeatherColumn } from './gardensOptions';
 import type { GardenOrder, GardenOrderFailure, GardenOrderState } from '../../../hooks/useGardenOrder';
 import { DASHBOARD_KEY_FIGURES as K, DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
-import { GARDENS_COUNTS, GARDENS_COUNT_ALL, type GardenSort, type GardensCount } from '../../../types/Dashboard';
+import { GARDENS_COUNTS, GARDENS_COUNT_ALL, type DashboardSize, type GardenSort, type GardensCount } from '../../../types/Dashboard';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 
 interface Props {
@@ -35,6 +38,13 @@ interface Props {
   onChange: (options: Record<string, unknown>) => void;
   /** The account's custom order, owned by the page (`useGardenOrder`): read and moved here. */
   order: GardenOrder;
+  /**
+   * SMA-482 (D2) — the widget's size: the « Colonnes » section is offered only
+   * at a size whose table has the MÉTÉO column (`sizeHasWeatherColumn`, the
+   * sizes the one rule reads), and not at all when no size is named. The
+   * setting stays stored at every size: every write of the panel carries it.
+   */
+  size?: DashboardSize;
 }
 
 /** The 11 px capitals of the panel's section headings — the exception the band's panel already carries (A-1.1). */
@@ -86,8 +96,14 @@ function orderFailureText(failure: GardenOrderFailure | null, t: TFunction): str
  * « Réinitialiser » keeps the count and the sort — a reset puts back a
  * layout, never a setting (SMA-437, lot V3-07, contract A-17) — and leaves
  * the order where it is: it belongs to the gardens, not to a layout.
+ *
+ * SMA-482 (D2, D5) — « Colonnes », between the sort and the order, at the
+ * sizes whose table has a MÉTÉO column: ONE switch, the Counters' idiom, the
+ * column shown until the user turns it off — the widget's own setting, never
+ * the Weather widget's presence on the page. A setting too: it never turns
+ * the chip « · ajustée », and the reset keeps it.
  */
-export default function GardensOptionsPanel({ options, sorts, gardens, ready, onChange, order }: Props) {
+export default function GardensOptionsPanel({ options, sorts, gardens, ready, onChange, order, size }: Props) {
   const { t } = useTranslation();
   const tk = useDashboardTokens();
   const theme = useTheme();
@@ -144,6 +160,8 @@ export default function GardensOptionsPanel({ options, sorts, gardens, ready, on
   const writeCount = (next: GardensCount | null) =>
     onChange(next === null ? without(document, 'count') : { ...document, count: next });
   const writeSort = (next: GardenSort) => onChange({ ...document, sort: next });
+  /** The document re-written with the MÉTÉO column on or off (SMA-482, D1) — beside the count, the sort and every other key. */
+  const writeWeather = (next: boolean) => onChange({ ...document, weather: next });
 
   const byId = new Map(gardens.map((garden) => [garden.id, garden]));
   const ordered = order.ids.map((id) => byId.get(id)).filter((garden): garden is DashboardGardenData => garden !== undefined);
@@ -251,6 +269,36 @@ export default function GardensOptionsPanel({ options, sorts, gardens, ready, on
           ))}
         </RadioGroup>
       </Box>
+
+      {/* ── Colonnes (SMA-482, D2): what the table shows, set here and by
+          nothing else — at the sizes whose table has a MÉTÉO column ──────── */}
+      {size !== undefined && sizeHasWeatherColumn(size) && (
+        <Box data-gardens-columns sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <Typography component="h4" sx={{ ...headingSx, m: 0 }}>
+            {t('dashboard.blocks.gardens.options.columnsSection')}
+          </Typography>
+          {/* The Counters' option switch: its row, a 22 px glyph — the
+              Weather widget's own sun —, the small switch, the label left. */}
+          <OptionRow icon={<WbSunnyOutlinedIcon />}>
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={parsed.weather}
+                  onChange={(event) => writeWeather(event.target.checked)}
+                />
+              }
+              label={t('dashboard.blocks.gardens.options.weatherColumn')}
+              slotProps={{ typography: { fontSize: 15 } }}
+              sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+              labelPlacement="start"
+            />
+          </OptionRow>
+          <Typography data-gardens-columns-help sx={noteSx}>
+            {t('dashboard.blocks.gardens.options.weatherColumnHelp')}
+          </Typography>
+        </Box>
+      )}
 
       {/* ── Votre ordre (A-N5): the complete list, the Expert's alone ───── */}
       {parsed.sort === 'custom' && (

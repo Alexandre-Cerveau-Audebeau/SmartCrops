@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { gardenFixture } from '../../../test/fixtures/dashboard';
-import type { GardenSort } from '../../../types/Dashboard';
+import { DASHBOARD_SIZES, type DashboardSize, type GardenSort } from '../../../types/Dashboard';
 import {
+  WEATHER_COLUMN_SIZES,
   customOrderIds,
   defaultGardensCount,
+  drawsWeatherColumn,
   gardensCap,
   gardensOptions,
   isGardensCount,
   searchGardens,
   searchKey,
+  sizeHasWeatherColumn,
   sortGardens,
 } from './gardensOptions';
 
@@ -23,9 +26,11 @@ const garden = (id: string, name: string, over: Parameters<typeof gardenFixture>
   gardenFixture({ id, name, ...over });
 
 describe('gardensOptions — the stored document, read carefully', () => {
-  it('reads nothing as no count and the default sort', () => {
-    expect(gardensOptions(null, EXPERT)).toEqual({ count: null, sort: 'lastOpened' });
-    expect(gardensOptions(undefined, GARDENER)).toEqual({ count: null, sort: 'lastOpened' });
+  // REWRITTEN by SMA-482 (D1): the document read whole now carries the MÉTÉO
+  // column's setting too — on, the default, when nothing was stored.
+  it('reads nothing as no count, the default sort and the MÉTÉO column shown', () => {
+    expect(gardensOptions(null, EXPERT)).toEqual({ count: null, sort: 'lastOpened', weather: true });
+    expect(gardensOptions(undefined, GARDENER)).toEqual({ count: null, sort: 'lastOpened', weather: true });
   });
 
   it('keeps a count of the list — 5, 8, 10 or « all » — and drops any other value', () => {
@@ -53,11 +58,13 @@ describe('gardensOptions — the stored document, read carefully', () => {
     expect(gardensOptions(null, []).sort).toBe('lastOpened');
   });
 
+  // REWRITTEN by SMA-482 (D1): the same document, read with its MÉTÉO setting.
   it('carries the keys another build owns', () => {
     expect(gardensOptions({ count: 8, sort: 'name', theme: 'soft' }, EXPERT)).toEqual({
       count: 8,
       sort: 'name',
       theme: 'soft',
+      weather: true,
     });
   });
 
@@ -67,6 +74,68 @@ describe('gardensOptions — the stored document, read carefully', () => {
     expect(gardensCap(10)).toBe(10);
     expect(gardensCap('all')).toBeNull();
   });
+});
+
+// SMA-482 (D1 — Alexandre, 10/09 and 26/11) — the MÉTÉO column is a setting
+// of the Gardens widget's OWN, the boolean `weather` of its options: shown by
+// default, the user turns it off. Absent, or of another type than a boolean,
+// it reads as ON: a value this build cannot read never hides what the widget
+// shows by default.
+describe('gardensOptions — the MÉTÉO column, a setting of the widget’s own (SMA-482, D1)', () => {
+  it('reads the column ON when the key is absent, and when it is true', () => {
+    expect(gardensOptions(null, EXPERT).weather).toBe(true);
+    expect(gardensOptions({}, EXPERT).weather).toBe(true);
+    expect(gardensOptions({ count: 5, sort: 'name' }, GARDENER).weather).toBe(true);
+    expect(gardensOptions({ weather: true }, EXPERT).weather).toBe(true);
+  });
+
+  it('reads it OFF for the boolean false alone — and keeps the count, the sort and the keys another build owns beside it', () => {
+    expect(gardensOptions({ weather: false }, EXPERT).weather).toBe(false);
+    expect(gardensOptions({ weather: false, count: 10, sort: 'name', theme: 'soft' }, GARDENER)).toEqual({
+      weather: false,
+      count: 10,
+      sort: 'name',
+      theme: 'soft',
+    });
+  });
+
+  it.each([
+    ['the string « false »', 'false'],
+    ['the number 0', 0],
+    ['null', null],
+    ['an object', { shown: false }],
+    ['an array', []],
+  ])('reads a value of another type — %s — as ON, the default', (_label, value) => {
+    expect(gardensOptions({ weather: value }, EXPERT).weather).toBe(true);
+  });
+});
+
+// SMA-482 (D1, D4) — THE rule, written once: the widget draws its MÉTÉO column
+// at a size whose table has one — the Large and the Full width — with its own
+// option on. The page reads it for the widget, and the weather warning for
+// the page: never two conditions in two places.
+describe('drawsWeatherColumn — the widget’s own size and its own option, nothing else (SMA-482, D1, D4)', () => {
+  it('names the Large and the Full width as the sizes whose table has a MÉTÉO column — the Small and the Medium have none', () => {
+    expect([...WEATHER_COLUMN_SIZES]).toEqual(['large', 'wide']);
+    expect(DASHBOARD_SIZES.filter((size) => sizeHasWeatherColumn(size))).toEqual(['large', 'wide']);
+  });
+
+  const SIZES: readonly DashboardSize[] = ['small', 'medium', 'large', 'wide'];
+  const OPTIONS: ReadonlyArray<readonly [string, Record<string, unknown> | null | undefined, boolean]> = [
+    ['no options', undefined, true],
+    ['options null', null, true],
+    ['the count and the sort alone', { count: 5, sort: 'name' }, true],
+    ['weather true', { weather: true }, true],
+    ['weather false', { weather: false, count: 10 }, false],
+    ['weather of another type', { weather: 'no' }, true],
+  ];
+
+  it.each(SIZES.flatMap((size) => OPTIONS.map(([label, options, on]) => [size, label, options, on] as const)))(
+    '%s, %s → drawn if and only if the size has the column and the option is on',
+    (size, _label, options, on) => {
+      expect(drawsWeatherColumn({ size, options })).toBe((size === 'large' || size === 'wide') && on);
+    }
+  );
 });
 
 describe('sortGardens — the five sorts', () => {

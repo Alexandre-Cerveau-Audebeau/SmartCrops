@@ -3,7 +3,9 @@
  * A-N5, A-N6 — decided by Alexandre on 28/09): how many gardens the widget
  * shows and in which order, stored on its `DashboardBlock.options` as
  * `{ count, sort }`, and the rules the widget applies to them — the five sorts,
- * the cap, the search.
+ * the cap, the search. SMA-482 (D1) adds `weather`: whether its table draws
+ * the MÉTÉO column — a setting of the widget's own, shown by default, never
+ * read from another widget of the page.
  *
  * Reading the document back is the one careful place, on the model of
  * `countersOptions` and `keyFiguresOptions`: it is persisted JSON this build
@@ -21,6 +23,8 @@ import {
   GARDENS_COUNTS,
   GARDENS_COUNT_ALL,
   isGardenSort,
+  type DashboardBlock,
+  type DashboardSize,
   type GardenSort,
   type GardensCount,
 } from '../../../types/Dashboard';
@@ -37,6 +41,40 @@ export interface GardensOptions {
   count: GardensCount | null;
   /** The sort, one the formula serves; the default when the stored one is not. */
   sort: GardenSort;
+  /**
+   * SMA-482 (D1) — whether the table draws its MÉTÉO column: false when the
+   * user turned it off, TRUE otherwise — absent, or of another type than a
+   * boolean (« tout doit être affiché de base », Alexandre, 26/11).
+   */
+  weather: boolean;
+}
+
+/** The stored `weather`, or true — the column shown — when it is absent or not a boolean (SMA-482, D1). */
+const weatherOf = (options: Record<string, unknown> | null | undefined): boolean =>
+  typeof options?.weather === 'boolean' ? options.weather : true;
+
+/**
+ * SMA-482 (D2, D4) — the sizes whose table has a MÉTÉO column: the Large and
+ * the Full width. The Small names one garden and the Medium lists three rows,
+ * neither with a column; the gear offers the setting at these sizes alone.
+ */
+export const WEATHER_COLUMN_SIZES = ['large', 'wide'] as const satisfies readonly DashboardSize[];
+
+/** Whether the widget's table has a MÉTÉO column at `size` — what decides where the gear offers the setting. */
+export function sizeHasWeatherColumn(size: DashboardSize): boolean {
+  return (WEATHER_COLUMN_SIZES as readonly DashboardSize[]).includes(size);
+}
+
+/**
+ * SMA-482 (D1, D4) — THE rule, written once: whether the Gardens widget draws
+ * its MÉTÉO column — at a size whose table has one, with its own option on.
+ * The page reads it for the widget (`showWeatherColumn`) and the weather
+ * warning reads it for the page (`weatherDisclaimerVisible`): one condition,
+ * never two. It reads the widget's OWN size and options and nothing else — no
+ * other widget of the page (rule R9 of the contract).
+ */
+export function drawsWeatherColumn(block: Pick<DashboardBlock, 'size' | 'options'>): boolean {
+  return sizeHasWeatherColumn(block.size) && weatherOf(block.options);
 }
 
 /** Whether `value` is 5, 8, 10 or « all ». */
@@ -51,7 +89,8 @@ export function isGardensCount(value: unknown): value is GardensCount {
  * The widget's options as the page reads them: the stored count when it is one
  * of the list, null otherwise; the stored sort when the formula SERVES it, the
  * default otherwise — « Derniers ouverts » when the formula has it, its first
- * sort if not; and every other key carried as it came.
+ * sort if not; the MÉTÉO column shown unless it was turned off (SMA-482); and
+ * every other key carried as it came.
  */
 export function gardensOptions(
   options: Record<string, unknown> | null | undefined,
@@ -68,6 +107,7 @@ export function gardensOptions(
     ...(options ?? {}),
     count: isGardensCount(options?.count) ? options.count : null,
     sort,
+    weather: weatherOf(options),
   };
 }
 

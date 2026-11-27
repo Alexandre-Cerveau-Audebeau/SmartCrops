@@ -1,10 +1,11 @@
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import { panelGardens } from '../../../test/layout/scenes';
 import type { GardenOrder } from '../../../hooks/useGardenOrder';
+import type { DashboardSize, GardenSort } from '../../../types/Dashboard';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import { customOrderIds } from './gardensOptions';
 import GardensOptionsPanel from './GardensOptionsPanel';
@@ -103,5 +104,91 @@ describe('GardensOptionsPanel — the « Nouveau » chip reads the list once, ne
     expect([three.chips, thirty.chips]).toEqual([2, 20]);
     expect(thirty.lookups).toEqual(three.lookups);
     expect(thirty.lookups.filter((lookup) => lookup.startsWith('local.'))).toEqual([]);
+  });
+});
+
+// SMA-482 (D2) — the « Columns » section of the gear: at the sizes whose table
+// has a MÉTÉO column — the Large, the Full width —, its heading, ONE switch in
+// the Counters panel's idiom (the option row, the label on the left) and its
+// help line, after « Sort by » and before the custom order; the column ON by
+// default; turned off, `weather: false` is written beside the count, the sort
+// and every key another build keeps there. In Small and in Medium, no section,
+// and the stored setting is kept by every write of the panel. The same panel
+// for the Gardener and the Expert: a setting of the widget, never a right of a
+// formula.
+
+const GARDENER_SORTS: readonly GardenSort[] = ['lastOpened', 'name', 'updated'];
+const EXPERT_SORTS: readonly GardenSort[] = ['lastOpened', 'name', 'created', 'updated', 'custom'];
+
+interface PanelProps {
+  size: DashboardSize;
+  sorts?: readonly GardenSort[];
+  options?: Record<string, unknown> | null;
+  onChange?: (options: Record<string, unknown>) => void;
+}
+
+/** The panel at `size` — three gardens, their served order — under the providers it reads. */
+function panelAt({ size, sorts = EXPERT_SORTS, options = null, onChange = () => {} }: PanelProps) {
+  const gardens = panelGardens(3);
+  const order: GardenOrder = { ids: customOrderIds(gardens), order: null, state: 'idle', failure: null, move: () => {} };
+  return (
+    <ThemeProvider theme={createTheme()}>
+      <LanguageProvider>
+        <GardensOptionsPanel options={options} sorts={sorts} gardens={gardens} ready onChange={onChange} order={order} size={size} />
+      </LanguageProvider>
+    </ThemeProvider>
+  );
+}
+
+describe('GardensOptionsPanel — the « Columns » section and its weather switch (SMA-482, D2)', () => {
+  beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
+
+  it.each([
+    ['the Expert', 'large', EXPERT_SORTS],
+    ['the Expert', 'wide', EXPERT_SORTS],
+    ['the Gardener', 'large', GARDENER_SORTS],
+  ] as const)('%s, in %s: the heading « Columns », the switch « Weather of each garden » ON by default, and its help line', (_formula, size, sorts) => {
+    render(panelAt({ size, sorts }));
+
+    expect(screen.getByRole('heading', { level: 4, name: 'Columns' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Weather of each garden' })).toBeChecked();
+    expect(screen.getByText('Shown by default. A garden with no city carries “Add” there.')).toBeInTheDocument();
+  });
+
+  it('stands after « Sort by » and before the custom order', () => {
+    render(panelAt({ size: 'wide', options: { sort: 'custom' } }));
+
+    expect(screen.getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent)).toEqual([
+      'Gardens shown',
+      'Sort by',
+      'Columns',
+      'Your order — 3 gardens',
+    ]);
+  });
+
+  it('turned off, writes weather: false beside the count, the sort and the keys another build keeps; turned on again, weather: true', () => {
+    const onChange = vi.fn();
+    const stored = { count: 10, sort: 'name', theme: 'soft' };
+    const { rerender } = render(panelAt({ size: 'large', options: stored, onChange }));
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Weather of each garden' }));
+    expect(onChange).toHaveBeenLastCalledWith({ count: 10, sort: 'name', theme: 'soft', weather: false });
+
+    // What the page writes back: the switch reads it off, and on again writes true.
+    rerender(panelAt({ size: 'large', options: { ...stored, weather: false }, onChange }));
+    const toggle = screen.getByRole('switch', { name: 'Weather of each garden' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    expect(onChange).toHaveBeenLastCalledWith({ count: 10, sort: 'name', theme: 'soft', weather: true });
+  });
+
+  it.each(['small', 'medium'] as const)('in %s, whose list has no MÉTÉO column: no « Columns » section — and the stored setting rides every write of the panel', (size) => {
+    const onChange = vi.fn();
+    render(panelAt({ size, sorts: GARDENER_SORTS, options: { weather: false, sort: 'name' }, onChange }));
+
+    expect(screen.queryByRole('heading', { name: 'Columns' })).toBeNull();
+    expect(screen.queryByRole('switch')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '5' }));
+    expect(onChange).toHaveBeenLastCalledWith({ weather: false, sort: 'name', count: 5 });
   });
 });

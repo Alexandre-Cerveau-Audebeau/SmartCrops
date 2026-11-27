@@ -365,12 +365,54 @@ describe('the MÉTÉO column of the Full width follows the page’s weather (SMA
     expect(screen.queryByRole('note')).toBeNull();
   });
 
-  it('the Weather widget off the page: no MÉTÉO column — six columns, the actions included', async () => {
+  // REWRITTEN by SMA-482 (D1): the column followed the Weather widget and left
+  // the page with it — a rule the page said nowhere. It is the Gardens
+  // widget's own setting now: the Weather widget off the page, it stays.
+  it('the Weather widget off the page: the MÉTÉO column stays — seven columns, each row its own city (SMA-482, D1)', async () => {
     serve('expert', 'wide', { weather: twoCities(), hideWeather: true });
     await renderPage();
 
-    expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Actions']);
+    await waitFor(() => expect(tableCities()).toEqual(['Lyon', 'Lyon', 'Annecy']));
+    expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
+    expect(document.querySelector('[data-widget="weather"]')).toBeNull();
+  });
+});
+
+// SMA-482 (D1 — Alexandre, 26/11: « tout est ajustable dans les options de
+// chaque widget, mais pas en fonction des autres widgets de la page ») — the
+// MÉTÉO column is a setting of the Gardens widget's own, shown by default: the
+// Weather widget on the page or not, the column is drawn in Large and in the
+// Full width; the widget's option off, it is not — whether the Weather widget
+// is there or not.
+describe('the MÉTÉO column is the Gardens widget’s own setting, never the Weather widget’s (SMA-482, D1)', () => {
+  it.each([
+    ['gardener', 'large', ['Garden', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Modified', 'Actions']],
+    ['expert', 'wide', ['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']],
+  ] as const)('%s, Gardens in %s, the Weather widget off the page, the option untouched: the column is drawn, each row its own city', async (level, size, columns) => {
+    serve(level, size, { weather: twoCities(), hideWeather: true });
+    await renderPage();
+
+    await waitFor(() => expect(tableCities()).toEqual(['Lyon', 'Lyon', 'Annecy']));
+    expect(headers()).toEqual([...columns]);
+    expect(document.querySelector('[data-widget="weather"]')).toBeNull();
+  });
+
+  it.each([
+    ['gardener', 'large', 'on the page', ['Garden', 'Plants', 'Occupancy', 'Exposure', 'Modified', 'Actions']],
+    ['gardener', 'large', 'off the page', ['Garden', 'Plants', 'Occupancy', 'Exposure', 'Modified', 'Actions']],
+    ['expert', 'wide', 'on the page', ['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Actions']],
+    ['expert', 'wide', 'off the page', ['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Actions']],
+  ] as const)('%s, Gardens in %s, its option OFF, the Weather widget %s: no MÉTÉO column, the aggregate landed', async (level, size, weatherWidget, columns) => {
+    serve(level, size, { weather: twoCities(), hideWeather: weatherWidget === 'off the page', options: { weather: false } });
+    await renderPage();
+
+    // The aggregate has landed: the page's other bearers — To-do and Tips are
+    // on both presets — put the warning under the grid. The column stays off.
+    await screen.findByRole('note');
+    expect(headers()).toEqual([...columns]);
     expect(widget().querySelector('[data-weather-column]')).toBeNull();
+    expect(tableCities()).toEqual([]);
+    expect(document.querySelector('[data-widget="weather"]') !== null).toBe(weatherWidget === 'on the page');
   });
 });
 
@@ -436,11 +478,43 @@ describe('the Expert preset puts the Gardens widget in the Full width (PR #300, 
     expect(headers()).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
   });
 
+  // REWRITTEN by SMA-482 (D3): the headers ended with HARVEST — the Harvest
+  // widget is on the Expert's page —; that column is withdrawn until harvest
+  // data exists (SMA-335), and MODIFIED ends them.
   it('an Expert’s STORED layout with the Gardens widget in Large keeps it: the Large table is drawn, not the Full width', async () => {
     serve('expert', 'large');
     await renderPage();
 
     expect(widget().querySelector('[data-gardens-wide]')).toBeNull();
-    expect(headers()).toEqual(['Garden', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Harvest', 'Actions']);
+    expect(headers()).toEqual(['Garden', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Modified', 'Actions']);
+  });
+});
+
+// SMA-482 (D3 — Alexandre, 26/11) — THE HARVEST COLUMN IS WITHDRAWN until
+// harvest data exists (SMA-335): it carried « Soon » on every row. In Large the
+// last column is MODIFIED, the Harvest widget on the page or not, and no size
+// of the table draws a HARVEST column.
+describe('the Gardens table has no HARVEST column until harvest data exists (SMA-482, D3)', () => {
+  it.each([
+    ['the Expert', 'on the page', 'expert'],
+    ['the Gardener', 'off the page', 'gardener'],
+  ] as const)('%s, Gardens in Large, the Harvest widget %s: the last column is MODIFIED', async (_formula, harvest, level) => {
+    serve(level, 'large');
+    await renderPage();
+
+    expect(document.querySelector('[data-widget="harvest"]') !== null).toBe(harvest === 'on the page');
+    expect(headers().slice(-2)).toEqual(['Modified', 'Actions']);
+    expect(headers()).not.toContain('Harvest');
+    // The column's one content, the « Soon » marker, went with it.
+    expect(within(widget()).queryByText('Soon')).toBeNull();
+  });
+
+  it.each(['small', 'medium', 'large', 'wide'] as const)('the Expert, Gardens in %s, the Harvest widget on the page: no HARVEST column', async (size) => {
+    serve('expert', size);
+    await renderPage();
+
+    expect(document.querySelector('[data-widget="harvest"]')).not.toBeNull();
+    expect([...widget().querySelectorAll('th')].map((th) => th.textContent)).not.toContain('Harvest');
+    expect(within(widget()).queryByText('Soon')).toBeNull();
   });
 });

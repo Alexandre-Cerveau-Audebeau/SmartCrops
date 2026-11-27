@@ -180,6 +180,12 @@ export interface PanelMeasure extends CardMeasure {
   lastRowReachable: boolean;
   /** The count group's labels drawn over more than one line — none belongs on two. */
   countWrapped: string[];
+  /**
+   * SMA-482 (D2) — the « Colonnes » section: its heading, the weather
+   * switch's label and whether it is on, and its help as the engine lays it
+   * out, line by line; null when the panel draws no such section.
+   */
+  columns: { heading: string; label: string; checked: boolean; help: string[] } | null;
 }
 
 /** One card of a grid scene: its measure, and its border box relative to the grid. */
@@ -535,12 +541,34 @@ function panelTree(scene: PanelScene, mode: 'light' | 'dark') {
               ready
               onChange={noop}
               order={data.order}
+              size={data.size}
             />
           </div>
         </Box>
       </Popover>
     </ThemeProvider>
   );
+}
+
+/**
+ * A block's text as the engine lays it out: its words grouped by the line they
+ * are drawn on, top to bottom (SMA-482 — where a line breaks, read, not
+ * guessed). One text node, the help line's own.
+ */
+function drawnLines(el: Element): string[] {
+  const text = el.firstChild;
+  if (!text || text.nodeType !== Node.TEXT_NODE) return [];
+  const lines = new Map<number, string[]>();
+  const range = document.createRange();
+  for (const word of (text.textContent ?? '').matchAll(/\S+/g)) {
+    range.setStart(text, word.index);
+    range.setEnd(text, word.index + word[0].length);
+    const rect = range.getClientRects()[0];
+    if (!rect) continue;
+    const top = Math.round(rect.top);
+    lines.set(top, [...(lines.get(top) ?? []), word[0]]);
+  }
+  return [...lines.entries()].sort(([a], [b]) => a - b).map(([, words]) => words.join(' '));
 }
 
 /** Measures a mounted panel scene: the panel's content as a card, and the Popover's paper around it. */
@@ -553,6 +581,9 @@ function measurePanel(scene: PanelScene): PanelMeasure {
   const paperRect = paper.getBoundingClientRect();
   const rows = card.querySelectorAll('[data-gardens-order] li');
   const countGroup = card.querySelector('[role="group"]');
+  // SMA-482 (D2) — the « Colonnes » section, read where the panel draws it.
+  const columnsSection = card.querySelector('[data-gardens-columns]');
+  const help = columnsSection?.querySelector('[data-gardens-columns-help]') ?? null;
   // Then, scrolled to the bottom of the paper: the last row must be reached.
   paper.scrollTop = paper.scrollHeight;
   const last = rows[rows.length - 1];
@@ -572,6 +603,14 @@ function measurePanel(scene: PanelScene): PanelMeasure {
     newChips: card.querySelectorAll('[data-gardens-order-new]').length,
     lastRowReachable,
     countWrapped: countGroup ? wrappedTexts(countGroup) : [],
+    columns: columnsSection
+      ? {
+          heading: columnsSection.querySelector('h4')?.textContent ?? '',
+          label: columnsSection.querySelector('.MuiFormControlLabel-label')?.textContent ?? '',
+          checked: columnsSection.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked ?? false,
+          help: help ? drawnLines(help) : [],
+        }
+      : null,
     ...measure,
   };
 }

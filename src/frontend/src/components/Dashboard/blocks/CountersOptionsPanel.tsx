@@ -58,10 +58,10 @@ interface Props {
  *
  * A component at module scope rather than a closure rebuilt per render (round
  * 7, S12 — Extension #6-4): it closes over nothing, and this gives the
- * 48 / 14 / 22 px geometry one owner the other panels can reuse the day they
- * gain option rows of their own.
+ * 48 / 14 / 22 px geometry one owner, which the Gardens panel's weather switch
+ * reuses since SMA-482 (D2) — the idiom of an option switch, kept in one place.
  */
-function OptionRow({
+export function OptionRow({
   icon,
   children,
 }: {

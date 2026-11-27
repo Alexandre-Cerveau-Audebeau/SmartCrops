@@ -8,6 +8,8 @@ import type { FocusMeasure } from './focusProbe';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { sizesFor } from '../fixtures/formulas';
 import type { DashboardBlockKey } from '../../types/Dashboard';
+import en from '../../i18n/en.json';
+import fr from '../../i18n/fr.json';
 import {
   IS_CI,
   buildHarness,
@@ -349,6 +351,24 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         expect(panel.paper.top + panel.paper.h, `${run.id}: the paper past the screen`).toBeLessThanOrEqual(panel.paper.viewportH);
         expect(panel.paper.scrollH, `${run.id}: the paper does not scroll`).toBeGreaterThan(panel.paper.clientH);
         expect(panel.lastRowReachable, `${run.id}: the last row out of reach`).toBe(true);
+      }
+    });
+
+    // SMA-482 (D2, V5) — the gear's « Colonnes » section, in the three panel
+    // scenes — the widget in the Expert's Full width, a size whose table has
+    // the MÉTÉO column: its heading, the weather switch ON by default, its
+    // help drawn whole; the panel's own rules above hold with it in.
+    it.each(PANEL_SCENES.map((scene) => scene.name))('%s: the « Colonnes » section — the weather switch on by default, its help drawn whole — in every run (SMA-482)', (name) => {
+      for (const run of RUNS) {
+        const texts = (run.lang === 'en' ? en : fr).dashboard.blocks.gardens.options;
+        const columns = panelOf(run, name).columns;
+        expect(columns, run.id).not.toBeNull();
+        expect({ ...columns!, help: columns!.help.join(' ') }, run.id).toEqual({
+          heading: texts.columnsSection,
+          label: texts.weatherColumn,
+          checked: true,
+          help: texts.weatherColumnHelp,
+        });
       }
     });
   });

@@ -233,7 +233,7 @@ describe('CustomizePanel — the list of the formula’s widgets (A-16)', () => 
 
     fireEvent.click(within(rowOf('stats')).getByRole('switch', { name: 'Show — Statistics' }));
     expect(reset).not.toHaveAttribute('aria-disabled');
-    expect(panel()).toHaveTextContent('Each widget’s own settings (key figures, sorts, photos) are kept.');
+    expect(panel()).toHaveTextContent('Each widget’s own settings (key figures, sorts, columns, photos) are kept.');
 
     fireEvent.click(reset);
     expect(onReset).toHaveBeenCalledTimes(1);

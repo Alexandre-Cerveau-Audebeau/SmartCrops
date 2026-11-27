@@ -564,7 +564,7 @@
       "hiddenSaid": "«\u00a0{{widget}}\u00a0» masqué.",
       "sizedSaid": "«\u00a0{{widget}}\u00a0» en {{size}}.",
       "reset": "Réinitialiser la disposition {{level}}",
-      "resetNote": "Remet les widgets de cette formule dans leur disposition de départ\u00a0: l’ordre, les tailles, ce qui est affiché. Les réglages de chaque widget (chiffres clés, tris, photos) sont conservés.",
+      "resetNote": "Remet les widgets de cette formule dans leur disposition de départ\u00a0: l’ordre, les tailles, ce qui est affiché. Les réglages de chaque widget (chiffres clés, tris, colonnes, photos) sont conservés.",
       "resetDone": "C’est déjà la disposition de départ.",
       "resetSaid": "La disposition {{level}} est rétablie.",
       "refused": "Impossible de passer en {{level}} : {{reasons, list}}",
@@ -695,7 +695,6 @@
           "occupancy": "Occupation",
           "exposure": "Exposition",
           "weather": "Météo",
-          "harvest": "Récolte",
           "modified": "Modifié",
           "actions": "Actions"
         },
@@ -751,6 +750,9 @@
             "updated": { "label": "Dernière modification", "sense": "le plus récent d’abord" },
             "custom": { "label": "Ordre personnalisé", "sense": "l’ordre que vous choisissez" }
           },
+          "columnsSection": "Colonnes",
+          "weatherColumn": "Météo de chaque jardin",
+          "weatherColumnHelp": "Affichée par défaut. Un jardin sans ville y porte « Ajouter ».",
           "orderSection_one": "Votre ordre — {{count, number}} jardin",
           "orderSection_other": "Votre ordre — {{count, number}} jardins",
           "orderHelp": "Glissez ⠿, ou utilisez ▲ ▼. Les {{count, number}} premiers sont affichés dans le widget.",

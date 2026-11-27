@@ -1560,7 +1560,7 @@ describe('Gardens table — the plan thumbnail is in the identity cell (V11)', (
     );
   });
 
-  it('at Gardener, where the HARVEST column is off', async () => {
+  it('at Gardener, in the Large', async () => {
     renderPage();
     await screen.findByText('Casa Lolo');
 
@@ -1569,11 +1569,12 @@ describe('Gardens table — the plan thumbnail is in the identity cell (V11)', (
     ).toHaveLength(1);
   });
 
-  it('at Expert too, where the HARVEST column is on', async () => {
-    // The defect, exactly: the thumbnail was tied to `!showHarvestColumn`, so
-    // it vanished the moment the Harvest widget joined the page. That condition
-    // transcribed a WIDTH arbitration of the frozen design, and V8's frozen
-    // actions column is what lifts it.
+  it('at Expert too, in the Full width', async () => {
+    // The defect, exactly, as it was: the thumbnail was tied to the HARVEST
+    // column being off, so it vanished the moment the Harvest widget joined the
+    // page. That condition transcribed a WIDTH arbitration of the frozen
+    // design, and V8's frozen actions column is what lifted it. The column
+    // itself is withdrawn since SMA-482 (D3); the thumbnail is at every formula.
     await renderExpert();
 
     expect(
@@ -2147,7 +2148,7 @@ describe('Gardens — an unreadable `updatedAt` is never displayed as « now » 
   });
 
   it('the MODIFIED column of the comparison table', async () => {
-    // Gardener: the HARVEST column is off, so MODIFIED is a column of its own.
+    // Gardener: the Large, whose last column is MODIFIED at every formula (SMA-482, D3).
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith([
         unreadable(),
@@ -2170,8 +2171,8 @@ describe('Gardens — an unreadable `updatedAt` is never displayed as « now » 
   });
 
   it('the sub-line under the name, at Expert', async () => {
-    // Expert: the HARVEST column is on, and « Modified … » moves under the
-    // garden's name (round 4, A5) — the third display site.
+    // Expert: the Full width, whose table has no MODIFIED column — « Modified
+    // … » sits under the garden's name (round 4, A5) — the third display site.
     vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([unreadable()]));
 
     await renderExpert();

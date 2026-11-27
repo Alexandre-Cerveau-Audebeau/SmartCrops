@@ -564,7 +564,7 @@
       "hiddenSaid": "“{{widget}}” hidden.",
       "sizedSaid": "“{{widget}}” set to {{size}}.",
       "reset": "Reset the {{level}} layout",
-      "resetNote": "Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, photos) are kept.",
+      "resetNote": "Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, columns, photos) are kept.",
       "resetDone": "This is already the starting layout.",
       "resetSaid": "The {{level}} layout is restored.",
       "refused": "Can’t switch to {{level}}: {{reasons, list}}",
@@ -695,7 +695,6 @@
           "occupancy": "Occupancy",
           "exposure": "Exposure",
           "weather": "Weather",
-          "harvest": "Harvest",
           "modified": "Modified",
           "actions": "Actions"
         },
@@ -751,6 +750,9 @@
             "updated": { "label": "Last modified", "sense": "the most recent first" },
             "custom": { "label": "Custom order", "sense": "the order you choose" }
           },
+          "columnsSection": "Columns",
+          "weatherColumn": "Weather of each garden",
+          "weatherColumnHelp": "Shown by default. A garden with no city carries “Add” there.",
           "orderSection_one": "Your order — {{count, number}} garden",
           "orderSection_other": "Your order — {{count, number}} gardens",
           "orderHelp": "Drag ⠿, or use ▲ ▼. The first {{count, number}} are shown in the widget.",

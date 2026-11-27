@@ -12,12 +12,13 @@ import { formatPercent, formatSurface } from '../../../utils/formatNumber';
 import { formatRelativeDate } from '../../../utils/formatRelativeDate';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import GardensBlock, { type GardensWeather } from './GardensBlock';
+import { drawsWeatherColumn } from './gardensOptions';
 
 // SMA-448, lot F5-b — THE FULL WIDTH of the Gardens widget, the Expert's (V3-03
 // § 1, V3-04 § 4; contract v3 § 4.7 a; pre-flight F5 § C.4, retained by
 // Alexandre on 28/09): the seven-column table — JARDIN, TYPE, PLANTES,
-// OCCUPATION, EXPOSITION, MÉTÉO when the Weather widget is on the page (V23),
-// the actions — with NO MODIFIÉ column (the modification is in the identity
+// OCCUPATION, EXPOSITION, MÉTÉO unless the widget's own option turns it off
+// (SMA-482), the actions — with NO MODIFIÉ column (the modification is in the identity
 // sub-line) and NO RÉCOLTE column; the settings of lot F5-a (the cap, « + N
 // autres jardins » unfolding in place, the search, the sort in the foot) hold
 // in it; on a phone, the rows of the A9 form rather than a table.
@@ -33,14 +34,19 @@ const lyon = (list: readonly DashboardGardenData[]): GardensWeather => ({
 
 interface RenderOptions {
   gardens?: readonly DashboardGardenData[];
-  showWeatherColumn?: boolean;
-  showHarvestColumn?: boolean;
   options?: Record<string, unknown> | null;
   /** The Full width unless said — the Large for what the two sizes share. */
   size?: 'large' | 'wide';
 }
 
-function renderWide({ gardens = sceneGardens, showWeatherColumn = true, showHarvestColumn = false, options = null, size = 'wide' }: RenderOptions = {}) {
+/**
+ * The widget as the page hands it. REWRITTEN by SMA-482 (D1): the MÉTÉO
+ * column was a prop of its own, « the Weather widget on the page »; it is
+ * read here as the page reads it — `drawsWeatherColumn`, the widget's own
+ * size and options. The HARVEST column it could also switch on is withdrawn
+ * (SMA-482, D3), and its prop with it.
+ */
+function renderWide({ gardens = sceneGardens, options = null, size = 'wide' }: RenderOptions = {}) {
   localStorage.setItem('smartcrops-language', 'en');
   render(
     <ThemeProvider theme={createTheme()}>
@@ -52,8 +58,7 @@ function renderWide({ gardens = sceneGardens, showWeatherColumn = true, showHarv
               gardens={[...gardens]}
               loading={false}
               loadError={false}
-              showWeatherColumn={showWeatherColumn}
-              showHarvestColumn={showHarvestColumn}
+              showWeatherColumn={drawsWeatherColumn({ size, options })}
               weather={lyon(gardens)}
               onLocate={() => {}}
               onCreateClick={() => {}}
@@ -109,19 +114,35 @@ afterEach(() => {
 });
 
 describe('GardensBlock in the Full width — the seven columns (SMA-448, lot F5-b; C.4)', () => {
-  it('draws JARDIN, TYPE, PLANTES, OCCUPATION, EXPOSITION, MÉTÉO and the actions — no MODIFIÉ column, no RÉCOLTE column even with the Harvest widget on the page', () => {
-    const card = renderWide({ showHarvestColumn: true });
+  // REWRITTEN by SMA-482 (D3): « … no RÉCOLTE column even with the Harvest
+  // widget on the page » — the prop that drew it in Large is gone, and the
+  // column with it, at every size.
+  it('draws JARDIN, TYPE, PLANTES, OCCUPATION, EXPOSITION, MÉTÉO and the actions — no MODIFIÉ column, no RÉCOLTE column', () => {
+    const card = renderWide();
 
     expect(headers(card)).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Weather', 'Actions']);
     expect(rowNames(card)).toEqual(['Terrasse', 'Balcon sud', 'Potager du fond']);
     expect(card.querySelector('table')).toHaveAttribute('aria-label', 'Gardens');
   });
 
-  it('the MÉTÉO column follows the Weather widget (V23): absent when it is off the page', () => {
-    const card = renderWide({ showWeatherColumn: false });
+  // REWRITTEN by SMA-482 (D1): « the MÉTÉO column follows the Weather widget
+  // (V23): absent when it is off the page ». It is the widget's own setting.
+  it('the MÉTÉO column is the widget’s own setting (SMA-482): its option off, six columns and no cell — its count and sort untouched', () => {
+    const card = renderWide({ gardens: gardensTwelve, options: { weather: false, count: 5, sort: 'name' } });
 
     expect(headers(card)).toEqual(['Garden', 'Type', 'Plants', 'Occupancy', 'Exposure', 'Actions']);
     expect(card.querySelector('[data-weather-column]')).toBeNull();
+    expect(rowNames(card)).toEqual(['Bac à fleurs', 'Balcon sud', 'Carré aromatique', 'Grand verger', 'Haie fruitière']);
+  });
+
+  it('the option off, on a phone: no weather chip on the rows (SMA-482)', () => {
+    stubPhone();
+    const card = renderWide({ options: { weather: false } });
+
+    const chips = card.querySelector('[data-garden-row] [data-garden-row-chips]') as HTMLElement;
+    expect(within(chips).getByText('21 plants')).toBeInTheDocument();
+    expect(within(chips).queryByText('24°')).toBeNull();
+    expect(card.querySelector('[data-weather-cell]')).toBeNull();
   });
 
   it('the identity cell: the name as the door to the garden, the sub-line « 10 × 8 · 50 cm · 20 m² · modified … », the description on its own truncated line (V33), the thumbnail and « Ornamental » — the type chip has its own column', () => {

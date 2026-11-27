@@ -1091,7 +1091,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     await waitFor(() => expect(reset).not.toHaveAttribute('aria-disabled'));
     expect(
       within(screen.getByRole('dialog', { name: 'Customize' })).getByText(
-        'Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, photos) are kept.'
+        'Puts this formula’s widgets back in their starting layout: the order, the sizes, what is shown. Each widget’s own settings (key figures, sorts, columns, photos) are kept.'
       )
     ).toBeInTheDocument();
 
@@ -1678,8 +1678,12 @@ describe('GardensDashboard — no widget draws outside its card (V7)', () => {
 // the grid », line 189, and the span assertion's wait, line 822); the third is
 // scoped to the Customize drawer, which the table is not part of, so it stays
 // as it is.
-describe('GardensDashboard — Weather and Harvest name two things each (E″7)', () => {
-  it('at Expert, the widget and the table column carry the same words', async () => {
+//
+// REWRITTEN by SMA-482 (D3): RÉCOLTE was the second of the two words — the
+// table's HARVEST column is withdrawn until harvest data exists (SMA-335), so
+// « Harvest » names the widget alone now. « Weather » still names two things.
+describe('GardensDashboard — Weather names two things, and Harvest one since SMA-482 (E″7)', () => {
+  it('at Expert, the widget and the table column carry the same word, Weather — Harvest is the widget’s heading alone', async () => {
     // The Gardens widget in LARGE, the table whose columns reuse the widget
     // titles: the Expert preset puts it in the Full width since PR #300 (fix
     // round 1, P1), whose seven columns carry no RÉCOLTE (C.4).
@@ -1694,14 +1698,12 @@ describe('GardensDashboard — Weather and Harvest name two things each (E″7)'
     const gardensWidget = () =>
       document.querySelector('[data-widget="gardens"]') as HTMLElement;
 
-    // Harvest: one heading, one column header — a text query would have to
-    // choose. The role narrows it to the widget, which is what those tests
-    // mean, and the second occurrence really is the table's column header.
-    expect(screen.getAllByText('Harvest')).toHaveLength(2);
+    // Harvest: the widget's heading, and no column header any more — the
+    // Large table of the Expert, the Harvest widget on the page, ends on
+    // MODIFIED (SMA-482, D3).
+    expect(screen.getAllByText('Harvest')).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 2, name: 'Harvest' })).toBeInTheDocument();
-    const harvestHeader = within(gardensWidget()).getByText('Harvest');
-    expect(harvestHeader.tagName).toBe('TH');
-    expect(harvestHeader).toHaveAttribute('scope', 'col');
+    expect(within(gardensWidget()).queryByText('Harvest')).toBeNull();
 
     // Weather, since PR 3b/5 (Q1): the widget is a REGION named « Weather »
     // (or by its place once located), with no h2 — so the word appears as
