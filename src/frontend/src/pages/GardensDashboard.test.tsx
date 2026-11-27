@@ -22,6 +22,7 @@ import type {
   DashboardVarietyData,
 } from '../types/DashboardData';
 import { declaredAtBreakpoint, emittedRules, gridNode, rulesFor, slotOf } from '../test/dashboardDom';
+import { hold } from '../test/responses';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -542,11 +543,14 @@ describe('GardensDashboard — page states (SMA-336)', () => {
       );
     servePreferences('gardener');
 
+    // The layout HELD, then landed inside `act` — the aggregate's failure lands
+    // with it —: the errors are read without a wait.
+    const landLayout = hold(fetchDashboardPreferences);
     renderPage();
+    await landLayout();
     const counters = () =>
       within(document.querySelector('[data-widget="counters"]') as HTMLElement);
     // Three widgets, three Retry buttons: the Counters one is the witness.
-    await screen.findAllByRole('button', { name: 'Try again' }, { timeout: 10000 });
     const button = counters().getByRole('button', { name: 'Try again' });
     expect(button).toBeEnabled();
 

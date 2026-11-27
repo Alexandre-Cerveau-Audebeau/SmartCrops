@@ -10,7 +10,7 @@ import { dashboardFixture } from '../test/fixtures/dashboard';
 import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { gardens as sceneGardens, varieties as sceneVarieties, weatherAll } from '../test/layout/scenes';
 import { rulesFor } from '../test/dashboardDom';
-import { deferred } from '../test/responses';
+import { deferred, hold } from '../test/responses';
 import type { DashboardBlock, DashboardLevel, FormulasCatalog } from '../types/Dashboard';
 import type { DashboardData } from '../types/DashboardData';
 import type { DashboardWeatherData } from '../types/DashboardWeather';
@@ -315,8 +315,42 @@ function serveFormulas(formula: DashboardLevel, blocks: DashboardBlock[] | null)
 const renderedKeys = () =>
   [...document.querySelectorAll('[data-widget]')].map((node) => node.getAttribute('data-widget'));
 
-/** The SMA-174 patience for a switch's round trips under the whole suite's load, below the 20 s test timeout. */
-const PATIENCE = { timeout: 10000 };
+const CHOOSER = { name: 'Choose your formula' };
+/** MUI keeps a closing dialog mounted for its exit transition (195 ms): past it, in simulated time. */
+const PAST_THE_EXIT = 400;
+
+/**
+ * The page, its layout read HELD, then landed inside `act` (SMA-452): the
+ * gardens and the weather land with it, and what follows reads a loaded page
+ * — synchronously, without a bound.
+ */
+async function renderLoaded() {
+  const landLayout = hold(fetchDashboardPreferences);
+  const view = renderPage();
+  await landLayout();
+  return view;
+}
+
+/** The chooser opened from `door`, there at once — its catalogue HELD, then landed inside `act`. */
+async function openChooserFrom(door: HTMLElement, name = CHOOSER.name) {
+  const landCatalogue = hold(fetchFormulas);
+  fireEvent.click(door);
+  const dialog = screen.getByRole('dialog', { name });
+  await landCatalogue();
+  return dialog;
+}
+
+/**
+ * From here the time of a dialog's exit is ADVANCED, never waited:
+ * `setTimeout` and `clearTimeout` are simulated once the page is up — no
+ * `findBy`, no `waitFor` after it —, and `Date` stays frozen where the suite
+ * froze it.
+ */
+const simulateTheClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+const pastTheExit = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(PAST_THE_EXIT);
+  });
 
 // SMA-448, lot F2, N3 — A NOVICE IS NEVER TRAPPED. The Novice page has no
 // « Personnaliser », and the panel was the one door to another formula: until
@@ -331,17 +365,16 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
   const chooser = () => screen.getByRole('dialog', { name: 'Choose your formula' });
 
   it('the chip is a button — « Novice view — change formula », a dialog behind it — that opens the three offers, the current one « Your formula »', async () => {
-    renderPage();
+    await renderLoaded();
 
-    const button = await screen.findByRole('button', { name: 'Novice view — change formula' });
+    const button = screen.getByRole('button', { name: 'Novice view — change formula' });
     expect(button).toHaveAttribute('aria-haspopup', 'dialog');
-    fireEvent.click(button);
 
-    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    const dialog = await openChooserFrom(button);
     // The choice screen of V3-01 (lot F3, L5) in place of the provisional
     // radios: the three offers, the current one « Your formula » with
     // « Keep », the others « Choose » — the same wiring behind.
-    expect(await within(dialog).findByRole('button', { name: 'Keep Novice' }, PATIENCE)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Keep Novice' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Choose Gardener' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Choose Expert' })).toBeInTheDocument();
     expect(within(dialog).getByText('Your formula')).toBeInTheDocument();
@@ -361,31 +394,31 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
       updatedAt: null,
     });
     vi.mocked(fetchFormulas).mockResolvedValue(catalogFor('gardener', { gardenCount: 3 }));
-    renderPage();
+    await renderLoaded();
 
-    expect(await screen.findByText('Gardener view')).toBeInTheDocument();
+    expect(screen.getByText('Gardener view')).toBeInTheDocument();
     const chip = screen.getByRole('button', { name: 'Gardener view — change formula' });
     expect(chip).toHaveAttribute('aria-haspopup', 'dialog');
-    fireEvent.click(chip);
-    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
-    expect(await within(dialog).findByRole('button', { name: 'Keep Gardener' }, PATIENCE)).toBeInTheDocument();
+    const dialog = await openChooserFrom(chip);
+    expect(within(dialog).getByRole('button', { name: 'Keep Gardener' })).toBeInTheDocument();
   });
 
   it('closing the chooser changes nothing: the page stays the Novice page, the focus back on the chip', async () => {
-    renderPage();
-    const button = await screen.findByRole('button', { name: 'Novice view — change formula' });
+    await renderLoaded();
+    const button = screen.getByRole('button', { name: 'Novice view — change formula' });
     // As a keyboard does — jsdom, like some browsers, gives a clicked button
     // no focus of its own.
     button.focus();
-    fireEvent.click(button);
-    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    const dialog = await openChooserFrom(button);
 
+    simulateTheClock();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close without changing formula' }));
+    await pastTheExit();
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    expect(screen.queryByRole('dialog', CHOOSER)).toBeNull();
     expect(changeFormula).not.toHaveBeenCalled();
     expect(cards()).toHaveLength(3);
-    await waitFor(() => expect(document.activeElement).toBe(chip()));
+    expect(document.activeElement).toBe(chip());
   });
 
   it('choosing Gardener switches the formula on the server — writing no layout, a Novice has none — and the page becomes the grid, with the Gardener’s own layout back: nothing lost (V4)', async () => {
@@ -396,29 +429,34 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
     arranged.find((block) => block.key === 'tips')!.size = 'small';
     const server = serveFormulas('novice', null);
     server.archive.set('gardener', arranged);
-    renderPage();
-    await waitFor(() => expect(cards()).toHaveLength(3));
-    fireEvent.click(chip());
-    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    await renderLoaded();
+    expect(cards()).toHaveLength(3);
+    const dialog = await openChooserFrom(chip());
 
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Gardener' }, PATIENCE));
+    // The switch HELD, then landed inside `act` — the layout read back behind
+    // it lands there too —, and the chooser's exit ADVANCED.
+    const landSwitch = hold(changeFormula);
+    simulateTheClock();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choose Gardener' }));
+    await landSwitch();
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(6), PATIENCE);
+    expect(renderedKeys()).toHaveLength(6);
     expect(renderedKeys().slice(0, 2)).toEqual(['gardens', 'weather']);
     expect(cards()).toHaveLength(0);
     expect(server.formula).toBe('gardener');
     expect(changeFormula).toHaveBeenCalledWith('gardener');
     // A Novice has no layout to write before the switch: nothing was sent.
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', CHOOSER)).toBeNull();
     // The Gardener's chip — « · adjusted », its layout being rearranged —
     // a button still (lot F3, L6): the door of every formula.
-    expect(await screen.findByText('Gardener view · adjusted', {}, PATIENCE)).toBeInTheDocument();
+    expect(screen.getByText('Gardener view · adjusted')).toBeInTheDocument();
     const chipAfter = screen.getByRole('button', { name: 'Gardener view — change formula' });
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     // The chip the chooser was opened from is still there: the focus returns
     // to it (contract v3 § 4.1) — never to the body.
-    await waitFor(() => expect(document.activeElement).toBe(chipAfter), PATIENCE);
+    expect(document.activeElement).toBe(chipAfter);
   });
 
   it('a formula the server refuses is said in the chooser, with each reason served — the formula stays, the chip stays a button, the indicator says nothing false', async () => {
@@ -430,13 +468,15 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
         reasons: [{ kind: 'gardens', have: 12, limit: 10 }],
       })
     );
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    await renderLoaded();
+    const dialog = await openChooserFrom(chip());
 
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Gardener' }, PATIENCE));
+    // The refusal HELD, then landed inside `act`: what it says is read without a wait.
+    const refuse = hold(changeFormula);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choose Gardener' }));
+    await refuse();
 
-    const said = await within(dialog).findByText('Can’t switch to Gardener: 12 gardens for 10 at most');
+    const said = within(dialog).getByText('Can’t switch to Gardener: 12 gardens for 10 at most');
     expect(said).toHaveAttribute('role', 'status');
     expect(said).toHaveAttribute('aria-live', 'polite');
     expect(within(dialog).getByRole('button', { name: 'Keep Novice' })).toBeInTheDocument();
@@ -476,24 +516,32 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
 
   it('a switch whose layout cannot be read back closes the chooser on the load error and its retry — the focus on « Try again » — and the retry brings the new formula', async () => {
     serveFormulas('novice', null);
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    await renderLoaded();
+    const dialog = await openChooserFrom(chip());
     vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
 
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Expert' }, PATIENCE));
+    // The switch HELD, then landed inside `act` — the read back that fails
+    // lands behind it —, and the chooser's exit ADVANCED.
+    const landSwitch = hold(changeFormula);
+    simulateTheClock();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choose Expert' }));
+    await landSwitch();
 
-    expect(await screen.findByText('Couldn’t load your dashboard.', {}, PATIENCE)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    expect(screen.getByText('Couldn’t load your dashboard.')).toBeInTheDocument();
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', CHOOSER)).toBeNull();
     const retry = screen.getByRole('button', { name: 'Try again' });
-    await waitFor(() => expect(document.activeElement).toBe(retry), PATIENCE);
+    expect(document.activeElement).toBe(retry);
     expect(screen.queryByText('Changes not saved')).toBeNull();
 
+    // The retry's read HELD, then landed inside `act`.
+    const landRetry = hold(fetchDashboardPreferences);
     fireEvent.click(retry);
+    await landRetry();
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(9), PATIENCE);
-    expect(await screen.findByText('Expert view', {}, PATIENCE)).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull();
+    expect(renderedKeys()).toHaveLength(9);
+    expect(screen.getByText('Expert view')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', CHOOSER)).toBeNull();
   });
 
   it('the foot of the page says what the Gardener formula adds, and its link opens the same chooser', async () => {
@@ -520,11 +568,13 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
         reasons: [{ kind: 'gardens', have: 12, limit: 10 }],
       })
     );
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Vue Novice — changer de formule' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Choisissez votre formule' });
+    await renderLoaded();
+    const dialog = await openChooserFrom(screen.getByRole('button', { name: 'Vue Novice — changer de formule' }), 'Choisissez votre formule');
 
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choisir Jardinier' }, PATIENCE));
+    // The refusal HELD, then landed inside `act`: what it says is read without a wait.
+    const refuse = hold(changeFormula);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choisir Jardinier' }));
+    await refuse();
 
     expect(await within(dialog).findByText('Impossible de passer en Jardinier : 12 jardins pour 10 au plus')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Passer à la formule Jardinier →', hidden: true })).toBeInTheDocument();
@@ -660,41 +710,34 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
   });
 
   it('Escape closes the chooser — and does nothing while a switch is on the wire, when the choice takes no gesture (S5)', async () => {
-    let release!: () => void;
-    const server = serveFormulas('novice', null);
-    // Installed AFTER `serveFormulas`'s own mock — the one the switch on the
-    // wire waits on (fix round 2, U1: a first mock, overwritten twice before
-    // any call, is gone).
-    vi.mocked(changeFormula).mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          release = () => {
-            server.formula = 'expert';
-            resolve();
-          };
-        })
-    );
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
+    serveFormulas('novice', null);
+    await renderLoaded();
+    const dialog = await openChooserFrom(screen.getByRole('button', { name: 'Novice view — change formula' }));
+    // From here every exit of the chooser is ADVANCED, never waited.
+    simulateTheClock();
 
     fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', CHOOSER)).toBeNull();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const reopened = await screen.findByRole('dialog', { name: 'Choose your formula' });
-    fireEvent.click(await within(reopened).findByRole('button', { name: 'Choose Expert' }, PATIENCE));
-    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+    const reopened = await openChooserFrom(screen.getByRole('button', { name: 'Novice view — change formula' }));
+    // The switch on the wire, HELD: its request leaves one step after the
+    // gesture — an `act` flushes that step.
+    const landSwitch = hold(changeFormula);
+    fireEvent.click(within(reopened).getByRole('button', { name: 'Choose Expert' }));
+    await act(async () => {});
+    expect(changeFormula).toHaveBeenCalledWith('expert');
     for (const name of ['Keep Novice', 'Choose Gardener', 'Choose Expert']) {
       expect(within(reopened).getByRole('button', { name })).toBeDisabled();
     }
     expect(within(reopened).getByRole('button', { name: 'Close without changing formula' })).toBeDisabled();
     fireEvent.keyDown(reopened, { key: 'Escape', code: 'Escape' });
-    expect(screen.getByRole('dialog', { name: 'Choose your formula' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', CHOOSER)).toBeInTheDocument();
 
-    release();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
-    expect(await screen.findByText('Expert view', {}, PATIENCE)).toBeInTheDocument();
+    await landSwitch();
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', CHOOSER)).toBeNull();
+    expect(screen.getByText('Expert view')).toBeInTheDocument();
   });
 
   it('opens the rename and the delete dialogs from a card, and gives the focus back to the button they were opened from', async () => {

@@ -7,6 +7,7 @@ import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
+import { hold } from '../test/responses';
 import {
   dashboardFixture,
   gardenFixture,
@@ -164,20 +165,25 @@ function renderPage() {
   );
 }
 
-/** The same allowance `GardensDashboard.edit.test.tsx` gives its own helper. */
-const RENDER_TIMEOUT = { timeout: 10000 };
+/**
+ * The page in Edit mode, without a wait (SMA-452): its layout read is HELD,
+ * then landed inside `act`. `GardensDashboard` renders Edit
+ * `disabled={loading || loadError}` — a click before the layout landed is
+ * swallowed and « Done » never arrives —, so the button is read ENABLED once
+ * the layout is in, and « Done » the moment it is pressed.
+ */
+async function enterEditMode() {
+  const landLayout = hold(fetchDashboardPreferences);
+  renderPage();
+  await landLayout();
+  const edit = screen.getByRole('button', { name: 'Edit' });
+  expect(edit).toBeEnabled();
+  fireEvent.click(edit);
+  expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+}
 
 async function openCountersOptions() {
-  renderPage();
-  const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-  // ENABLED, not merely present (round 1, E17 — the same trap round 3 of PR ①
-  // caught in `edit.test.tsx`). `GardensDashboard` renders Edit
-  // `disabled={loading || loadError}`, so `findByRole` can hand back a button
-  // that is still disabled: the click is swallowed, « Done » never arrives, and
-  // the failure reads as a bare timeout that names nothing.
-  await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
-  fireEvent.click(edit);
-  await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+  await enterEditMode();
   fireEvent.click(
     screen.getByRole('button', { name: 'Counts by variety options' })
   );
@@ -215,12 +221,7 @@ describe('the Counters widget options (artboard A8)', () => {
   });
 
   it('a widget with no settings still says so', async () => {
-    renderPage();
-    // Same enabled-state wait as the helper above (round 1, E17).
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
-    fireEvent.click(edit);
-    await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    await enterEditMode();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
 
@@ -393,11 +394,7 @@ describe('the widget settings surface is a Popover, not a Menu (round 1, G6)', (
   });
 
   it('opens from the keyboard and gives the focus to its content', async () => {
-    renderPage();
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
-    fireEvent.click(edit);
-    await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    await enterEditMode();
 
     const gear = screen.getByRole('button', { name: 'Counts by variety options' });
     gear.focus();
@@ -412,11 +409,7 @@ describe('the widget settings surface is a Popover, not a Menu (round 1, G6)', (
     // The gear is captured BEFORE the panel opens: `Popover` is a Modal, so it
     // marks the rest of the document `aria-hidden` while it is up and the
     // button is no longer reachable by role.
-    renderPage();
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
-    fireEvent.click(edit);
-    await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    await enterEditMode();
     const gear = screen.getByRole('button', { name: 'Counts by variety options' });
 
     // Focused first, the way a browser focuses a button it is given a click on

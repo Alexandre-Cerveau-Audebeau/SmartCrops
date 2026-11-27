@@ -220,8 +220,10 @@ describe('GardenPlanner render budget when arming a catalogue plant (SMA-423)', 
     probe.reset();
     renderPlanner();
     await screen.findByRole('grid');
-    await screen.findByText('Plante 535', {}, { timeout: 15000 });
+    // The catalogue's answer and its 535 rows, flushed inside `act` — a cost,
+    // never a wait —, then read at once.
     await act(async () => {});
+    expect(screen.getByText('Plante 535')).toBeInTheDocument();
 
     // The probe must see the whole catalogue and the whole grid at mount —
     // otherwise the budgets below would pass for the wrong reason.

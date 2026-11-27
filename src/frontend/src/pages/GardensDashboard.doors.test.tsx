@@ -7,7 +7,7 @@ import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture } from '../test/fixtures/dashboard';
 import { weatherFixture } from '../test/fixtures/weather';
-import { deferred } from '../test/responses';
+import { deferred, hold } from '../test/responses';
 import type { DashboardLevel, DashboardPreferences, FormulasCatalog } from '../types/Dashboard';
 
 vi.mock('../services/gardenApi', () => ({
@@ -60,8 +60,9 @@ import { HttpStatusError } from '../services/httpStatusError';
 // and none of them changes the formula itself: the server is called from the
 // screen's buttons, nowhere else.
 
-const PATIENCE = { timeout: 10000 };
 const CHOICE = { name: 'Choose your formula' };
+/** MUI keeps a closing dialog mounted for its exit transition (195 ms): past it, in simulated time. */
+const PAST_THE_EXIT = 400;
 
 function serve(level: DashboardLevel, gardenCount = 2) {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
@@ -90,13 +91,36 @@ function renderPage(state: { formulas?: boolean } | null = null) {
   );
 }
 
-/** The screen open, the server untouched: a door, not a switch. */
-async function expectTheScreenOpenAndNothingSwitched() {
-  const dialog = await screen.findByRole('dialog', CHOICE, PATIENCE);
-  expect(await within(dialog).findAllByRole('button', { name: /^(Choose|Keep) / }, PATIENCE)).toHaveLength(3);
+/**
+ * The page, its layout read HELD, then landed inside `act` (SMA-452): what
+ * follows reads a loaded page — synchronously, without a bound.
+ */
+async function renderLoaded(state: { formulas?: boolean } | null = null) {
+  const landLayout = hold(fetchDashboardPreferences);
+  renderPage(state);
+  await landLayout();
+}
+
+/**
+ * A door, opened: the screen is there at once, and the server untouched — a
+ * door, not a switch. The catalogue the screen reads as it mounts is HELD,
+ * then landed inside `act`: its three offers are read without a wait.
+ */
+async function expectTheDoorOpensTheScreen(open: () => unknown) {
+  const landCatalogue = hold(fetchFormulas);
+  await open();
+  const dialog = screen.getByRole('dialog', CHOICE);
+  await landCatalogue();
+  expect(within(dialog).getAllByRole('button', { name: /^(Choose|Keep) / })).toHaveLength(3);
   expect(changeFormula).not.toHaveBeenCalled();
   return dialog;
 }
+
+/** The time of a dialog's exit, ADVANCED inside `act` — never waited. */
+const pastTheExit = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(PAST_THE_EXIT);
+  });
 
 beforeEach(() => {
   localStorage.setItem('smartcrops-language', 'en');
@@ -120,6 +144,8 @@ afterEach(() => {
   // and the page sends its pending layout save as it unmounts — cleared first,
   // the mocks would record that write for the next test.
   cleanup();
+  // The clock a test simulated once its page was up: real again, after the unmount.
+  vi.useRealTimers();
   vi.clearAllMocks();
   localStorage.clear();
 });
@@ -127,21 +153,17 @@ afterEach(() => {
 describe('every door leads to the choice screen, and none changes the formula itself (SMA-448, PR #297, fix round 1, A1)', () => {
   it.each(['novice', 'gardener', 'expert'] as const)('%s: the chip of the header', async (level) => {
     serve(level);
-    renderPage();
+    await renderLoaded();
     const name = { novice: 'Novice', gardener: 'Gardener', expert: 'Expert' }[level];
 
-    fireEvent.click(await screen.findByRole('button', { name: `${name} view — change formula` }, PATIENCE));
-
-    await expectTheScreenOpenAndNothingSwitched();
+    await expectTheDoorOpensTheScreen(() => fireEvent.click(screen.getByRole('button', { name: `${name} view — change formula` })));
   });
 
   it('the Novice page’s foot link', async () => {
     serve('novice', 1);
-    renderPage();
+    await renderLoaded();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Switch to the Gardener formula →' }, PATIENCE));
-
-    await expectTheScreenOpenAndNothingSwitched();
+    await expectTheDoorOpensTheScreen(() => fireEvent.click(screen.getByRole('button', { name: 'Switch to the Gardener formula →' })));
   });
 
   it('« See the formulas » of a creation the limit refused', async () => {
@@ -149,31 +171,32 @@ describe('every door leads to the choice screen, and none changes the formula it
     vi.mocked(createGarden).mockRejectedValue(
       new HttpStatusError('Request failed (403)', 403, { status: 403, code: 'formula.gardenLimit', formula: 'novice', limit: 3, current: 3 })
     );
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Create Garden' }, PATIENCE));
-    const creation = await screen.findByRole('dialog', { name: 'Create a new garden' });
+    await renderLoaded();
+    // The header's « Create Garden »: a page without a garden draws a second one, in its invitation.
+    fireEvent.click(within(document.querySelector('[data-dashboard-actions]') as HTMLElement).getByRole('button', { name: 'Create Garden' }));
+    const creation = screen.getByRole('dialog', { name: 'Create a new garden' });
     fireEvent.change(within(creation).getByLabelText(/Name/), { target: { value: 'Quatrième' } });
+    // The creation HELD, then refused inside `act`: the refusal and its link are read without a wait.
+    const refuse = hold(createGarden);
     fireEvent.click(within(creation).getByRole('button', { name: 'Create' }));
+    await refuse();
 
-    fireEvent.click(await within(creation).findByRole('button', { name: 'See the formulas' }, PATIENCE));
-
-    await expectTheScreenOpenAndNothingSwitched();
+    await expectTheDoorOpensTheScreen(() => fireEvent.click(within(creation).getByRole('button', { name: 'See the formulas' })));
   });
 
   it('the planner’s « See the formulas », which arrives here with the formulas in its state', async () => {
     serve('novice', 1);
-    renderPage({ formulas: true });
 
-    await expectTheScreenOpenAndNothingSwitched();
+    await expectTheDoorOpensTheScreen(() => renderLoaded({ formulas: true }));
   });
 
   it.each(['gardener', 'expert'] as const)('%s: the Customize panel holds no choice of formula — its « Change formula » link opens the screen, and the focus returns to the link when the screen closes', async (level) => {
     serve(level);
-    renderPage();
-    const customize = await screen.findByRole('button', { name: 'Customize' }, PATIENCE);
-    await waitFor(() => expect(customize).toBeEnabled());
+    await renderLoaded();
+    const customize = screen.getByRole('button', { name: 'Customize' });
+    expect(customize).toBeEnabled();
     fireEvent.click(customize);
-    const panel = await screen.findByRole('dialog', { name: 'Customize' }, PATIENCE);
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
 
     // No level to choose, anywhere in the panel: the formula is named, not chosen, here.
     expect(within(panel).queryAllByRole('radio')).toEqual([]);
@@ -183,33 +206,42 @@ describe('every door leads to the choice screen, and none changes the formula it
     expect(link).toHaveAttribute('aria-haspopup', 'dialog');
 
     link.focus();
-    fireEvent.click(link);
-    const dialog = await expectTheScreenOpenAndNothingSwitched();
+    const dialog = await expectTheDoorOpensTheScreen(() => fireEvent.click(link));
+    // The screen leaves on MUI's exit transition: from here its time is
+    // ADVANCED, never waited — only `setTimeout` and `clearTimeout` are
+    // simulated, once the page is up (no `findBy`, no `waitFor` after it).
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close without changing formula' }));
+    await pastTheExit();
 
-    await waitFor(() => expect(screen.queryByRole('dialog', CHOICE)).toBeNull(), PATIENCE);
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Customize' })).toBeInTheDocument();
-    await waitFor(() => expect(document.activeElement).toBe(link), PATIENCE);
+    expect(document.activeElement).toBe(link);
   });
 
   it('the screen is the one place that switches: from the panel’s link, choosing Expert calls the server once, the page becomes the Expert’s, the panel still open on it', async () => {
     serve('gardener');
-    renderPage();
-    const customize = await screen.findByRole('button', { name: 'Customize' }, PATIENCE);
-    await waitFor(() => expect(customize).toBeEnabled());
+    await renderLoaded();
+    const customize = screen.getByRole('button', { name: 'Customize' });
+    expect(customize).toBeEnabled();
     fireEvent.click(customize);
-    const panel = await screen.findByRole('dialog', { name: 'Customize' }, PATIENCE);
-    fireEvent.click(within(panel).getByRole('button', { name: 'Change formula' }));
-    const dialog = await expectTheScreenOpenAndNothingSwitched();
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
+    const dialog = await expectTheDoorOpensTheScreen(() => fireEvent.click(within(panel).getByRole('button', { name: 'Change formula' })));
     // What the server holds once the account is Expert.
     serve('expert');
 
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Expert' }, PATIENCE));
+    // The switch HELD, then landed inside `act` — the layout read back behind
+    // it lands there too —, and the screen's exit ADVANCED, never waited.
+    const landSwitch = hold(changeFormula);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choose Expert' }));
+    await landSwitch();
 
-    await waitFor(() => expect(changeFormula).toHaveBeenCalledTimes(1));
+    expect(changeFormula).toHaveBeenCalledTimes(1);
     expect(changeFormula).toHaveBeenCalledWith('expert');
-    await waitFor(() => expect(screen.queryByRole('dialog', CHOICE)).toBeNull(), PATIENCE);
-    expect(await screen.findByText('Expert view', {}, PATIENCE)).toBeInTheDocument();
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
+    expect(screen.getByText('Expert view')).toBeInTheDocument();
     expect(within(screen.getByRole('dialog', { name: 'Customize' })).getByText('Expert')).toBeInTheDocument();
   });
 });
