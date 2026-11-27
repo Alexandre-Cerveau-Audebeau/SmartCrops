@@ -331,3 +331,102 @@ describe('a tab whose formula changed on another device (SMA-437, review of the 
     expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
   });
 });
+
+// SMA-452 — THE REAL CHAIN of the stale refusal. Every test above answers the
+// layout's write with an `HttpStatusError` built by hand, so nothing between
+// the wire and the hook is exercised by them: `saveDashboardPreferences`,
+// `fetchJson` reading an `application/problem+json` body into
+// `HttpStatusError.problem`, and `isStaleFormulaRefusal` reading its code.
+// Here the two services of the layout are the real ones and only `fetch` is
+// simulated: it answers what the server answers (`FormulaRefusals.Stale` —
+// the document `DashboardPreferencesControllerTests` pins on the real one: a
+// 409, its title, its code and the account's formula).
+describe('the stale refusal through the real chain: fetch, fetchJson, the problem document, the predicate, the re-read (SMA-452)', () => {
+  /** A response as `fetchJson` reads one: its status, its content type, its text. */
+  const response = (status: number, body: unknown, type = 'application/json') => ({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers({ 'content-type': type }),
+    text: () => Promise.resolve(body === undefined ? '' : JSON.stringify(body)),
+  });
+
+  /** The server ON THE WIRE: the layout it reads back, and a write it refuses as stale once the formula has moved. */
+  async function serveOnTheWire(level: DashboardLevel) {
+    const server = { formula: level };
+    const wire = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url !== '/api/dashboard/preferences') throw new Error(`Unexpected request: ${url}`);
+      if (init?.method !== 'PUT') {
+        return response(200, {
+          schemaVersion: 1,
+          level: server.formula,
+          capabilities: capabilitiesFor(server.formula),
+          isPreset: true,
+          formulaChosen: true,
+          blocks: presetFor(server.formula),
+          updatedAt: null,
+        });
+      }
+      const written = (JSON.parse(String(init.body)) as { level: DashboardLevel }).level;
+      if (written === server.formula) return response(204, undefined);
+      return response(
+        409,
+        {
+          title: `level '${written}' is not the account's formula '${server.formula}'`,
+          status: 409,
+          code: 'formula.stale',
+          formula: server.formula,
+        },
+        'application/problem+json'
+      );
+    });
+    vi.stubGlobal('fetch', wire);
+    const real = await vi.importActual<typeof import('../services/dashboardApi')>('../services/dashboardApi');
+    vi.mocked(fetchDashboardPreferences).mockImplementation(real.fetchDashboardPreferences);
+    vi.mocked(saveDashboardPreferences).mockImplementation(real.saveDashboardPreferences);
+    const sent = (method: 'GET' | 'PUT') => wire.mock.calls.filter(([, init]) => (init?.method ?? 'GET') === method);
+    return { server, sent };
+  }
+
+  afterEach(() => {
+    // Unmount FIRST: the page may still write as it leaves — on the simulated
+    // wire, which is dropped only once the page is gone.
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('a write the server refuses with its 409 problem document: the page re-reads the formula and its layout — the Expert’s page —, says why, and retries nothing', async () => {
+    const { server, sent } = await serveOnTheWire('gardener');
+    renderPage();
+    await openEditMode();
+    expect(screen.getByRole('button', { name: 'Gardener view — change formula' })).toBeInTheDocument();
+    const reads = sent('GET').length;
+
+    // On the phone, meanwhile: the account goes Expert.
+    server.formula = 'expert';
+
+    // The clock faked once the page is up (never before a find): the write
+    // leaves when the pause is over; its refusal and the re-read land on the
+    // microtasks a 0 ms advance flushes.
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Tips' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // ONE write left, the Gardener's; ONE read followed its refusal.
+    expect(sent('PUT')).toHaveLength(1);
+    expect(JSON.parse(String(sent('PUT')[0]![1]!.body))).toMatchObject({ level: 'gardener' });
+    expect(sent('GET')).toHaveLength(reads + 1);
+    expect(screen.getByText(SAID)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expert view — change formula' })).toBeInTheDocument();
+    expect(screen.queryByText('Changes not saved')).toBeNull();
+    // Past another pause: the Gardener's layout is never written again.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    expect(sent('PUT')).toHaveLength(1);
+  });
+});
