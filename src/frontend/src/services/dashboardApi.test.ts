@@ -7,6 +7,7 @@ import {
   saveDashboardPreferences,
 } from './dashboardApi';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
+import type { DashboardBlock } from '../types/Dashboard';
 
 // SMA-336 round 1 (E17) — the service boundary is the last place an untrusted
 // body can be turned into the typed layout the app relies on. `fetchJson`
@@ -619,6 +620,35 @@ describe('saveDashboardPreferences (SMA-336)', () => {
     expect(init.method).toBe('PUT');
     expect(init.credentials).toBe('include');
     expect(init.keepalive).toBe(false);
+  });
+
+  // SMA-452 § 15 — the service sends the object it is given through
+  // `JSON.stringify`, and nothing pinned what reaches the wire: the body is
+  // parsed back here, the layout AND each widget's own settings.
+  it('sends the layout whole in the body: the level, every block in its order with its size and whether it is hidden — and each widget’s own settings', async () => {
+    const fetchSpy = mockFetch(null, 204);
+    const blocks: DashboardBlock[] = [
+      { key: 'keyfigures', size: 'wide', hidden: false, options: { figures: ['free', 'occupancy', 'varieties', 'todo'] } },
+      { key: 'gardens', size: 'large', hidden: false, options: { sort: 'custom', count: 'all' } },
+      { key: 'counters', size: 'medium', hidden: true, options: { photos: true, gardenId: 'g1' } },
+      { key: 'weather', size: 'medium', hidden: false, options: null },
+      { key: 'tips', size: 'small', hidden: false },
+    ];
+
+    await saveDashboardPreferences({ level: 'expert', blocks });
+
+    const [, init] = fetchSpy.mock.calls[0]!;
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(JSON.parse(init.body)).toStrictEqual({
+      level: 'expert',
+      blocks: [
+        { key: 'keyfigures', size: 'wide', hidden: false, options: { figures: ['free', 'occupancy', 'varieties', 'todo'] } },
+        { key: 'gardens', size: 'large', hidden: false, options: { sort: 'custom', count: 'all' } },
+        { key: 'counters', size: 'medium', hidden: true, options: { photos: true, gardenId: 'g1' } },
+        { key: 'weather', size: 'medium', hidden: false, options: null },
+        { key: 'tips', size: 'small', hidden: false },
+      ],
+    });
   });
 
   it('sets keepalive for the page-teardown write (round 1, E12)', async () => {
