@@ -3,6 +3,7 @@ import {
   cleanup,
   fireEvent,
   render,
+  renderHook,
   screen,
   waitFor,
   within,
@@ -16,6 +17,7 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
+import { useDashboardData } from '../hooks/useDashboardData';
 import { useLanguage } from '../hooks/useLanguage';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import {
@@ -279,6 +281,43 @@ describe('Gardens widget cards (SMA-6 / SMA-155, moved by SMA-336)', () => {
     });
     expect(screen.queryByText('Vieux jardin')).toBeNull();
     expect(screen.getByText('Jardin frais')).toBeInTheDocument();
+  });
+
+  // SMA-452 — the test above sends the stale answer after a language switch,
+  // where the loader's two guards refuse it together: its controller was
+  // aborted AND its generation has passed, so neither is proven alone. A
+  // refetch asked outside an event — as the callers that follow a write do,
+  // after their `await` — moves the generation at once, while React commits
+  // the new request later: until that commit the superseded request's
+  // controller still stands, and the GENERATION alone refuses its answer.
+  it('drops the answer of a request a refetch has superseded before React committed it — its controller not aborted yet: the generation alone refuses it', async () => {
+    const loads: Array<{ land: (data: DashboardData) => void; signal: AbortSignal | undefined }> = [];
+    vi.mocked(fetchDashboardData).mockImplementation(
+      (_language, signal) =>
+        new Promise<DashboardData>((resolve) => {
+          loads.push({ land: resolve, signal });
+        })
+    );
+    const { result } = renderHook(() => useDashboardData('en'));
+    expect(loads).toHaveLength(1);
+
+    await act(async () => {
+      result.current.refetch();
+      // Not committed yet: the first request's controller still stands.
+      expect(loads[0]!.signal?.aborted).toBe(false);
+      loads[0]!.land(dashboardWith([gardenWith(0, { id: 'g1', name: 'Vieux jardin' })]));
+    });
+
+    // Refused: nothing of it is held, and the loader still waits for the
+    // request that replaced it — the commit that followed aborted the first.
+    expect(result.current.data.gardens).toEqual([]);
+    expect(result.current.loading).toBe(true);
+    expect(loads).toHaveLength(2);
+    expect(loads[0]!.signal?.aborted).toBe(true);
+
+    await act(async () => loads[1]!.land(dashboardWith([gardenWith(0, { id: 'g2', name: 'Jardin frais' })])));
+    expect(result.current.data.gardens.map((garden) => garden.name)).toEqual(['Jardin frais']);
+    expect(result.current.loading).toBe(false);
   });
 });
 
