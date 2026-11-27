@@ -1327,10 +1327,7 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
     });
     expect(overlay.querySelector('[data-widget="weather"]')).not.toBeNull();
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
-    await waitFor(() =>
-      expect(document.querySelector('[data-drag-overlay]')).toBeNull()
-    );
+    await cancelMove(handle);
   });
 
   it('keeps the dragging slot perceivable while the keyboard holds it', async () => {
