@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Internal;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,19 @@ public class WeatherForecastCacheTests
         CapturingLoggerProvider? logs = null,
         ISystemClock? clock = null)
     {
+        var (cache, handler, _) = BuildWithMemory(maxConcurrentCalls, logs, clock);
+        return (cache, handler);
+    }
+
+    /// <summary>
+    /// <see cref="Build"/>, with the memory cache the forecast cache writes
+    /// to: a test can read an entry there, and write it back.
+    /// </summary>
+    private static (WeatherForecastCache Cache, CountingHandler Handler, IMemoryCache Memory) BuildWithMemory(
+        int maxConcurrentCalls = 4,
+        CapturingLoggerProvider? logs = null,
+        ISystemClock? clock = null)
+    {
         var handler = new CountingHandler();
         var services = new ServiceCollection();
         services.AddLogging(logging =>
@@ -59,7 +73,7 @@ public class WeatherForecastCacheTests
             .ConfigurePrimaryHttpMessageHandler(() => handler);
         services.AddSingleton<WeatherForecastCache>();
         var provider = services.BuildServiceProvider();
-        return (provider.GetRequiredService<WeatherForecastCache>(), handler);
+        return (provider.GetRequiredService<WeatherForecastCache>(), handler, provider.GetRequiredService<IMemoryCache>());
     }
 
     [Fact]
@@ -415,6 +429,12 @@ public class WeatherForecastCacheTests
         Assert.Equal(0, cache.GateCount);
     }
 
+    /// <summary>
+    /// 2026-01-01T00:00:00.0000000Z — written in the round-trip format, it
+    /// holds neither « 45.76 », « 4.84 » nor « 45.7 ».
+    /// </summary>
+    private static readonly DateTime InstantWithoutACoordinateFragment = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
     [Fact]
     public async Task Warnings_NeverCarryThePlacesCoordinates()
     {
@@ -422,8 +442,19 @@ public class WeatherForecastCacheTests
         // the two warnings of a failed refresh must name the place some other
         // way — an opaque tag — and carry no digit of latitude or longitude.
         var logs = new CapturingLoggerProvider();
-        var (cache, handler) = Build(logs: logs);
+        var (cache, handler, memory) = BuildWithMemory(logs: logs);
         await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        // The first warning writes the instant of the last known answer
+        // ({FetchedAt:O}), which the cache stamps from the wall clock: about
+        // once in a thousand runs its digits spelled « 4.84 » or « 45.7 » by
+        // chance, and the test failed on a message that carried no coordinate.
+        // The instant is PINNED on one whose writing holds none of the
+        // fragments below; the guarantee is unchanged — no digit of the place
+        // anywhere in either message.
+        var lastKnownKey = WeatherForecastCache.LastKnownKey(WeatherLocationKey.From(45.76, 4.84), "fr");
+        var known = memory.Get<CachedForecast>(lastKnownKey);
+        Assert.NotNull(known);
+        memory.Set(lastKnownKey, known with { FetchedAtUtc = InstantWithoutACoordinateFragment });
 
         // Failed refresh with a last known answer, then one with nothing known.
         cache.EvictFresh(45.76, 4.84, "fr");
@@ -438,7 +469,8 @@ public class WeatherForecastCacheTests
             .Where(e => e.Category == typeof(WeatherForecastCache).FullName && e.Level == LogLevel.Warning)
             .ToList();
         Assert.Equal(2, warnings.Count);
-        Assert.Contains(warnings, w => w.Message.Contains("serving the last known forecast"));
+        Assert.Contains(warnings, w => w.Message.Contains("serving the last known forecast")
+            && w.Message.Contains(InstantWithoutACoordinateFragment.ToString("O")));
         Assert.Contains(warnings, w => w.Message.Contains("nothing known before"));
         var tag = WeatherLocationKey.ToLogTag(WeatherLocationKey.From(45.76, 4.84));
         Assert.All(warnings, w =>
