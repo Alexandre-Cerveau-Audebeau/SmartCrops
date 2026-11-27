@@ -801,6 +801,11 @@ describe('useDashboardPreferences — no edit is taken while a switch is in flig
       switching = result.current.setLevel('expert');
     });
     await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+    // From here the pause an edit's write would wait is ADVANCED, never
+    // waited — a real wait proves « nothing left » only if the engine keeps
+    // time. Only `setTimeout` and `clearTimeout` are simulated, once the hook
+    // has loaded and the switch is on the wire: no `waitFor` after it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
     const edited = presetFor('gardener');
     edited[0]!.size = 'small';
@@ -816,7 +821,7 @@ describe('useDashboardPreferences — no edit is taken while a switch is in flig
     });
     // Past the pause an edit's write would have waited.
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100));
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 100);
     });
 
     expect(saveDashboardPreferences).not.toHaveBeenCalled();

@@ -424,13 +424,16 @@ function deferredWeather() {
 }
 
 /**
- * dnd-kit measures the droppable rects one tick AFTER a drag starts, so an
- * arrow key fired in the same task finds no geometry and moves nothing. Every
- * keyboard step waits for that measurement.
+ * dnd-kit needs one turn of the timers' queue after a drag starts before an
+ * arrow key moves anything: its keyboard sensor adds its `keydown` listener
+ * from a `setTimeout` of its own (`KeyboardSensor.attach`), so a key fired in
+ * the same task is not heard. Every keyboard step yields that ONE turn — a
+ * 0 ms timer set after the sensor's fires after it, in the queue's order,
+ * whatever the load: no duration is waited.
  */
 const settle = async () => {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 };
 

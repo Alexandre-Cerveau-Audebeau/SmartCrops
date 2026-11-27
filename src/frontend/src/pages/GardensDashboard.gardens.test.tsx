@@ -147,6 +147,8 @@ afterEach(() => {
   // and the page sends its pending layout save as it unmounts — cleared first,
   // the mocks would record that write for the next test.
   cleanup();
+  // The clock a test simulated once its page was up: real again, after the unmount.
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -517,15 +519,21 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(updateGarden).toHaveBeenCalled());
 
+    // From here the dialog's exit is ADVANCED, never waited: only `setTimeout`
+    // and `clearTimeout` are simulated, once the page and the dialog are up —
+    // no `findBy`, no `waitFor` after it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pastTheExit = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
 
     // PAST the close transition, not in the same tick: MUI keeps a closing
     // Dialog mounted for its 195ms exit, so an assertion fired straight after
     // the click passes whether the handler refused to close or not.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    });
+    await pastTheExit();
     expect(
       screen.getByRole('dialog', { name: 'Edit garden' })
     ).toBeInTheDocument();
@@ -536,13 +544,12 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
     });
 
     expect(
-      await within(dialog).findByText('An error occurred. Please try again.')
+      within(dialog).getByText('An error occurred. Please try again.')
     ).toBeInTheDocument();
     // And once the mutation is over, the dialog closes normally again.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
-    );
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull();
   });
 
   it('says it is working while the close is blocked', async () => {
