@@ -731,7 +731,11 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
       expect(within(reopened).getByRole('button', { name })).toBeDisabled();
     }
     expect(within(reopened).getByRole('button', { name: 'Close without changing formula' })).toBeDisabled();
+    // Read PAST the exit transition: a chooser that Escape had closed would
+    // still be mounted while it leaves, and a read made at once would pass
+    // whatever the handler did.
     fireEvent.keyDown(reopened, { key: 'Escape', code: 'Escape' });
+    await pastTheExit();
     expect(screen.getByRole('dialog', CHOOSER)).toBeInTheDocument();
 
     await landSwitch();
