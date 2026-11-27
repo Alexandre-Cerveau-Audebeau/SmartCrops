@@ -258,7 +258,8 @@ describe('CustomizePanel — the list of the formula’s widgets (A-16)', () => 
     const onClose = vi.fn();
     render(<Panel level="gardener" initial={presetFor('gardener')} onClose={onClose} />);
     const handle = within(rowOf('tips')).getByRole('button', { name: 'Drag “Tips”' });
-    handle.focus();
+    // As the keyboard gives it: inside an async act — MUI's focus ripple pulses a microtask later.
+    await act(async () => handle.focus());
 
     await act(async () => {
       fireEvent.keyDown(handle, { code: 'Space', key: ' ' });

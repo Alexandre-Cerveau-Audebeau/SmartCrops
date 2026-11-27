@@ -749,7 +749,8 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
     await waitFor(() => expect(cards()).toHaveLength(3));
 
     const pencil = within(cardOf('g1')).getByRole('button', { name: 'Edit Terrasse' });
-    pencil.focus();
+    // As the keyboard gives it: inside an async act — MUI's focus ripple pulses a microtask later.
+    await act(async () => pencil.focus());
     fireEvent.click(pencil);
     const rename = await screen.findByRole('dialog', { name: 'Edit garden' });
     expect(within(rename).getByRole('textbox', { name: /^Name/ })).toHaveValue('Terrasse');

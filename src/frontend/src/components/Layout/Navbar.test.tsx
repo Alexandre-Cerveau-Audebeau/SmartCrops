@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -263,7 +263,8 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
     expect(settings).toHaveAttribute('tabindex');
     expect(row).toHaveAttribute('tabindex');
 
-    row.focus();
+    // As the keyboard gives it: inside an async act — the row is a MUI button, and its focus ripple pulses a microtask later.
+    await act(async () => row.focus());
     expect(row).toHaveFocus();
     await user.keyboard('{Enter}');
 

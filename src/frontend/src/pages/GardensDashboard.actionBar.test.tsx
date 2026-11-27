@@ -367,32 +367,41 @@ describe('the focus and the scroll padding under the compact action bar (SMA-437
   /** The header's button of an action, and the bar's. */
   const headerButton = (action: string) => headerRow().querySelector<HTMLElement>(`[data-page-action="${action}"]`)!;
   const barButton = (action: string) => bar()!.querySelector<HTMLElement>(`[data-page-action="${action}"]`)!;
+  /**
+   * A focus, as the keyboard gives it. MUI's focus handlers set state, and its
+   * lazily mounted focus ripple pulses a microtask later: the gesture runs
+   * inside an async act, whatever ran before it — a test run alone, the window
+   * having seen no click yet, is where the ripple shows.
+   */
+  const focus = (button: HTMLElement) => act(async () => button.focus());
 
   it('moves the focus to the twin when its row hides — the header’s Edit to the bar’s, and back — never to the body', async () => {
     await renderLoaded();
-    headerButton('edit').focus();
+    await focus(headerButton('edit'));
     expect(document.activeElement).toBe(headerButton('edit'));
 
-    scrollPast();
+    // The row hides and the page gives the focus to the twin: a focus again,
+    // so the scroll that causes it runs inside an async act too.
+    await act(async () => scrollPast());
     expect(document.activeElement).toBe(barButton('edit'));
 
-    scrollBack();
+    await act(async () => scrollBack());
     expect(document.activeElement).toBe(headerButton('edit'));
   });
 
   it('does the same for Customize', async () => {
     await renderLoaded();
-    headerButton('customize').focus();
-    scrollPast();
+    await focus(headerButton('customize'));
+    await act(async () => scrollPast());
     expect(document.activeElement).toBe(barButton('customize'));
-    scrollBack();
+    await act(async () => scrollBack());
     expect(document.activeElement).toBe(headerButton('customize'));
   });
 
   it('never gives the focus to the bar when it appears: a focus elsewhere stays where it is', async () => {
     await renderLoaded();
     const create = screen.getByRole('button', { name: 'Create Garden' });
-    create.focus();
+    await focus(create);
     scrollPast();
     expect(document.activeElement).toBe(create);
   });
@@ -402,7 +411,7 @@ describe('the focus and the scroll padding under the compact action bar (SMA-437
     await renderLoaded();
     scrollPast();
     const toggle = barButton('edit');
-    toggle.focus();
+    await focus(toggle);
     await user.keyboard('{Enter}');
     expect(document.activeElement).toBe(toggle);
     expect(toggle).toHaveTextContent('Done');
@@ -414,7 +423,7 @@ describe('the focus and the scroll padding under the compact action bar (SMA-437
   it('gives the focus back to the twin when the Customize panel closes on a button that went inert meanwhile (technical decision 8)', async () => {
     const user = userEvent.setup();
     await renderLoaded();
-    headerButton('customize').focus();
+    await focus(headerButton('customize'));
     await user.keyboard('{Enter}');
     await screen.findByRole('dialog', { name: 'Customize' });
 

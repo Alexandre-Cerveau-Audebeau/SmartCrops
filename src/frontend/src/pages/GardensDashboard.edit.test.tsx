@@ -639,7 +639,8 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     const user = userEvent.setup();
     const edit = screen.getByRole('button', { name: 'Edit' });
     expect(edit).toBeEnabled();
-    act(() => edit.focus());
+    // As the keyboard gives it: inside an async act — MUI's focus ripple pulses a microtask later.
+    await act(async () => edit.focus());
 
     await user.keyboard('{Enter}');
     const done = screen.getByRole('button', { name: 'Done' });

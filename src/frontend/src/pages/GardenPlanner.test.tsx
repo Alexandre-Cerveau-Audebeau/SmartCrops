@@ -1792,7 +1792,8 @@ describe('GardenPlanner placement panel (SMA-309)', () => {
   it('Escape abandons an uncommitted draft — nothing commits, nothing resurrects (R3)', async () => {
     const grid = await selectPlacement();
     const field = screen.getByLabelText('Notes');
-    field.focus();
+    // The field's FormControl takes its focused state from this focus: inside an act.
+    await act(async () => field.focus());
     fireEvent.change(field, { target: { value: 'Typed then Escape' } });
     // No blur: Escape tears the panel down through the window keydown path.
     // The uncommitted draft is ABANDONED by design (declared R3): a flush
