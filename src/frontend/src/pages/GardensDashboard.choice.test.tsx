@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -7,6 +7,7 @@ import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture } from '../test/fixtures/dashboard';
 import { weatherFixture } from '../test/fixtures/weather';
+import { hold } from '../test/responses';
 import type { DashboardLevel, FormulaRefusalReason } from '../types/Dashboard';
 
 vi.mock('../services/gardenApi', () => ({
@@ -104,8 +105,53 @@ function renderPage() {
   );
 }
 
-const PATIENCE = { timeout: 10000 };
-const dialog = () => screen.findByRole('dialog', { name: 'Choose your formula' }, PATIENCE);
+const CHOICE = { name: 'Choose your formula' };
+/** MUI keeps a closing dialog mounted for its exit transition (195 ms): past it, in simulated time. */
+const PAST_THE_EXIT = 400;
+
+/**
+ * The page, its layout read HELD, then landed inside `act` (SMA-452): what
+ * follows reads a loaded page — synchronously, without a bound.
+ */
+async function renderLoaded() {
+  const landLayout = hold(fetchDashboardPreferences);
+  const view = renderPage();
+  await landLayout();
+  return view;
+}
+
+/**
+ * The page of an account that never chose: the mandatory screen comes with the
+ * layout, and the catalogue it reads as it mounts is HELD, then landed inside
+ * `act` — its offers are read without a wait.
+ */
+async function renderWithTheMandatoryScreen() {
+  const landCatalogue = hold(fetchFormulas);
+  const view = await renderLoaded();
+  const screenOfChoice = screen.getByRole('dialog', CHOICE);
+  await landCatalogue();
+  return { ...view, screenOfChoice };
+}
+
+/** The screen opened from `door`, there at once — its catalogue HELD, then landed inside `act`. */
+async function openFrom(door: HTMLElement, name = CHOICE.name) {
+  const landCatalogue = hold(fetchFormulas);
+  fireEvent.click(door);
+  const screenOfChoice = screen.getByRole('dialog', { name });
+  await landCatalogue();
+  return screenOfChoice;
+}
+
+/**
+ * From here the time of a dialog's exit is ADVANCED, never waited: only
+ * `setTimeout` and `clearTimeout` are simulated, once the page is up — no
+ * `findBy`, no `waitFor` after it.
+ */
+const simulateTheClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+const pastTheExit = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(PAST_THE_EXIT);
+  });
 const offer = (level: DashboardLevel) => document.querySelector<HTMLElement>(`[data-formula-offer="${level}"]`)!;
 const tagsOf = (level: DashboardLevel) =>
   [...offer(level).querySelectorAll('[data-offer-tag]')].map((tag) => tag.getAttribute('data-offer-tag'));
@@ -131,6 +177,8 @@ afterEach(() => {
   // and the page sends its pending layout save as it unmounts — cleared first,
   // the mocks would record that write for the next test.
   cleanup();
+  // The clock a test simulated once its page was up: real again, after the unmount.
+  vi.useRealTimers();
   vi.clearAllMocks();
   localStorage.clear();
 });
@@ -143,53 +191,62 @@ afterEach(() => {
 describe('the chip-button at every formula (SMA-448, lot F3, L6)', () => {
   it.each(['gardener', 'expert'] as const)('%s: the chip is a button that opens the screen — the current formula « Keep » —, and closing gives it the focus back', async (level) => {
     serve(level, { chosen: true, gardenCount: 4 });
-    renderPage();
+    await renderLoaded();
 
     const name = level === 'gardener' ? 'Gardener' : 'Expert';
-    const chip = await screen.findByRole('button', { name: `${name} view — change formula` }, PATIENCE);
+    const chip = screen.getByRole('button', { name: `${name} view — change formula` });
     expect(chip).toHaveAttribute('aria-haspopup', 'dialog');
-    expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull();
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
     chip.focus();
-    fireEvent.click(chip);
 
-    const screenOfChoice = await dialog();
-    await within(screenOfChoice).findByRole('button', { name: `Keep ${name}` }, PATIENCE);
+    const screenOfChoice = await openFrom(chip);
+    expect(within(screenOfChoice).getByRole('button', { name: `Keep ${name}` })).toBeInTheDocument();
     expect(within(screenOfChoice).getByRole('button', { name: 'Close without changing formula' })).toBeInTheDocument();
+    simulateTheClock();
     fireEvent.click(within(screenOfChoice).getByRole('button', { name: 'Close without changing formula' }));
+    await pastTheExit();
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
-    await waitFor(() => expect(document.activeElement).toBe(chip), PATIENCE);
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
+    expect(document.activeElement).toBe(chip);
     expect(changeFormula).not.toHaveBeenCalled();
   });
 
   it('the Expert chooses Gardener from the chip: the switch goes through, the page becomes the Gardener grid, the chip still the button, the focus on it', async () => {
     const server = serve('expert', { chosen: true, gardenCount: 4 });
-    renderPage();
-    const chip = await screen.findByRole('button', { name: 'Expert view — change formula' }, PATIENCE);
+    await renderLoaded();
+    const chip = screen.getByRole('button', { name: 'Expert view — change formula' });
     chip.focus();
-    fireEvent.click(chip);
-    const screenOfChoice = await dialog();
+    const screenOfChoice = await openFrom(chip);
 
-    fireEvent.click(await within(screenOfChoice).findByRole('button', { name: 'Choose Gardener' }, PATIENCE));
+    // The switch HELD, then landed inside `act` — the layout read back behind
+    // it lands there too —, and the screen's exit ADVANCED.
+    const landSwitch = hold(changeFormula);
+    simulateTheClock();
+    fireEvent.click(within(screenOfChoice).getByRole('button', { name: 'Choose Gardener' }));
+    await landSwitch();
 
-    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('gardener'));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    expect(changeFormula).toHaveBeenCalledWith('gardener');
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
     expect(server.formula).toBe('gardener');
-    const chipAfter = await screen.findByRole('button', { name: 'Gardener view — change formula' }, PATIENCE);
-    await waitFor(() => expect(document.activeElement).toBe(chipAfter), PATIENCE);
+    const chipAfter = screen.getByRole('button', { name: 'Gardener view — change formula' });
+    expect(document.activeElement).toBe(chipAfter);
   });
 });
 
 describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
   it('an account that never chose sees the screen with the page, mandatory: no close button, Escape does nothing, the three offers to choose from, Novice recommended', async () => {
     serve('gardener', { chosen: false, gardenCount: 0 });
-    renderPage();
+    const { screenOfChoice } = await renderWithTheMandatoryScreen();
 
-    const screenOfChoice = await dialog();
-    await within(screenOfChoice).findByRole('button', { name: 'Choose Novice' }, PATIENCE);
+    expect(within(screenOfChoice).getByRole('button', { name: 'Choose Novice' })).toBeInTheDocument();
     expect(within(screenOfChoice).queryByRole('button', { name: 'Close without changing formula' })).toBeNull();
+    // Read PAST the exit: a screen that Escape had started to close would
+    // still be mounted, on its way out, at an instant read.
+    simulateTheClock();
     fireEvent.keyDown(screenOfChoice, { key: 'Escape', code: 'Escape' });
-    expect(screen.getByRole('dialog', { name: 'Choose your formula' })).toBeInTheDocument();
+    await pastTheExit();
+    expect(screen.getByRole('dialog', CHOICE)).toBeInTheDocument();
 
     // A new account: no formula of its own yet — three « Choose », no « Keep ».
     expect(within(screenOfChoice).getByRole('button', { name: 'Choose Gardener' })).toBeInTheDocument();
@@ -207,55 +264,60 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
 
   it('« Keep Gardener » for an existing account: the current formula preselected, kept in one click — the choice stamped on the server —, the screen closes, the focus on « Create Garden », and it is not shown again', async () => {
     const server = serve('gardener', { chosen: false, gardenCount: 2 });
-    const { unmount } = renderPage();
+    const { unmount, screenOfChoice } = await renderWithTheMandatoryScreen();
 
-    const screenOfChoice = await dialog();
-    const keep = await within(screenOfChoice).findByRole('button', { name: 'Keep Gardener' }, PATIENCE);
+    const keep = within(screenOfChoice).getByRole('button', { name: 'Keep Gardener' });
     expect(tagsOf('gardener')).toEqual(['current']);
     expect(within(screenOfChoice).getByText(/You have 2 gardens\. Your current formula is preselected/)).toBeInTheDocument();
     // Never « Recommended » on Novice here: it would advise going down (decision 3, 22/09 18:02).
     expect(tagsOf('novice')).toEqual([]);
 
+    // The choice HELD, then landed inside `act` with the layout read back
+    // behind it, and the screen's exit ADVANCED.
+    const landSwitch = hold(changeFormula);
+    simulateTheClock();
     fireEvent.click(keep);
+    await landSwitch();
 
-    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('gardener'));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    expect(changeFormula).toHaveBeenCalledWith('gardener');
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
     expect(server.chosen).toBe(true);
     expect(server.formula).toBe('gardener');
     // The header's « Create Garden » (`data-create-garden`) — the empty Gardens widget of the grid offers one too.
-    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-create-garden]')), PATIENCE);
+    expect(document.activeElement).toBe(document.querySelector('[data-create-garden]'));
 
     // Once: the next visit does not ask again.
     unmount();
-    renderPage();
-    expect(await screen.findByText('Gardener view', {}, PATIENCE)).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull();
+    await renderLoaded();
+    expect(screen.getByText('Gardener view')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
   });
 
   it('an account that chose sees no screen at load; the chip reopens it, closable, and closing changes nothing', async () => {
     serve('novice', { chosen: true, gardenCount: 1 });
-    renderPage();
+    await renderLoaded();
 
-    const chip = await screen.findByRole('button', { name: 'Novice view — change formula' }, PATIENCE);
-    expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull();
-    fireEvent.click(chip);
+    const chip = screen.getByRole('button', { name: 'Novice view — change formula' });
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
 
-    const screenOfChoice = await dialog();
-    await within(screenOfChoice).findByRole('button', { name: 'Keep Novice' }, PATIENCE);
+    const screenOfChoice = await openFrom(chip);
+    expect(within(screenOfChoice).getByRole('button', { name: 'Keep Novice' })).toBeInTheDocument();
     expect(within(screenOfChoice).getByText(/You are on Novice and you have 1 garden/)).toBeInTheDocument();
     // Reopened from the chip: no line of the Terms — the mandatory screen alone says it (SMA-448, § 4.1).
     expect(screenOfChoice.querySelector('[data-formula-choice-terms]')).toBeNull();
+    simulateTheClock();
     fireEvent.click(within(screenOfChoice).getByRole('button', { name: 'Close without changing formula' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull(), PATIENCE);
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', CHOICE)).toBeNull();
     expect(changeFormula).not.toHaveBeenCalled();
   });
 
   it('a formula too small is unavailable and explained, its button inert: five gardens, « You have 5 gardens — Novice allows 3. », nothing deleted', async () => {
     serve('gardener', { chosen: false, gardenCount: 5, unavailable: { novice: [{ kind: 'gardens', have: 5, limit: 3 }] } });
-    renderPage();
+    const { screenOfChoice } = await renderWithTheMandatoryScreen();
 
-    const screenOfChoice = await dialog();
-    const choose = await within(screenOfChoice).findByRole('button', { name: 'Choose Novice' }, PATIENCE);
+    const choose = within(screenOfChoice).getByRole('button', { name: 'Choose Novice' });
     expect(choose).toBeDisabled();
     expect(tagsOf('novice')).toEqual(['unavailable']);
     expect(offer('novice').textContent).toContain('You have 5 gardens — Novice allows 3.');
@@ -272,10 +334,8 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
         novice: [{ kind: 'size', gardenId: 'g1', width: 30, height: 12, maxWidth: 20, maxHeight: 20 }],
       },
     });
-    renderPage();
+    const { screenOfChoice } = await renderWithTheMandatoryScreen();
 
-    const screenOfChoice = await dialog();
-    await within(screenOfChoice).findByRole('button', { name: 'Choose Novice' }, PATIENCE);
     expect(within(screenOfChoice).getByRole('button', { name: 'Choose Novice' })).toBeDisabled();
     expect(offer('novice').textContent).toContain('A garden of 30 × 12 cells — Novice allows 20 × 20.');
     expect(tagsOf('novice')).toEqual(['unavailable']);
@@ -287,10 +347,9 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
       gardenCount: 12,
       unavailable: { novice: [{ kind: 'gardens', have: 12, limit: 3 }], gardener: [{ kind: 'gardens', have: 12, limit: 10 }] },
     });
-    renderPage();
+    const { screenOfChoice } = await renderWithTheMandatoryScreen();
 
-    const screenOfChoice = await dialog();
-    const keep = await within(screenOfChoice).findByRole('button', { name: 'Keep Gardener' }, PATIENCE);
+    const keep = within(screenOfChoice).getByRole('button', { name: 'Keep Gardener' });
     expect(keep).toBeEnabled();
     expect(tagsOf('gardener')).toEqual(['currentKept']);
     expect(offer('gardener').textContent).toContain('You keep everything: nothing will be deleted.');
@@ -302,11 +361,9 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
 
   it('the offers say what the catalogue serves — 3, 10, unlimited gardens; 20 × 20, 50 × 50, 100 × 100 cells —, every price €0, never a harvest promised, no weather warning', async () => {
     serve('gardener', { chosen: false, gardenCount: 0 });
-    renderPage();
+    const { screenOfChoice } = await renderWithTheMandatoryScreen();
 
-    const screenOfChoice = await dialog();
-    await within(screenOfChoice).findByRole('button', { name: 'Choose Novice' }, PATIENCE);
-
+    expect(within(screenOfChoice).getByRole('button', { name: 'Choose Novice' })).toBeInTheDocument();
     expect(offer('novice').textContent).toContain('Up to 3 gardens');
     expect(offer('novice').textContent).toContain('Up to 20 × 20 cells per garden');
     expect(offer('gardener').textContent).toContain('Up to 10 gardens');
@@ -343,10 +400,9 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
 
     it('in English: exactly three lines for the Expert — the two of lot F3 unchanged, then the weather of several gardens in several cities at once; the weather row tells one city from several', async () => {
       serve('gardener', { chosen: true, gardenCount: 2 });
-      renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Gardener view — change formula' }, PATIENCE));
-      const screenOfChoice = await dialog();
-      await within(screenOfChoice).findByRole('button', { name: 'Choose Expert' }, PATIENCE);
+      await renderLoaded();
+      const screenOfChoice = await openFrom(screen.getByRole('button', { name: 'Gardener view — change formula' }));
+      expect(within(screenOfChoice).getByRole('button', { name: 'Choose Expert' })).toBeInTheDocument();
 
       expect(featuresOf('expert')).toEqual([
         'Every widget, statistics included',
@@ -363,10 +419,9 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
     it('en français : « Météo pour plusieurs jardins, dans plusieurs villes différentes en même temps » en troisième ligne, et la ligne Météo du comparatif distingue une ville de plusieurs', async () => {
       localStorage.setItem('smartcrops-language', 'fr');
       serve('gardener', { chosen: true, gardenCount: 2 });
-      renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Vue Jardinier — changer de formule' }, PATIENCE));
-      const screenOfChoice = await screen.findByRole('dialog', { name: 'Choisissez votre formule' }, PATIENCE);
-      await within(screenOfChoice).findByRole('button', { name: 'Choisir Expert' }, PATIENCE);
+      await renderLoaded();
+      const screenOfChoice = await openFrom(screen.getByRole('button', { name: 'Vue Jardinier — changer de formule' }), 'Choisissez votre formule');
+      expect(within(screenOfChoice).getByRole('button', { name: 'Choisir Expert' })).toBeInTheDocument();
 
       expect(featuresOf('expert')).toEqual([
         'Tous les widgets, statistiques comprises',
@@ -393,10 +448,9 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
 
     it('in English: « No limit » is a yes, « Up to 3 » a figure, a « No — … » a no, a name neither', async () => {
       serve('gardener', { chosen: true, gardenCount: 2 });
-      renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Gardener view — change formula' }, PATIENCE));
-      const screenOfChoice = await dialog();
-      await within(screenOfChoice).findByRole('button', { name: 'Choose Expert' }, PATIENCE);
+      await renderLoaded();
+      const screenOfChoice = await openFrom(screen.getByRole('button', { name: 'Gardener view — change formula' }));
+      expect(within(screenOfChoice).getByRole('button', { name: 'Choose Expert' })).toBeInTheDocument();
       const table = within(screenOfChoice).getByRole('table');
 
       expect(cellOf(table, 'Number of gardens', 2)).toEqual({ text: 'No limit', tone: 'yes' });
@@ -413,10 +467,9 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
     it('en français : « Sans limite » est un oui, son texte inchangé ; « Jusqu’à 3 » un chiffre ; « Non » un non', async () => {
       localStorage.setItem('smartcrops-language', 'fr');
       serve('gardener', { chosen: true, gardenCount: 2 });
-      renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Vue Jardinier — changer de formule' }, PATIENCE));
-      const screenOfChoice = await screen.findByRole('dialog', { name: 'Choisissez votre formule' }, PATIENCE);
-      await within(screenOfChoice).findByRole('button', { name: 'Choisir Expert' }, PATIENCE);
+      await renderLoaded();
+      const screenOfChoice = await openFrom(screen.getByRole('button', { name: 'Vue Jardinier — changer de formule' }), 'Choisissez votre formule');
+      expect(within(screenOfChoice).getByRole('button', { name: 'Choisir Expert' })).toBeInTheDocument();
       const table = within(screenOfChoice).getByRole('table');
 
       expect(cellOf(table, 'Nombre de jardins', 2)).toEqual({ text: 'Sans limite', tone: 'yes' });
@@ -439,14 +492,19 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
         reasons: [{ kind: 'gardens', have: 5, limit: 3 }],
       })
     );
-    renderPage();
+    const { screenOfChoice } = await renderWithTheMandatoryScreen();
 
-    const screenOfChoice = await dialog();
-    fireEvent.click(await within(screenOfChoice).findByRole('button', { name: 'Choose Expert' }, PATIENCE));
+    // The refusal HELD, then landed inside `act`: what it says is read without a wait.
+    const refuse = hold(changeFormula);
+    simulateTheClock();
+    fireEvent.click(within(screenOfChoice).getByRole('button', { name: 'Choose Expert' }));
+    await refuse();
 
-    const said = await within(screenOfChoice).findByText('Can’t switch to Expert: 5 gardens for 3 at most', {}, PATIENCE);
+    const said = within(screenOfChoice).getByText('Can’t switch to Expert: 5 gardens for 3 at most');
     expect(said).toHaveAttribute('role', 'status');
-    expect(screen.getByRole('dialog', { name: 'Choose your formula' })).toBeInTheDocument();
+    // « The screen stays » is read PAST the exit, like Escape above.
+    await pastTheExit();
+    expect(screen.getByRole('dialog', CHOICE)).toBeInTheDocument();
     expect(within(screenOfChoice).queryByRole('button', { name: 'Close without changing formula' })).toBeNull();
   });
 });

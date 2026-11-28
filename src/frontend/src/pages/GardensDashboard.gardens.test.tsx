@@ -3,6 +3,7 @@ import {
   cleanup,
   fireEvent,
   render,
+  renderHook,
   screen,
   waitFor,
   within,
@@ -16,6 +17,7 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
+import { useDashboardData } from '../hooks/useDashboardData';
 import { useLanguage } from '../hooks/useLanguage';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import {
@@ -147,6 +149,8 @@ afterEach(() => {
   // and the page sends its pending layout save as it unmounts — cleared first,
   // the mocks would record that write for the next test.
   cleanup();
+  // The clock a test simulated once its page was up: real again, after the unmount.
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -277,6 +281,43 @@ describe('Gardens widget cards (SMA-6 / SMA-155, moved by SMA-336)', () => {
     });
     expect(screen.queryByText('Vieux jardin')).toBeNull();
     expect(screen.getByText('Jardin frais')).toBeInTheDocument();
+  });
+
+  // SMA-452 — the test above sends the stale answer after a language switch,
+  // where the loader's two guards refuse it together: its controller was
+  // aborted AND its generation has passed, so neither is proven alone. A
+  // refetch asked outside an event — as the callers that follow a write do,
+  // after their `await` — moves the generation at once, while React commits
+  // the new request later: until that commit the superseded request's
+  // controller still stands, and the GENERATION alone refuses its answer.
+  it('drops the answer of a request a refetch has superseded before React committed it — its controller not aborted yet: the generation alone refuses it', async () => {
+    const loads: Array<{ land: (data: DashboardData) => void; signal: AbortSignal | undefined }> = [];
+    vi.mocked(fetchDashboardData).mockImplementation(
+      (_language, signal) =>
+        new Promise<DashboardData>((resolve) => {
+          loads.push({ land: resolve, signal });
+        })
+    );
+    const { result } = renderHook(() => useDashboardData('en'));
+    expect(loads).toHaveLength(1);
+
+    await act(async () => {
+      result.current.refetch();
+      // Not committed yet: the first request's controller still stands.
+      expect(loads[0]!.signal?.aborted).toBe(false);
+      loads[0]!.land(dashboardWith([gardenWith(0, { id: 'g1', name: 'Vieux jardin' })]));
+    });
+
+    // Refused: nothing of it is held, and the loader still waits for the
+    // request that replaced it — the commit that followed aborted the first.
+    expect(result.current.data.gardens).toEqual([]);
+    expect(result.current.loading).toBe(true);
+    expect(loads).toHaveLength(2);
+    expect(loads[0]!.signal?.aborted).toBe(true);
+
+    await act(async () => loads[1]!.land(dashboardWith([gardenWith(0, { id: 'g2', name: 'Jardin frais' })])));
+    expect(result.current.data.gardens.map((garden) => garden.name)).toEqual(['Jardin frais']);
+    expect(result.current.loading).toBe(false);
   });
 });
 
@@ -517,15 +558,21 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(updateGarden).toHaveBeenCalled());
 
+    // From here the dialog's exit is ADVANCED, never waited: only `setTimeout`
+    // and `clearTimeout` are simulated, once the page and the dialog are up —
+    // no `findBy`, no `waitFor` after it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pastTheExit = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
 
     // PAST the close transition, not in the same tick: MUI keeps a closing
     // Dialog mounted for its 195ms exit, so an assertion fired straight after
     // the click passes whether the handler refused to close or not.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    });
+    await pastTheExit();
     expect(
       screen.getByRole('dialog', { name: 'Edit garden' })
     ).toBeInTheDocument();
@@ -536,13 +583,12 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
     });
 
     expect(
-      await within(dialog).findByText('An error occurred. Please try again.')
+      within(dialog).getByText('An error occurred. Please try again.')
     ).toBeInTheDocument();
     // And once the mutation is over, the dialog closes normally again.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
-    );
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull();
   });
 
   it('says it is working while the close is blocked', async () => {

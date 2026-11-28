@@ -129,19 +129,26 @@ describe('the planner bounded by the formula (SMA-448, lot F3, L3)', () => {
     expect(document.querySelector('[data-planner-limit]')).toBeNull();
   });
 
-  it('a Gardener plan already at 60 × 60 keeps its size: no growth beyond 60, a row removed may be added back, and the note says the plan is beyond the formula', async () => {
-    serve('gardener', 60, 60);
+  // The smallest scene that crosses a formula's bound in both dimensions: 21 ×
+  // 21 for the Novice's 20 × 20 — 441 cells, drawn three times here (the
+  // plan, a row removed, the row added back). The rule has no branch per
+  // formula (`planSizeBound`: the larger of the limit and the stored size),
+  // and the Gardener's own kept plan, 60 × 60, is read once by the settings
+  // dialog below: 3 600 cells drawn three times cost this test 6 s alone and
+  // 13 s under the whole suite's load, for the same proof.
+  it('a Novice plan already at 21 × 21 keeps its size: no growth beyond 21, a row removed may be added back, and the note says the plan is beyond the formula', async () => {
+    serve('novice', 21, 21);
     renderPlanner();
     await enterShapeMode();
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add row at top' })).toBeDisabled());
     expect(screen.getByRole('button', { name: 'Add column on right' })).toBeDisabled();
-    expect(document.querySelector('[data-planner-limit]')!.textContent).toContain('60 × 60');
+    expect(document.querySelector('[data-planner-limit]')!.textContent).toContain('21 × 21');
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove top row' }));
     expect(screen.getByRole('button', { name: 'Add row at top' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Add row at bottom' })).toBeEnabled();
-    // The columns are still at 60.
+    // The columns are still at 21.
     expect(screen.getByRole('button', { name: 'Add column on left' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add row at top' }));

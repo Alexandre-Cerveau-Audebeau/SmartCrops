@@ -8,6 +8,7 @@ import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
 import { deferred } from '../test/responses';
+import { SAVE_DEBOUNCE_MS } from '../hooks/useDashboardPreferences';
 import { LIVE_REGION_CLEAR_MS } from '../hooks/useLiveRegion';
 
 vi.mock('../services/gardenApi', () => ({
@@ -108,9 +109,23 @@ const slots = (panel: HTMLElement) =>
  */
 const said = (panel: HTMLElement) => panel.querySelector('[data-key-figures-said]') as HTMLElement;
 
-/** The figures the last debounced save carried for the band. */
+/**
+ * From here the save's pause is ADVANCED, never waited: only `setTimeout` and
+ * `clearTimeout` are simulated, once the panel is open — no `findBy`, no
+ * `waitFor` after it.
+ */
+const simulateTheClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+/**
+ * The figures the last debounced save carried for the band. The test simulated
+ * the clock before its gestures: the pause's time is advanced inside `act`,
+ * and the write has left and landed when it returns.
+ */
 async function savedFigures() {
-  await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled(), { timeout: 3000 });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+  });
+  expect(saveDashboardPreferences).toHaveBeenCalled();
   const calls = vi.mocked(saveDashboardPreferences).mock.calls;
   const last = calls[calls.length - 1]![0];
   return last.blocks.find((block) => block.key === 'keyfigures')?.options?.figures;
@@ -170,6 +185,7 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
 
   it('▲ moves a figure up a place, says the new place, keeps the focus — and writes the order', async () => {
     const panel = await openPanel();
+    simulateTheClock();
     const up = within(panel).getByRole('button', { name: 'Move “Varieties” up' });
     up.focus();
     fireEvent.click(up);
@@ -186,6 +202,7 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
   // as Chrome does; what the page must leave is the focus back on ▼.
   it('▼ moves a figure down a place, says the new place, keeps the focus — and writes the order', async () => {
     const panel = await openPanel();
+    simulateTheClock();
     const down = within(panel).getByRole('button', { name: 'Move “Free cells” down' });
     down.focus();
     fireEvent.click(down);
@@ -249,6 +266,7 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
 
   it('SWAPS the two places when the figure chosen is already shown — no duplicate, no hole, no error', async () => {
     const panel = await openPanel();
+    simulateTheClock();
     fireEvent.click(slots(panel)[1]!);
     fireEvent.click(within(panel).getByRole('radio', { name: /^Free cells(?! in full sun)/ }));
     fireEvent.click(within(panel).getByRole('button', { name: 'Replace' }));
@@ -261,12 +279,13 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
     ]);
     expect(said(panel)).toHaveTextContent('“Free cells” and “Occupancy” swap places.');
     // The focus comes back to the emplacement it left.
-    await waitFor(() => expect(document.activeElement).toBe(slots(panel)[1]));
+    expect(document.activeElement).toBe(slots(panel)[1]);
     expect(await savedFigures()).toEqual(['occupancy', 'free', 'varieties', 'todo']);
   });
 
   it('REPLACES with a figure not shown yet — still four', async () => {
     const panel = await openPanel();
+    simulateTheClock();
     fireEvent.click(slots(panel)[3]!);
     fireEvent.click(within(panel).getByRole('radio', { name: /^Cities/ }));
     fireEvent.click(within(panel).getByRole('button', { name: 'Replace' }));
@@ -326,6 +345,7 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
 
   it('never turns the chip « · adjusted »: the figures are options, and `isAdjusted` reads none (V19)', async () => {
     const panel = await openPanel();
+    simulateTheClock();
     fireEvent.click(slots(panel)[3]!);
     fireEvent.click(within(panel).getByRole('radio', { name: /^Cities/ }));
     fireEvent.click(within(panel).getByRole('button', { name: 'Replace' }));

@@ -128,6 +128,13 @@ describe('a kill the system refuses — the child is not let go while it runs (K
       new Promise<string>((resolve) => setTimeout(() => resolve(`still waiting after ${ms} ms`), ms)),
     ]);
 
+  /** Resolves once Node has delivered the child's exit — at once when it already has (Node sets the codes as it emits `exit`). */
+  const delivered = (child: ReturnType<typeof spawnChild>) =>
+    new Promise<void>((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null) resolve();
+      else child.once('exit', () => resolve());
+    });
+
   /** `terminateChildren()` with every kill of `pid` refused: what it came to, and the child meanwhile. The child is killed for real before this returns. */
   const terminateRefused = async (pid: number) => {
     const release = refuseKills(pid);
@@ -193,6 +200,11 @@ describe('a kill the system refuses — the child is not let go while it runs (K
       // The forced SIGKILL, past the grace, is not refused: it ends the child, and the wait.
       expect(await outcome(gone, 5_000)).toBe('resolved');
       expect(isAlive(pid)).toBe(false);
+      // The list is Node's reflection: a child leaves it when Node DELIVERS its
+      // exit — and under load `exited()` can stop waiting for that delivery
+      // first, on a process the system no longer has. The delivery is awaited
+      // — an event, no bound — before the list is read.
+      await delivered(child);
       expect(liveChildren()).toEqual([]);
     } finally {
       await release();

@@ -15,8 +15,10 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../types/DashboardWeather';
+import { SAVE_DEBOUNCE_MS } from '../hooks/useDashboardPreferences';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { emittedRules, rulesFor } from '../test/dashboardDom';
+import { hold } from '../test/responses';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../theme/dashboardTokens';
 import type {
@@ -320,40 +322,61 @@ function renderPage(beside?: ReactNode) {
 }
 
 /**
- * The explicit timeout is the SMA-174 rule applied one level down: `findBy*`
- * carries Testing Library's OWN 1 000 ms default, which the package.json
- * `--testTimeout=20000` does not touch. Both waits are for the page to render,
- * and under a full-suite load this file has lost that race — the assertions
- * that follow are unaffected, only the patience of the wait changes.
- *
- * Deliberately BELOW the 20 000 ms test timeout (round 3): at 20 000 ms a slow
- * render exhausted the test's whole budget and failed as a bare
- * "Test timed out", saying nothing about what never appeared.
+ * The page loaded, without a wait (SMA-452): its layout read is HELD, then
+ * landed inside `act` — every other answer already on its way lands with it,
+ * and what follows reads the page synchronously, without a bound.
  */
-const RENDER_TIMEOUT = { timeout: 10000 };
-
-/** Waits for the rendered page's grid and switches it into Edit mode. */
-async function switchToEditMode() {
-  const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-  // ENABLED, not merely present. `GardensDashboard` renders Edit
-  // `disabled={loading || loadError}`, so clicking it while the preferences are
-  // still in flight is a no-op and « Done » never arrives — a race this helper
-  // lost under a full-suite load, and lost as a bare timeout rather than as
-  // anything that named the cause.
-  await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
-  fireEvent.click(edit);
-  return await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+async function renderLoaded(
+  level: DashboardLevel = 'gardener',
+  blocks: DashboardBlock[] = presetFor(level),
+  beside?: ReactNode
+) {
+  servePreferences(level, blocks);
+  const landLayout = hold(fetchDashboardPreferences);
+  const view = renderPage(beside);
+  await landLayout();
+  return view;
 }
 
-/** Renders, waits for the grid and switches the page into Edit mode. */
+/**
+ * Switches the loaded page into Edit mode. « Edit » is read ENABLED, not
+ * merely present: `GardensDashboard` renders it `disabled={loading ||
+ * loadError}`, so a click while the preferences are still in flight is a
+ * no-op and « Done » never arrives.
+ */
+function switchToEditMode() {
+  const edit = screen.getByRole('button', { name: 'Edit' });
+  expect(edit).toBeEnabled();
+  fireEvent.click(edit);
+  return screen.getByRole('button', { name: 'Done' });
+}
+
+/** Renders, lands the layout and switches the page into Edit mode. */
 async function enterEditMode(
   level: DashboardLevel = 'gardener',
   blocks: DashboardBlock[] = presetFor(level)
 ) {
-  servePreferences(level, blocks);
-  renderPage();
-  return await switchToEditMode();
+  await renderLoaded(level, blocks);
+  return switchToEditMode();
 }
+
+/** MUI keeps a closing dialog mounted for its exit transition (195 ms): past it, in simulated time. */
+const PAST_THE_EXIT = 400;
+
+/**
+ * From here the save's pause and a dialog's exit are ADVANCED inside `act`,
+ * never waited: only `setTimeout` and `clearTimeout` are simulated, once the
+ * page is up — no `findBy`, no `waitFor` after it.
+ */
+const simulateTheClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+const pastTheSavePause = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+  });
+const pastTheExit = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(PAST_THE_EXIT);
+  });
 
 /**
  * The one way the page offers to re-fetch the weather with the location
@@ -372,9 +395,8 @@ function LanguageProbe() {
 
 /** `enterEditMode` on the gardener preset, with the language probe beside the page. */
 async function enterEditModeWithLanguageProbe() {
-  servePreferences('gardener');
-  renderPage(<LanguageProbe />);
-  return await switchToEditMode();
+  await renderLoaded('gardener', presetFor('gardener'), <LanguageProbe />);
+  return switchToEditMode();
 }
 
 /**
@@ -402,13 +424,16 @@ function deferredWeather() {
 }
 
 /**
- * dnd-kit measures the droppable rects one tick AFTER a drag starts, so an
- * arrow key fired in the same task finds no geometry and moves nothing. Every
- * keyboard step waits for that measurement.
+ * dnd-kit needs one turn of the timers' queue after a drag starts before an
+ * arrow key moves anything: its keyboard sensor adds its `keydown` listener
+ * from a `setTimeout` of its own (`KeyboardSensor.attach`), so a key fired in
+ * the same task is not heard. Every keyboard step yields that ONE turn — a
+ * 0 ms timer set after the sensor's fires after it, in the queue's order,
+ * whatever the load: no duration is waited.
  */
 const settle = async () => {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 };
 
@@ -449,11 +474,11 @@ const weatherAt = (size: DashboardSize) =>
  * the pill keeps its size, and no write is scheduled — the header's save
  * indicator would say « Saving… » at once (`useDashboardPreferences.schedule`),
  * and the save mock would count a call more. Read once the last write has
- * landed, the indicator on « Saved ».
+ * landed — the caller advanced the pause —, the indicator on « Saved ».
  */
-async function expectNothingChangesOnClick(segment: HTMLElement, pill: () => HTMLElement, name: string) {
+function expectNothingChangesOnClick(segment: HTMLElement, pill: () => HTMLElement, name: string) {
   const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
-  await waitFor(() => expect(header.getByRole('status')).toHaveTextContent('Saved'), RENDER_TIMEOUT);
+  expect(header.getByRole('status')).toHaveTextContent('Saved');
   const writes = vi.mocked(saveDashboardPreferences).mock.calls.length;
 
   fireEvent.click(segment);
@@ -490,6 +515,8 @@ afterEach(() => {
   // and the page sends its pending layout save as it unmounts — cleared first,
   // the mocks would record that write for the next test.
   cleanup();
+  // The clock a test simulated once its page was up: real again, after the unmount.
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -531,19 +558,24 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
   // it — the same node in both modes, so it is still there to take it.
   // Driven by `userEvent`, which focuses what it presses as a browser does.
   it('in Edit mode, Create Garden ends the mode, then opens the dialog — the pending layout still saved — and the focus comes back to it when the dialog closes (A-7, amended 25/09)', async () => {
-    servePreferences('gardener');
-    renderPage();
+    await renderLoaded();
     const user = userEvent.setup();
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    expect(edit).toBeEnabled();
     await user.click(edit);
-    await user.click(await screen.findByRole('button', { name: 'Hide Weather' }, RENDER_TIMEOUT));
+    // From here the save's pause and the dialog's exit are ADVANCED, never
+    // waited. The clock is simulated once the page is up and keeps walking
+    // with the real one (`shouldAdvanceTime`): `userEvent` and Testing Library
+    // pace themselves on 0 ms timers of their own, which a clock standing
+    // still would never fire.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    await user.click(screen.getByRole('button', { name: 'Hide Weather' }));
     const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
     const create = header.getByRole('button', { name: 'Create Garden' });
 
     await user.click(create);
 
-    const dialog = await screen.findByRole('dialog', { name: 'Create a new garden' }, RENDER_TIMEOUT);
+    const dialog = screen.getByRole('dialog', { name: 'Create a new garden' });
     // The mode is over under the veil: « Terminé » is « Modifier » again, and
     // no card carries its Edit-mode controls. `hidden: true` — the open modal
     // hides the page from the accessibility tree.
@@ -551,11 +583,13 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(screen.queryByRole('button', { name: 'Done', hidden: true })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Hide /, hidden: true })).toBeNull();
     // The change made in Edit mode leaves anyway, dialog open.
-    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled(), RENDER_TIMEOUT);
+    await pastTheSavePause();
+    expect(saveDashboardPreferences).toHaveBeenCalled();
     expect(lastSaved().blocks.find((block) => block.key === 'weather')?.hidden).toBe(true);
 
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create a new garden' })).toBeNull(), RENDER_TIMEOUT);
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', { name: 'Create a new garden' })).toBeNull();
 
     expect(header.getByRole('button', { name: 'Create Garden' })).toBe(create);
     expect(document.activeElement).toBe(create);
@@ -565,9 +599,12 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     await enterEditMode();
 
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
-    const panel = await screen.findByRole('dialog', { name: 'Customize' }, RENDER_TIMEOUT);
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
+    // The panel leaves on its exit transition: its time is ADVANCED.
+    simulateTheClock();
     fireEvent.click(within(panel).getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull(), RENDER_TIMEOUT);
+    await pastTheExit();
+    expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull();
 
     expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide Weather' })).toBeInTheDocument();
@@ -581,38 +618,37 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
   // `userEvent`, which focuses what it presses as a browser does: a bare
   // `click()` never moves the focus and would prove nothing.
   it('turns Edit into Done at the same button, the focus kept on it — at the click, and back (A-10.5)', async () => {
-    servePreferences('gardener');
-    renderPage();
+    await renderLoaded();
     const user = userEvent.setup();
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    expect(edit).toBeEnabled();
 
     await user.click(edit);
-    const done = await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    const done = screen.getByRole('button', { name: 'Done' });
     expect(document.activeElement).toBe(done);
     expect(done).toBe(edit);
 
     await user.click(done);
-    const back = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    const back = screen.getByRole('button', { name: 'Edit' });
     expect(document.activeElement).toBe(back);
     expect(back).toBe(edit);
   });
 
   it('keeps the focus on it at the keyboard too: Enter on Edit leaves it on Done, and Enter on Done on Edit (A-10.5)', async () => {
-    servePreferences('gardener');
-    renderPage();
+    await renderLoaded();
     const user = userEvent.setup();
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
-    act(() => edit.focus());
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    expect(edit).toBeEnabled();
+    // As the keyboard gives it: inside an async act — MUI's focus ripple pulses a microtask later.
+    await act(async () => edit.focus());
 
     await user.keyboard('{Enter}');
-    const done = await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    const done = screen.getByRole('button', { name: 'Done' });
     expect(document.activeElement).toBe(done);
     expect(done).toBe(edit);
 
     await user.keyboard('{Enter}');
-    const back = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    const back = screen.getByRole('button', { name: 'Edit' });
     expect(document.activeElement).toBe(back);
     expect(back).toBe(edit);
   });
@@ -634,10 +670,9 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
           release = resolve;
         })
     );
-    servePreferences('gardener');
-    renderPage();
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    await renderLoaded();
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    expect(edit).toBeEnabled();
     const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
 
     const regions = header.queryAllByRole('status');
@@ -646,14 +681,17 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(region).toBeEmptyDOMElement();
 
     fireEvent.click(edit);
-    fireEvent.click(await screen.findByRole('button', { name: 'Hide Weather' }, RENDER_TIMEOUT));
+    // From the first change on, the save's pause is ADVANCED, never waited.
+    simulateTheClock();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Weather' }));
 
-    await waitFor(() => expect(region).toHaveTextContent('Saving…'));
+    expect(region).toHaveTextContent('Saving…');
     expect(header.getAllByRole('status')).toEqual([region]);
-    // The write has left and waits: let it end.
-    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled(), RENDER_TIMEOUT);
+    // The pause over, the write has left and waits: let it end.
+    await pastTheSavePause();
+    expect(saveDashboardPreferences).toHaveBeenCalled();
     await act(async () => release());
-    await waitFor(() => expect(region).toHaveTextContent('Saved'), RENDER_TIMEOUT);
+    expect(region).toHaveTextContent('Saved');
     expect(header.getAllByRole('status')).toEqual([region]);
   });
 
@@ -664,10 +702,9 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
   // jardin », never repeated, stays outside it. jsdom lays nothing out: the
   // geometry is the layout harness's (`dashboardLayout.test.tsx`).
   it('holds the two repeated buttons in one wrapper of their own — Edit and Customize at rest, Done and Customize in Edit mode — Create outside it (§ 4.1)', async () => {
-    servePreferences('gardener');
-    renderPage();
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    await renderLoaded();
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    expect(edit).toBeEnabled();
     const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
     const customize = header.getByRole('button', { name: 'Customize' });
     const pair = edit.parentElement!;
@@ -1056,6 +1093,8 @@ describe('GardensDashboard — resizing and hiding (SMA-336)', () => {
   // the scale.
   it('« + » grows the widget one size at a time — Small, Medium, Large — and persists it; at Large it is inert: aria-disabled, named for the end, and its click changes nothing', async () => {
     await enterEditMode('gardener', weatherAt('small'));
+    // From the first change on, the save's pause is ADVANCED, never waited.
+    simulateTheClock();
     const pill = () => screen.getByRole('group', { name: /^Size of Weather: / });
     const grow = () => within(pill()).getByRole('button', { name: /^Make Weather larger/ });
 
@@ -1071,17 +1110,17 @@ describe('GardensDashboard — resizing and hiding (SMA-336)', () => {
     expect(grow()).toHaveAccessibleName('Make Weather larger — already at the largest size');
     expect(grow()).toHaveAttribute('aria-disabled', 'true');
     expect(grow()).toBeEnabled();
-    await waitFor(
-      () => expect(lastSaved().blocks.find((block) => block.key === 'weather')!.size).toBe('large'),
-      RENDER_TIMEOUT
-    );
-    await expectNothingChangesOnClick(grow(), pill, 'Size of Weather: Large');
+    await pastTheSavePause();
+    expect(lastSaved().blocks.find((block) => block.key === 'weather')!.size).toBe('large');
+    expectNothingChangesOnClick(grow(), pill, 'Size of Weather: Large');
   });
 
   // REWRITTEN by SMA-437's size stepper: « the cycle wraps Large back to Small
   // so a widget is never stuck ». No wrap any more: « − » brings it down.
   it('« − » brings it back down one size at a time — Large, Medium, Small — so a widget is never stuck at its largest; at Small it is inert, named for the end, and its click changes nothing (the Expert’s Tips)', async () => {
     await enterEditMode('expert');
+    // From the first change on, the save's pause is ADVANCED, never waited.
+    simulateTheClock();
     const pill = () => screen.getByRole('group', { name: /^Size of Tips: / });
     const shrink = () => within(pill()).getByRole('button', { name: /^Make Tips smaller/ });
 
@@ -1099,11 +1138,9 @@ describe('GardensDashboard — resizing and hiding (SMA-336)', () => {
     expect(shrink()).toHaveAccessibleName('Make Tips smaller — already at the smallest size');
     expect(shrink()).toHaveAttribute('aria-disabled', 'true');
     expect(shrink()).toBeEnabled();
-    await waitFor(
-      () => expect(lastSaved().blocks.find((block) => block.key === 'tips')!.size).toBe('small'),
-      RENDER_TIMEOUT
-    );
-    await expectNothingChangesOnClick(shrink(), pill, 'Size of Tips: Small');
+    await pastTheSavePause();
+    expect(lastSaved().blocks.find((block) => block.key === 'tips')!.size).toBe('small');
+    expectNothingChangesOnClick(shrink(), pill, 'Size of Tips: Small');
   });
 
   // SMA-437 (D3) — the focus never leaves the segment pressed: the widget is
@@ -1112,13 +1149,12 @@ describe('GardensDashboard — resizing and hiding (SMA-336)', () => {
   // button drops the focus. Driven by `userEvent`, which focuses what it
   // presses as a browser does: a bare `click()` never moves the focus.
   it('keeps the focus on the segment pressed, click after click — on « + » once it has just turned inert at Large, on « − » once it has at Small (D3)', async () => {
-    servePreferences('gardener', weatherAt('small'));
-    renderPage();
+    await renderLoaded('gardener', weatherAt('small'));
     const user = userEvent.setup();
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    expect(edit).toBeEnabled();
     await user.click(edit);
-    const pill = await screen.findByRole('group', { name: 'Size of Weather: Small' }, RENDER_TIMEOUT);
+    const pill = screen.getByRole('group', { name: 'Size of Weather: Small' });
     const shrink = within(pill).getByRole('button', { name: /^Make Weather smaller/ });
     const grow = within(pill).getByRole('button', { name: /^Make Weather larger/ });
 
@@ -1291,10 +1327,7 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
     });
     expect(overlay.querySelector('[data-widget="weather"]')).not.toBeNull();
 
-    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
-    await waitFor(() =>
-      expect(document.querySelector('[data-drag-overlay]')).toBeNull()
-    );
+    await cancelMove(handle);
   });
 
   it('keeps the dragging slot perceivable while the keyboard holds it', async () => {

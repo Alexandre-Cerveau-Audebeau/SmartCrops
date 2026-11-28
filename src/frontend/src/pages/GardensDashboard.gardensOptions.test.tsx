@@ -144,6 +144,12 @@ beforeEach(() => {
   vi.mocked(fetchDashboardData).mockResolvedValue(data);
 });
 
+/** The pause before a write, ADVANCED inside `act` on the clock the test simulated — never waited. */
+const pastThePause = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 100);
+  });
+
 afterEach(() => {
   // Unmount FIRST (PR #300, fix round 1, I1): this hook runs before Testing
   // Library's automatic cleanup, and the page sends its pending layout save as
@@ -277,6 +283,10 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
     const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
     expect(region.textContent).toBe('');
+    // From here the pause before the write is ADVANCED, never waited: only
+    // `setTimeout` and `clearTimeout` are simulated, once the page and the
+    // panel are up — no `findBy`, no `waitFor` after it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Move “Carré aromatique” down' }));
 
@@ -294,11 +304,11 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     expect(names).toEqual(['Serre nord', 'Carré aromatique', 'Balcon sud', 'Potager du fond', 'Terrasse']);
     expect(saveGardenOrder).not.toHaveBeenCalled();
 
-    await act(() => new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100)));
+    await pastThePause();
 
     expect(saveGardenOrder).toHaveBeenCalledTimes(1);
     expect(vi.mocked(saveGardenOrder).mock.calls[0]![0]).toEqual(['g3', 'g4', 'g1', 'g2', 'g0']);
-    await waitFor(() => expect(region.textContent).toBe('Order saved.'));
+    expect(region.textContent).toBe('Order saved.');
     // The layout's document never carried the order.
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
@@ -311,15 +321,19 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     vi.mocked(saveGardenOrder).mockReturnValueOnce(first).mockResolvedValueOnce(undefined);
     const panel = await openGardensOptions('expert', { sort: 'custom', count: 'all' });
     const region = panel.querySelector('[data-gardens-options-said]') as HTMLElement;
+    // The pause before a write is ADVANCED, never waited — a real wait proves
+    // « nothing left » only if the engine keeps time. Simulated once the page
+    // and the panel are up: no `findBy`, no `waitFor` after it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Move “Carré aromatique” down' }));
-    await act(() => new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100)));
+    await pastThePause();
     expect(saveGardenOrder).toHaveBeenCalledTimes(1);
 
     // A second move while the first write is still out: it waits its turn — nothing on the wire beside the first, nothing said.
     fireEvent.click(within(panel).getByRole('button', { name: 'Move “Carré aromatique” down' }));
     expect(region.textContent).toBe('“Carré aromatique” moves to 3rd position.');
-    await act(() => new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100)));
+    await pastThePause();
     expect(saveGardenOrder).toHaveBeenCalledTimes(1);
     expect(region.textContent).toBe('“Carré aromatique” moves to 3rd position.');
 
@@ -327,9 +341,9 @@ describe('the custom order (A-N5) — the Expert alone', () => {
     await act(async () => {
       releaseFirst();
     });
-    await waitFor(() => expect(saveGardenOrder).toHaveBeenCalledTimes(2));
+    expect(saveGardenOrder).toHaveBeenCalledTimes(2);
     expect(vi.mocked(saveGardenOrder).mock.calls[1]![0]).toEqual(['g3', 'g1', 'g4', 'g2', 'g0']);
-    await waitFor(() => expect(region.textContent).toBe('Order saved.'));
+    expect(region.textContent).toBe('Order saved.');
   });
 
   // SMA-437, review of the v3, M3 — R3-E1 applied to the order's region: a

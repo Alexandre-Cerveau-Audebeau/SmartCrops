@@ -7,7 +7,9 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
+import { SAVE_DEBOUNCE_MS } from '../hooks/useDashboardPreferences';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
+import { hold } from '../test/responses';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
 import type { DashboardLevel } from '../types/Dashboard';
 
@@ -128,6 +130,8 @@ afterEach(() => {
   // and the page sends its pending layout save as it unmounts — cleared first,
   // the mocks would record that write for the next test.
   cleanup();
+  // The clock a test simulated once its page was up: real again, after the unmount.
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -145,16 +149,30 @@ function renderPage(before?: ReactNode) {
   );
 }
 
-/** The SMA-174 patience, below the 20 s test timeout (see GardensDashboard.edit.test.tsx). */
-const RENDER_TIMEOUT = { timeout: 10000 };
-
-/** Renders the page and waits for its grid — the layout read, the trigger armed. */
+/**
+ * Renders the page — its layout read HELD, then landed inside `act` (SMA-452)
+ * — and reads its grid without a wait: the widgets' titles, the trigger armed.
+ */
 async function renderLoaded(before?: ReactNode) {
+  const landLayout = hold(fetchDashboardPreferences);
   const view = renderPage(before);
-  await screen.findAllByRole('heading', { level: 2 }, RENDER_TIMEOUT);
-  await waitFor(() => expect(live()).toHaveLength(1));
+  await landLayout();
+  expect(screen.getAllByRole('heading', { level: 2 }).length).toBeGreaterThan(0);
+  expect(live()).toHaveLength(1);
   return view;
 }
+
+/**
+ * The time of the save's pause, ADVANCED inside `act` — never waited. The
+ * clock is simulated once the page is up and keeps walking with the real one
+ * (`shouldAdvanceTime`): `userEvent` and Testing Library pace themselves on
+ * 0 ms timers of their own, which a clock standing still would never fire.
+ */
+const simulateTheClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+const pastTheSavePause = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+  });
 
 const bar = () => document.querySelector<HTMLElement>('[data-compact-bar]');
 const headerRow = () => document.querySelector<HTMLElement>('[data-dashboard-header] [data-page-actions]')!;
@@ -236,8 +254,11 @@ describe('the compact action bar, out of Edit mode (SMA-437, lot V39, B4)', () =
 
   it('is not drawn at the Novice formula — at any position (A-9)', async () => {
     servePreferences('novice');
+    const landLayout = hold(fetchDashboardPreferences);
     renderPage();
-    await screen.findAllByRole('heading', { level: 2 }, RENDER_TIMEOUT);
+    await landLayout();
+    // The cards page is drawn: its h2s are the gardens' names.
+    expect(screen.getAllByRole('heading', { level: 2 }).length).toBeGreaterThan(0);
     expect(bar()).toBeNull();
     expect(live()).toEqual([]);
   });
@@ -245,15 +266,20 @@ describe('the compact action bar, out of Edit mode (SMA-437, lot V39, B4)', () =
   it('never shows while the layout loads', async () => {
     vi.mocked(fetchDashboardPreferences).mockReturnValue(new Promise(() => {}));
     renderPage();
-    await screen.findByRole('heading', { level: 1 }, RENDER_TIMEOUT);
+    // The layout never lands; every other answer does, inside `act`.
+    await act(async () => {});
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(live()).toEqual([]);
     expect(bar()).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('never shows once the layout could not be read', async () => {
     vi.mocked(fetchDashboardPreferences).mockRejectedValue(new Error('down'));
+    // The refusal HELD, then landed inside `act`.
+    const refuse = hold(fetchDashboardPreferences);
     renderPage();
-    await screen.findByRole('button', { name: 'Try again' }, RENDER_TIMEOUT);
+    await refuse();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(live()).toEqual([]);
     expect(bar()).toHaveAttribute('aria-hidden', 'true');
   });
@@ -310,13 +336,15 @@ describe('the compact action bar in Edit mode (SMA-437, lot V39, B5)', () => {
     expect(copy).toHaveAttribute('aria-hidden', 'true');
     expect(copy).toBeEmptyDOMElement();
 
+    simulateTheClock();
     await user.click(screen.getAllByRole('button', { name: /^Hide / })[0]!);
     await waitFor(() => expect(region).toHaveTextContent('Saving…'));
     expect(copy).toHaveTextContent('Saving…');
-    // The write has left and waits: let it end.
-    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled(), { timeout: 5000 });
+    // The pause over, the write has left and waits: let it end.
+    await pastTheSavePause();
+    expect(saveDashboardPreferences).toHaveBeenCalled();
     await act(async () => release());
-    await waitFor(() => expect(region).toHaveTextContent('Saved'), { timeout: 5000 });
+    expect(region).toHaveTextContent('Saved');
     expect(copy).toHaveTextContent('Saved');
   });
 
@@ -325,9 +353,12 @@ describe('the compact action bar in Edit mode (SMA-437, lot V39, B5)', () => {
     const user = userEvent.setup();
     await editFromTheBar(user);
 
+    simulateTheClock();
     await user.click(screen.getAllByRole('button', { name: /^Hide / })[0]!);
     const region = document.querySelector('[data-save-status]')!;
-    await waitFor(() => expect(region).toHaveTextContent('Changes not saved'), { timeout: 5000 });
+    // The pause over, the write leaves and is refused: both inside `act`.
+    await pastTheSavePause();
+    expect(region).toHaveTextContent('Changes not saved');
     expect(bar()!.querySelector('[data-compact-bar-status]')).toHaveTextContent('Changes not saved');
   });
 });
@@ -336,32 +367,41 @@ describe('the focus and the scroll padding under the compact action bar (SMA-437
   /** The header's button of an action, and the bar's. */
   const headerButton = (action: string) => headerRow().querySelector<HTMLElement>(`[data-page-action="${action}"]`)!;
   const barButton = (action: string) => bar()!.querySelector<HTMLElement>(`[data-page-action="${action}"]`)!;
+  /**
+   * A focus, as the keyboard gives it. MUI's focus handlers set state, and its
+   * lazily mounted focus ripple pulses a microtask later: the gesture runs
+   * inside an async act, whatever ran before it — a test run alone, the window
+   * having seen no click yet, is where the ripple shows.
+   */
+  const focus = (button: HTMLElement) => act(async () => button.focus());
 
   it('moves the focus to the twin when its row hides — the header’s Edit to the bar’s, and back — never to the body', async () => {
     await renderLoaded();
-    headerButton('edit').focus();
+    await focus(headerButton('edit'));
     expect(document.activeElement).toBe(headerButton('edit'));
 
-    scrollPast();
+    // The row hides and the page gives the focus to the twin: a focus again,
+    // so the scroll that causes it runs inside an async act too.
+    await act(async () => scrollPast());
     expect(document.activeElement).toBe(barButton('edit'));
 
-    scrollBack();
+    await act(async () => scrollBack());
     expect(document.activeElement).toBe(headerButton('edit'));
   });
 
   it('does the same for Customize', async () => {
     await renderLoaded();
-    headerButton('customize').focus();
-    scrollPast();
+    await focus(headerButton('customize'));
+    await act(async () => scrollPast());
     expect(document.activeElement).toBe(barButton('customize'));
-    scrollBack();
+    await act(async () => scrollBack());
     expect(document.activeElement).toBe(headerButton('customize'));
   });
 
   it('never gives the focus to the bar when it appears: a focus elsewhere stays where it is', async () => {
     await renderLoaded();
     const create = screen.getByRole('button', { name: 'Create Garden' });
-    create.focus();
+    await focus(create);
     scrollPast();
     expect(document.activeElement).toBe(create);
   });
@@ -371,7 +411,7 @@ describe('the focus and the scroll padding under the compact action bar (SMA-437
     await renderLoaded();
     scrollPast();
     const toggle = barButton('edit');
-    toggle.focus();
+    await focus(toggle);
     await user.keyboard('{Enter}');
     expect(document.activeElement).toBe(toggle);
     expect(toggle).toHaveTextContent('Done');
@@ -383,7 +423,7 @@ describe('the focus and the scroll padding under the compact action bar (SMA-437
   it('gives the focus back to the twin when the Customize panel closes on a button that went inert meanwhile (technical decision 8)', async () => {
     const user = userEvent.setup();
     await renderLoaded();
-    headerButton('customize').focus();
+    await focus(headerButton('customize'));
     await user.keyboard('{Enter}');
     await screen.findByRole('dialog', { name: 'Customize' });
 

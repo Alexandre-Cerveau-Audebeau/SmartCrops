@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import { createAppTheme } from '../theme';
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
+import { SAVE_DEBOUNCE_MS } from '../hooks/useDashboardPreferences';
 import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
 import {
   dashboardFixture as dashboardWith,
@@ -22,6 +23,7 @@ import type {
   DashboardVarietyData,
 } from '../types/DashboardData';
 import { declaredAtBreakpoint, emittedRules, gridNode, rulesFor, slotOf } from '../test/dashboardDom';
+import { hold } from '../test/responses';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -542,11 +544,14 @@ describe('GardensDashboard — page states (SMA-336)', () => {
       );
     servePreferences('gardener');
 
+    // The layout HELD, then landed inside `act` — the aggregate's failure lands
+    // with it —: the errors are read without a wait.
+    const landLayout = hold(fetchDashboardPreferences);
     renderPage();
+    await landLayout();
     const counters = () =>
       within(document.querySelector('[data-widget="counters"]') as HTMLElement);
-    // Three widgets, three Retry buttons: the Counters one is the witness.
-    await screen.findAllByRole('button', { name: 'Try again' }, { timeout: 10000 });
+    // More than one widget shows a Retry button here: the Counters one is the witness.
     const button = counters().getByRole('button', { name: 'Try again' });
     expect(button).toBeEnabled();
 
@@ -1225,14 +1230,22 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
   it('choosing another formula from the panel — on the choice screen — switches it on the server; the page never writes its preset', async () => {
     vi.mocked(changeFormula).mockResolvedValue(undefined);
     const choice = await openChoiceFromPanel();
+    // The offer found BEFORE the clock is simulated: no `findBy` advances under it.
+    const expert = await within(choice).findByRole('button', { name: 'Choose Expert' });
 
-    await chooseOnScreen(choice, 'Choose Expert');
+    // From here the pause a write would wait is ADVANCED, never waited: only
+    // `setTimeout` and `clearTimeout` are simulated, once the page is up.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(expert);
+    // The switch leaves one step after the gesture, and lands: both inside `act`.
+    await act(async () => {});
+    expect(changeFormula).toHaveBeenCalledWith('expert');
 
-    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
-    // The switch closes the screen: its exit ends here, not during the wait
-    // below (SMA-452 § 3).
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose your formula' })).toBeNull());
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    // Past the pause a write of the preset would have waited — and past the
+    // exit of the screen the switch closed.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 100);
+    });
     expect(
       vi.mocked(saveDashboardPreferences).mock.calls.filter(([saved]) => saved.level === 'expert')
     ).toEqual([]);

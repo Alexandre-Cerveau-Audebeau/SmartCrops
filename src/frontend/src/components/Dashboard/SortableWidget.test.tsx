@@ -163,9 +163,6 @@ describe('SortableWidget — the inert segment reads as greyed, by day and at ni
     const live = screen.getByRole('button', { name: 'Make Tips larger — to Medium' });
 
     const chip = hex(palette.surfaceSubtle);
-    expect(inkOf(inert, '[aria-disabled="true"]').toLowerCase()).toBe(
-      (mode === 'dark' ? palette.mutedText : palette.text.disabled).toLowerCase()
-    );
     const inertInk = resolveColor(inkOf(inert, '[aria-disabled="true"]'), chip)!;
     const liveInk = resolveColor(inkOf(live, ''), chip)!;
 

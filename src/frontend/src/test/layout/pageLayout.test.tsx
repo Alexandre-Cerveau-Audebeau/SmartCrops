@@ -826,7 +826,6 @@ async function runPlannerLocationView(
   }
 }
 
-/** What a page or a card must be free of, at every width — named so a failure says which. */
 /**
  * The plantings whose drawn box is not the box they owe — their area inset
  * by `inset(cell)` on each side, to `tolerance` —, each with its drawn sizes
@@ -851,6 +850,7 @@ function plantingFaults(
   return faults;
 }
 
+/** What a page or a card must be free of, at every width — named so a failure says which. */
 function defects(scene: CardMeasure) {
   return {
     overlaps: scene.overlaps
