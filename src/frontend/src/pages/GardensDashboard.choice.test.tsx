@@ -241,7 +241,11 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
 
     expect(within(screenOfChoice).getByRole('button', { name: 'Choose Novice' })).toBeInTheDocument();
     expect(within(screenOfChoice).queryByRole('button', { name: 'Close without changing formula' })).toBeNull();
+    // Read PAST the exit: a screen that Escape had started to close would
+    // still be mounted, on its way out, at an instant read.
+    simulateTheClock();
     fireEvent.keyDown(screenOfChoice, { key: 'Escape', code: 'Escape' });
+    await pastTheExit();
     expect(screen.getByRole('dialog', CHOICE)).toBeInTheDocument();
 
     // A new account: no formula of its own yet — three « Choose », no « Keep ».
@@ -492,11 +496,14 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
 
     // The refusal HELD, then landed inside `act`: what it says is read without a wait.
     const refuse = hold(changeFormula);
+    simulateTheClock();
     fireEvent.click(within(screenOfChoice).getByRole('button', { name: 'Choose Expert' }));
     await refuse();
 
     const said = within(screenOfChoice).getByText('Can’t switch to Expert: 5 gardens for 3 at most');
     expect(said).toHaveAttribute('role', 'status');
+    // « The screen stays » is read PAST the exit, like Escape above.
+    await pastTheExit();
     expect(screen.getByRole('dialog', CHOICE)).toBeInTheDocument();
     expect(within(screenOfChoice).queryByRole('button', { name: 'Close without changing formula' })).toBeNull();
   });

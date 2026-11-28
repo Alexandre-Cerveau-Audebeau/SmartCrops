@@ -551,7 +551,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
     await landLayout();
     const counters = () =>
       within(document.querySelector('[data-widget="counters"]') as HTMLElement);
-    // Three widgets, three Retry buttons: the Counters one is the witness.
+    // More than one widget shows a Retry button here: the Counters one is the witness.
     const button = counters().getByRole('button', { name: 'Try again' });
     expect(button).toBeEnabled();
 
